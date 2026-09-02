@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>실전 중국어 · 광저우 지사장</title>
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="实战 중국어">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#26262E">
+<style>
+  :root{--red:#C8352E;--navy:#26262E;--grey:#8A8C94;--hair:#E4E2DD;--bg:#F7F6F3;--ok:#1E7F4F;--okbg:#E8F5EE;--nobg:#FBEDEC}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{font-family:'Noto Sans KR','Noto Sans SC','Noto Sans',sans-serif;background:var(--bg);color:var(--navy);padding-bottom:58px}
+  .seal{width:46px;height:46px;background:var(--red);color:#fff;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:900;letter-spacing:1px;box-shadow:inset 0 0 0 2px rgba(255,255,255,.85),inset 0 0 0 4px var(--red);transform:rotate(-2deg);flex-shrink:0}
+  .zh{font-family:'Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif}
+  header{background:var(--navy);padding:14px 18px 12px}
+  header img{height:24px;display:block}
+  .redline{height:2.5px;background:var(--red)}
+  .hrow{background:var(--navy);padding:10px 18px 14px;display:flex;justify-content:space-between;align-items:flex-end}
+  .htitle{color:#fff;font-size:18px;font-weight:700;letter-spacing:-0.3px}
+  .hsub{color:#8f9ab0;font-size:11.5px;margin-top:2px}
+  .hstat{color:#fff;font-size:11.5px;text-align:right;line-height:1.5}
+  .hstat b{color:#ff8fa3;font-weight:700}
+  .banner{display:none;background:#FFF4E5;color:#8a5a00;font-size:12px;padding:9px 14px;line-height:1.5}
+  .speedbar{display:flex;gap:6px;align-items:center;padding:9px 12px;background:#fff;border-bottom:1px solid var(--hair);position:sticky;top:0;z-index:20;overflow-x:auto}
+  .speedbar .lbl{font-size:12px;color:var(--grey);flex-shrink:0}
+  .chip{border:1px solid var(--hair);background:#fff;color:var(--navy);border-radius:16px;padding:5px 11px;font-size:12.5px;font-weight:500;cursor:pointer;flex-shrink:0;font-family:inherit}
+  .chip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .chip.red.on{background:var(--red);border-color:var(--red)}
+  .chip.py-toggle{margin-left:auto}
+  .chip.py-toggle.off{color:var(--grey);text-decoration:line-through}
+  nav{display:flex;background:#fff;border-bottom:1px solid var(--hair)}
+  nav button{flex:1;border:none;background:none;padding:12px 1px;font-size:12.5px;font-weight:600;color:var(--grey);border-bottom:2.5px solid transparent;cursor:pointer;font-family:inherit;position:relative}
+  nav button.on{color:var(--navy);border-bottom-color:var(--red)}
+  nav .badge{position:absolute;top:6px;right:14%;background:var(--red);color:#fff;font-size:9.5px;font-weight:700;border-radius:9px;min-width:17px;padding:1.5px 5px}
+  .pane{display:none;padding:13px}
+  .pane.on{display:block}
+  .subchips{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+  .scenario-note{font-size:12.5px;color:var(--grey);line-height:1.55;padding:0 3px 12px}
+  .qcard{background:#fff;border:1px solid var(--hair);border-radius:10px;margin-bottom:12px;overflow:hidden}
+  .qhead{padding:13px 14px 11px}
+  .qintent{font-size:11.5px;color:var(--red);font-weight:700;margin-bottom:6px}
+  .qrow{display:flex;gap:10px;align-items:flex-start}
+  .qzh{font-size:18px;font-weight:700;line-height:1.45;flex:1}
+  .playbtn{flex-shrink:0;width:35px;height:35px;border-radius:50%;border:none;background:var(--navy);color:#fff;font-size:13px;cursor:pointer}
+  .playbtn:active{background:var(--red)}
+  .qpy{font-size:12.5px;color:var(--grey);margin-top:5px;line-height:1.5}
+  .qko{font-size:13px;color:#4a5670;margin-top:4px;line-height:1.5}
+  .atoggle{width:100%;border:none;border-top:1px solid var(--hair);background:#FAFBFC;padding:10px;font-size:12.5px;font-weight:600;color:var(--navy);cursor:pointer;font-family:inherit}
+  .answers{display:none;border-top:1px solid var(--hair)}
+  .answers.open{display:block}
+  .ans{padding:11px 14px;border-bottom:1px solid var(--hair)}
+  .ans:last-child{border-bottom:none}
+  .atag{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:3px;margin-bottom:6px}
+  .atag.std{background:var(--navy);color:#fff}
+  .atag.real{background:#fff;color:var(--red);border:1px solid var(--red)}
+  .atag.coll{background:#EDEFF3;color:#5a6478}
+  .arow{display:flex;gap:10px;align-items:flex-start}
+  .azh{font-size:15.5px;font-weight:600;line-height:1.5;flex:1}
+  .playbtn.sm{width:29px;height:29px;font-size:11px;background:#3a4a6d}
+  .apy{font-size:12px;color:var(--grey);margin-top:4px;line-height:1.5}
+  .ako{font-size:12.5px;color:#4a5670;margin-top:3px;line-height:1.5}
+  .anote{font-size:11.5px;color:var(--red);margin-top:4px;font-weight:500}
+  body.nopy .qpy,body.nopy .apy{display:none}
+  /* 퀴즈 */
+  .qz-stage{background:#fff;border:1px solid var(--hair);border-radius:12px;padding:20px 16px;margin-top:4px}
+  .qz-top{display:flex;justify-content:space-between;font-size:12px;color:var(--grey);margin-bottom:14px}
+  .qz-top b{color:var(--navy)}
+  .qz-prompt{text-align:center;padding:6px 0 16px}
+  .qz-zh{font-size:24px;font-weight:700;line-height:1.4}
+  .qz-zh.sent{font-size:19px}
+  .qz-py{font-size:13px;color:var(--grey);margin-top:6px}
+  .qz-ko{font-size:18px;font-weight:700;line-height:1.5}
+  .qz-audio{width:64px;height:64px;border-radius:50%;border:none;background:var(--navy);color:#fff;font-size:22px;cursor:pointer;margin:4px 0 6px}
+  .qz-audio:active{background:var(--red)}
+  .qz-dir{font-size:11.5px;color:var(--grey);margin-bottom:8px}
+  .opts{display:flex;flex-direction:column;gap:8px}
+  .opt{border:1.5px solid var(--hair);background:#fff;border-radius:9px;padding:12px 13px;font-size:14.5px;text-align:left;cursor:pointer;font-family:inherit;line-height:1.45;color:var(--navy)}
+  .opt.zhopt{font-size:16px;font-weight:600}
+  .opt.correct{border-color:var(--ok);background:var(--okbg);font-weight:700}
+  .opt.wrongpick{border-color:var(--red);background:var(--nobg)}
+  .opt:disabled{cursor:default;opacity:1}
+  .qz-fb{display:none;margin-top:14px;border-top:1px solid var(--hair);padding-top:12px}
+  .qz-fb.show{display:block}
+  .qz-fb .r{font-size:14px;font-weight:700;margin-bottom:6px}
+  .qz-fb .r.ok{color:var(--ok)} .qz-fb .r.no{color:var(--red)}
+  .qz-fb .d{font-size:13px;color:#4a5670;line-height:1.6}
+  .qz-next{width:100%;margin-top:14px;border:none;background:var(--red);color:#fff;border-radius:9px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;display:none}
+  .qz-next.show{display:block}
+  .qz-empty{text-align:center;color:var(--grey);font-size:13.5px;padding:30px 10px;line-height:1.7}
+  /* 복습/통계 */
+  .statgrid{display:flex;gap:8px;margin-bottom:14px}
+  .statbox{flex:1;background:#fff;border:1px solid var(--hair);border-radius:10px;padding:12px 6px;text-align:center}
+  .statbox .v{font-size:20px;font-weight:800}
+  .statbox .v.red{color:var(--red)}
+  .statbox .k{font-size:11px;color:var(--grey);margin-top:3px}
+  .rv-item{background:#fff;border:1px solid var(--hair);border-radius:9px;padding:11px 13px;margin-bottom:8px}
+  .rv-row{display:flex;gap:9px;align-items:flex-start}
+  .rv-zh{font-size:15.5px;font-weight:600;flex:1;line-height:1.45}
+  .rv-ko{font-size:12.5px;color:#4a5670;margin-top:3px;line-height:1.5}
+  .rv-meta{font-size:11px;color:var(--grey);margin-top:4px}
+  .rv-meta b{color:var(--red)}
+  .bigbtn{width:100%;border:none;background:var(--navy);color:#fff;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:14px}
+  .bigbtn:disabled{background:#c6cbd6}
+  .routine{margin-top:16px;background:#fff;border:1px solid var(--hair);border-radius:10px;padding:15px}
+  .routine h3{font-size:14px;margin-bottom:9px}
+  .routine ol{padding-left:19px;font-size:13px;line-height:1.8;color:#3a4560}
+  /* 진척도 */
+  .pgcard{background:#fff;border:1px solid var(--hair);border-radius:10px;padding:15px;margin-bottom:12px}
+  .pgcard h3{font-size:13.5px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:baseline}
+  .pgcard h3 small{font-size:11px;color:var(--grey);font-weight:400}
+  .goal{margin-bottom:13px}
+  .goal:last-child{margin-bottom:2px}
+  .goal .g-top{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px}
+  .goal .g-top b{font-weight:700}
+  .goal .g-top .pct{color:var(--grey)}
+  .goal .g-top .pct.done{color:#1E7F4F;font-weight:700}
+  .gbar{height:8px;background:#EDEFF3;border-radius:4px;overflow:hidden}
+  .gfill{height:100%;background:var(--navy);border-radius:4px;transition:width .3s}
+  .gfill.done{background:#1E7F4F}
+  .weekchart{display:flex;gap:5px;align-items:flex-end;height:86px;padding-top:4px}
+  .wc-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end}
+  .wc-bar{width:100%;max-width:30px;background:var(--navy);border-radius:3px 3px 0 0;min-height:2px}
+  .wc-bar.today{background:var(--red)}
+  .wc-lbl{font-size:10px;color:var(--grey)}
+  .wc-val{font-size:9.5px;color:var(--grey)}
+  .slotrow{display:flex;gap:8px}
+  .slot{flex:1;background:#FAFBFC;border:1px solid var(--hair);border-radius:8px;padding:10px 6px;text-align:center}
+  .slot .sv{font-size:17px;font-weight:800}
+  .slot .sk{font-size:10.5px;color:var(--grey);margin-top:2px}
+  .streakline{display:flex;justify-content:space-between;align-items:center;font-size:13px}
+  .streakline b{font-size:19px;color:var(--red)}
+  .gset{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:11px}
+  .gset label{font-size:11.5px;color:var(--grey);display:block;margin-bottom:3px}
+  .gset input{width:100%;border:1px solid var(--hair);border-radius:7px;padding:9px 10px;font-size:14px;font-family:inherit;color:var(--navy)}
+  .gsave{width:100%;border:none;background:var(--navy);color:#fff;border-radius:8px;padding:11px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit}
+  .modal-bg{display:none;position:fixed;inset:0;background:rgba(26,42,74,.55);z-index:50}
+  .modal-bg.show{display:flex;align-items:center;justify-content:center;padding:20px}
+  .modal{background:#fff;border-radius:12px;padding:20px 18px;width:100%;max-width:420px;max-height:85vh;overflow-y:auto}
+  .modal h3{font-size:15px;margin-bottom:4px}
+  .modal .desc{font-size:12px;color:var(--grey);line-height:1.6;margin-bottom:14px}
+  .modal label{font-size:11.5px;color:var(--grey);display:block;margin:10px 0 4px}
+  .modal input{width:100%;border:1px solid var(--hair);border-radius:7px;padding:10px;font-size:13px;font-family:inherit;color:var(--navy)}
+  .modal .mrow{display:flex;gap:8px;margin-top:16px}
+  .modal .mbtn{flex:1;border-radius:8px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;border:none}
+  .modal .mbtn.navy{background:var(--navy);color:#fff}
+  .modal .mbtn.ghost{background:#fff;border:1px solid var(--hair);color:var(--navy)}
+  .modal .mstat{font-size:12px;margin-top:10px;line-height:1.5}
+  footer{position:fixed;bottom:0;left:0;right:0;background:var(--navy);color:#8f9ab0;font-size:10px;padding:7px 14px;text-align:center;letter-spacing:0.2px;z-index:30}
+</style>
+</head>
+<body>
+
+<header style="background:var(--navy);padding:16px 18px 15px;display:flex;align-items:center;gap:12px">
+  <div class="seal zh">实战</div>
+  <div style="flex:1">
+    <div style="color:#b9bac2;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#e58a85;font-size:11px;font-weight:700;vertical-align:2px">BETA</span></div>
+  </div>
+  <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
+</header>
+<div class="redline"></div>
+
+<div class="banner" id="storeBanner">아직 초대 코드가 등록되지 않아 기록이 이 기기에만 저장됩니다.</div>
+<div class="banner" id="ttsWarn">중국어 음성을 찾지 못했습니다. 휴대폰 설정에서 중국어(간체) TTS 음성을 추가해 주세요.</div>
+
+<div class="speedbar">
+  <button class="chip" id="btnCfg" style="padding:5px 9px">⚙︎ <span id="syncDot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#c6cbd6;vertical-align:middle"></span></button>
+  <span class="lbl">속도</span>
+  <button class="chip spd" data-r="0.7">0.7×</button>
+  <button class="chip spd on" data-r="1.0">1.0×</button>
+  <button class="chip spd" data-r="1.2">1.2×</button>
+  <button class="chip spd" data-r="1.45">실전</button>
+  <button class="chip py-toggle" id="pyToggle">병음</button>
+</div>
+
+<nav>
+  <button class="tab on" data-p="p0">회화</button>
+  <button class="tab" data-p="p1">퀴즈</button>
+  <button class="tab" data-p="p2">HSK 단어</button>
+  <button class="tab" data-p="p3">복습<span class="badge" id="rvBadge" style="display:none">0</span></button>
+  <button class="tab" data-p="p4">진척</button>
+</nav>
+
+<!-- 회화 -->
+<div class="pane on" id="p0">
+  <div class="subchips">
+    <button class="chip sc on" data-s="0">신규 실사</button>
+    <button class="chip sc" data-s="1">단가 협상</button>
+    <button class="chip sc" data-s="2">품질 클레임</button>
+  </div>
+  <div class="scenario-note" id="scNote"></div>
+  <div id="scList"></div>
+</div>
+
+<!-- 퀴즈 -->
+<div class="pane" id="p1">
+  <div class="subchips">
+    <button class="chip red qsrc on" data-src="sent">회화 문장</button>
+    <button class="chip red qsrc" data-src="hsk4">HSK 4급</button>
+    <button class="chip red qsrc" data-src="hsk5">HSK 5급</button>
+    <button class="chip red qsrc" data-src="word">단어 전체</button>
+  </div>
+  <div class="qz-stage" id="qzStage"></div>
+</div>
+
+<!-- HSK 단어장 -->
+<div class="pane" id="p2">
+  <div class="subchips">
+    <button class="chip wf on" data-l="4">4급</button>
+    <button class="chip wf" data-l="5">5급</button>
+  </div>
+  <div class="scenario-note">단어를 누르면 발음이 재생됩니다. 학습 상태: <b style="color:#1E7F4F">초록 = 마스터(연속 2회 정답)</b> · <b style="color:#D51030">빨강 = 오답 대기</b>. 암기는 퀴즈 탭에서 하세요.</div>
+  <div id="wordList"></div>
+</div>
+
+<!-- 복습 -->
+<div class="pane" id="p3">
+  <div class="statgrid">
+    <div class="statbox"><div class="v" id="stToday">0</div><div class="k">오늘 푼 문제</div></div>
+    <div class="statbox"><div class="v" id="stAcc">–</div><div class="k">누적 정답률</div></div>
+    <div class="statbox"><div class="v red" id="stWrong">0</div><div class="k">복습 대기</div></div>
+    <div class="statbox"><div class="v" style="color:#1E7F4F" id="stMaster">0</div><div class="k">마스터</div></div>
+  </div>
+  <button class="bigbtn" id="btnReview">오답 복습 퀴즈 시작</button>
+  <div class="scenario-note">틀린 문장·단어는 자동으로 여기에 쌓입니다. 복습 퀴즈에서 <b>연속 2회 정답</b>이면 목록에서 빠지고 마스터로 기록됩니다.</div>
+  <div id="rvList"></div>
+  <div class="routine">
+    <h3>아침 7시 루틴 (총 15분)</h3>
+    <ol>
+      <li>회화 탭 — 오늘 시나리오 1개, 질문 5개 소리 내어 3회</li>
+      <li>퀴즈 탭 — 회화 문장 5문 + HSK 단어 10문</li>
+      <li>복습 탭 — 오답 복습 퀴즈로 대기 목록 비우기</li>
+      <li>오늘의 중국어 단어시험(이미지 업로드)과 병행</li>
+    </ol>
+  </div>
+</div>
+
+<!-- 진척 -->
+<div class="pane" id="p4">
+  <div class="pgcard">
+    <h3>이번 주 목표 <small id="weekRange"></small></h3>
+    <div class="goal"><div class="g-top"><span>⏱ 학습 시간</span><span><b id="gT1"></b> <span class="pct" id="gP1"></span></span></div><div class="gbar"><div class="gfill" id="gF1"></div></div></div>
+    <div class="goal"><div class="g-top"><span>🎧 회화 문장 퀴즈</span><span><b id="gT2"></b> <span class="pct" id="gP2"></span></span></div><div class="gbar"><div class="gfill" id="gF2"></div></div></div>
+    <div class="goal"><div class="g-top"><span>📝 전체 퀴즈 문항</span><span><b id="gT3"></b> <span class="pct" id="gP3"></span></span></div><div class="gbar"><div class="gfill" id="gF3"></div></div></div>
+    <div class="goal"><div class="g-top"><span>✅ 단어·문장 마스터</span><span><b id="gT4"></b> <span class="pct" id="gP4"></span></span></div><div class="gbar"><div class="gfill" id="gF4"></div></div></div>
+  </div>
+  <div class="pgcard">
+    <h3>일별 학습 시간 <small>단위: 분 · 빨강 = 오늘</small></h3>
+    <div class="weekchart" id="weekChart"></div>
+  </div>
+  <div class="pgcard">
+    <h3>오늘 시간대별 <small>자동 분류</small></h3>
+    <div class="slotrow">
+      <div class="slot"><div class="sv" id="slAm">0</div><div class="sk">출근길 (5~11시)</div></div>
+      <div class="slot"><div class="sv" id="slMv">0</div><div class="sk">이동 중 (11~20시)</div></div>
+      <div class="slot"><div class="sv" id="slPm">0</div><div class="sk">자기 전 (20~5시)</div></div>
+    </div>
+    <div style="font-size:11px;color:var(--grey);margin-top:9px;line-height:1.5">앱을 열고 사용하는 동안 자동으로 측정됩니다 (1분 이상 조작이 없으면 일시정지).</div>
+  </div>
+  <div class="pgcard">
+    <div class="streakline"><span>🔥 연속 학습</span><span><b id="streakN">0</b>일째</span></div>
+    <div style="font-size:11px;color:var(--grey);margin-top:6px">하루 10분 이상 또는 10문항 이상이면 출석으로 인정</div>
+  </div>
+  <div class="pgcard">
+    <h3>주간 목표 설정</h3>
+    <div class="gset">
+      <div><label>학습 시간 (분/주)</label><input type="number" id="inMin" min="10"></div>
+      <div><label>회화 문장 퀴즈 (문/주)</label><input type="number" id="inSent" min="5"></div>
+      <div><label>전체 퀴즈 문항 (문/주)</label><input type="number" id="inQuiz" min="10"></div>
+      <div><label>마스터 목표 (개/주)</label><input type="number" id="inMast" min="1"></div>
+    </div>
+    <button class="gsave" id="btnGoalSave">목표 저장</button>
+    <div style="font-size:11px;color:var(--grey);margin-top:8px;line-height:1.6">기본값은 평일 기준 아침 15분 + 저녁 15분 + 이동 중 α = 주 220분입니다.</div>
+  </div>
+</div>
+
+<div class="modal-bg" id="cfgModal">
+  <div class="modal">
+    <h3>초대 코드</h3>
+    <div class="desc">등록된 초대 코드로 모든 기기에서 학습 기록이 동기화됩니다. 다른 기기에서도 같은 코드를 입력하세요.</div>
+    <label>내 초대 코드</label>
+    <input id="cfgSid" placeholder="예: sz-3fk9-mj" autocapitalize="none" autocomplete="off">
+    <div class="mrow">
+      <button class="mbtn ghost" id="cfgClose">닫기</button>
+      <button class="mbtn navy" id="cfgSave">등록</button>
+    </div>
+    <div class="mstat" id="cfgStat"></div>
+  </div>
+</div>
+
+<div class="modal-bg" id="welModal">
+  <div class="modal">
+    <div style="display:flex;align-items:center;gap:11px;margin-bottom:13px">
+      <div class="seal zh" style="width:52px;height:52px;font-size:19px">实战</div>
+      <div>
+        <div style="font-size:11.5px;color:var(--grey)">광저우 지사장의</div>
+        <div style="font-size:19px;font-weight:800">실전 중국어</div>
+      </div>
+    </div>
+    <div class="desc" style="font-size:13px;color:var(--navy);line-height:1.7;margin-bottom:6px">
+      중국에서 <b>37개 의류 공장</b>을 관리하는 현직 지사장이<br>
+      공장에서 <b>실제로 오가는 문장</b>으로 만든 학습앱입니다.
+    </div>
+    <div class="desc" style="line-height:1.7">
+      · 신규 공장 실사 · 단가 협상 · 품질 클레임 회화<br>
+      · 공장 사장님의 시간끌기·역제안 패턴까지 듣기 훈련<br>
+      · HSK 4·5급 실무 빈출 250단어 · 오답 자동 복습<br>
+      · 아이폰·아이패드·PC 학습 기록 동기화
+    </div>
+    <label>초대 코드를 입력하세요</label>
+    <input id="welSid" placeholder="받으신 코드 입력" autocapitalize="none" autocomplete="off">
+    <div class="mrow">
+      <button class="mbtn ghost" id="welSkip">코드 없이 둘러보기</button>
+      <button class="mbtn navy" id="welGo">시작하기</button>
+    </div>
+    <div class="mstat" id="welStat"></div>
+  </div>
+</div>
+
+<footer>实战 중국어 BETA · 광저우 지사장의 실전 중국어 · 무단 재배포를 삼가 주세요</footer>
+<script>
+const SCEN_NAMES=["신규 공장 실사","단가 협상","품질 클레임"];
+const SCEN_NOTES=[
+"신규 공장 첫 미팅 + 라운딩 필수 질문 10개. '실전형'은 조건·회피·역제안이 붙는 실제 답변 패턴입니다.",
+"견적·단가 협상 테이블의 8개 핵심 문장. 공장 쪽 역제안 패턴을 귀로 익히는 것이 목표입니다.",
+"불량·색차·사이즈 클레임 7개 상황. 시간 끌기·책임 회피·역제안을 알아채는 것이 핵심입니다."];
+const TAG_NAMES={std:"표준 답변",real:"실전형 (조건·회피·역제안)",coll:"구어체"};
+const DATA=[
+[
+{i:"주력 품목 확인",q:"你们厂主要做什么品类？梭织还是针织？",p:"Nǐmen chǎng zhǔyào zuò shénme pǐnlèi? Suōzhī háishì zhēnzhī?",k:"공장 주력 품목이 뭐예요? 우븐이에요, 니트예요?",a:[
+{t:"std",z:"我们主要做针织，T恤、卫衣、卫裤这些都可以。",p:"Wǒmen zhǔyào zuò zhēnzhī, T-xù, wèiyī, wèikù zhèxiē dōu kěyǐ.",k:"저희는 니트 위주고, 티셔츠·맨투맨·조거팬츠 다 가능합니다."},
+{t:"real",z:"梭织也能接，不过要看款式复杂不复杂。",p:"Suōzhī yě néng jiē, búguò yào kàn kuǎnshì fùzá bu fùzá.",k:"우븐도 받긴 하는데, 스타일이 복잡한지 봐야 해요."},
+{t:"coll",z:"啥都做过啦，主要还是针织多一点。",p:"Shá dōu zuòguo la, zhǔyào háishì zhēnzhī duō yìdiǎn.",k:"뭐 다 해봤죠, 그래도 니트가 많아요."}]},
+{i:"인원·라인 규모",q:"工厂有多少车位？几条流水线？",p:"Gōngchǎng yǒu duōshao chēwèi? Jǐ tiáo liúshuǐxiàn?",k:"공장에 재봉 인원(미싱 자리)이 몇이에요? 라인은 몇 개죠?",a:[
+{t:"std",z:"车位一百二十个左右，六条流水线。",p:"Chēwèi yìbǎi èrshí ge zuǒyòu, liù tiáo liúshuǐxiàn.",k:"재봉 인원 120명 정도, 라인 6개입니다."},
+{t:"real",z:"旺季会加临时工，能做到一百五十人。",p:"Wàngjì huì jiā línshígōng, néng zuòdào yìbǎi wǔshí rén.",k:"성수기엔 임시공 붙여서 150명까지 됩니다.",n:"※ 상시 인원과 성수기 인원을 구분해 기록할 것"}]},
+{i:"월 생산능력",q:"基本款的话，月产能大概多少件？",p:"Jīběnkuǎn dehuà, yuè chǎnnéng dàgài duōshao jiàn?",k:"베이직 기준으로 월 캐파가 대략 몇 장이에요?",a:[
+{t:"std",z:"一个月十五万件左右没问题。",p:"Yí ge yuè shíwǔ wàn jiàn zuǒyòu méi wèntí.",k:"한 달 15만 장 정도는 문제없어요."},
+{t:"real",z:"要看工艺，绣花印花多的话产能要打七折。",p:"Yào kàn gōngyì, xiùhuā yìnhuā duō dehuà chǎnnéng yào dǎ qīzhé.",k:"공정 봐야죠. 자수·프린트 많으면 캐파가 70%로 떨어져요."}]},
+{i:"최소 주문 수량 (MOQ)",q:"单色单款起订量最低多少？",p:"Dānsè dānkuǎn qǐdìngliàng zuìdī duōshao?",k:"단색·단일 스타일 기준 최소 주문 수량이 얼마예요?",a:[
+{t:"std",z:"最少一千件，少了面料起不了缸。",p:"Zuìshǎo yìqiān jiàn, shǎole miànliào qǐbuliǎo gāng.",k:"최소 1,000장이요. 그보다 적으면 원단 염색 로트가 안 나와요."},
+{t:"real",z:"首单可以给你降到五百件，先合作看看嘛。",p:"Shǒudān kěyǐ gěi nǐ jiàngdào wǔbǎi jiàn, xiān hézuò kànkan ma.",k:"첫 오더는 500장까지 해드릴게요. 일단 한번 해보시죠."}]},
+{i:"샘플 기간·비용",q:"打样要几天？样品费怎么算？",p:"Dǎyàng yào jǐ tiān? Yàngpǐnfèi zěnme suàn?",k:"샘플 작업 며칠 걸려요? 샘플비는 어떻게 계산해요?",a:[
+{t:"std",z:"正常五到七天，样品费一件两百，下单可以退。",p:"Zhèngcháng wǔ dào qī tiān, yàngpǐnfèi yí jiàn liǎngbǎi, xiàdān kěyǐ tuì.",k:"보통 5~7일이고, 샘플비는 장당 200위안인데 발주하면 환불됩니다."},
+{t:"coll",z:"面料现成的话三天就能出。",p:"Miànliào xiànchéng dehuà sān tiān jiù néng chū.",k:"원단 재고 있으면 3일이면 나와요."}]},
+{i:"한국·일본 오더 경험",q:"你们做过韩国或者日本的单子吗？",p:"Nǐmen zuòguo Hánguó huòzhě Rìběn de dānzi ma?",k:"한국이나 일본 오더 해본 적 있어요?",a:[
+{t:"std",z:"有，跟几个韩国客户合作三四年了。",p:"Yǒu, gēn jǐ ge Hánguó kèhù hézuò sān sì nián le.",k:"네, 한국 바이어 몇 곳과 3~4년째 하고 있어요."},
+{t:"real",z:"日单做得多，品质要求我们心里有数。",p:"Rìdān zuò de duō, pǐnzhì yāoqiú wǒmen xīnli yǒushù.",k:"일본 오더를 많이 해서 품질 기준은 잘 알고 있습니다."}]},
+{i:"납기·성수기",q:"下单后交期一般多久？旺季会不会拖？",p:"Xiàdān hòu jiāoqī yìbān duōjiǔ? Wàngjì huì bu huì tuō?",k:"발주 후 납기가 보통 얼마나 돼요? 성수기엔 밀리지 않아요?",a:[
+{t:"std",z:"面料到位后三十五天左右出货。",p:"Miànliào dàowèi hòu sānshíwǔ tiān zuǒyòu chūhuò.",k:"원단 입고 후 35일 정도면 출고합니다.",n:"※ '발주 후'가 아니라 '원단 입고 후' 기준임에 주의"},
+{t:"real",z:"九、十月是旺季，最好提前半个月下单，不然排不上线。",p:"Jiǔ, shí yuè shì wàngjì, zuìhǎo tíqián bàn ge yuè xiàdān, bùrán páibushàng xiàn.",k:"9~10월은 성수기라 보름 먼저 발주하셔야 해요. 안 그러면 라인 배정이 안 돼요."}]},
+{i:"QC 체계",q:"质检是怎么做的？有没有专职QC？",p:"Zhìjiǎn shì zěnme zuò de? Yǒu méiyǒu zhuānzhí QC?",k:"검품은 어떻게 해요? 전담 QC 있어요?",a:[
+{t:"std",z:"每条线都有专职QC，出货前还有一道终检。",p:"Měi tiáo xiàn dōu yǒu zhuānzhí QC, chūhuò qián hái yǒu yí dào zhōngjiǎn.",k:"라인마다 전담 QC가 있고, 출고 전 최종검품을 한 번 더 합니다."},
+{t:"coll",z:"我们老板娘自己盯质量，比谁都严。",p:"Wǒmen lǎobǎnniáng zìjǐ dīng zhìliàng, bǐ shéi dōu yán.",k:"사장 사모님이 직접 품질을 챙겨요. 누구보다 깐깐해요.",n:"※ 소규모 공장의 흔한 답변 — 전담 QC 부재 신호일 수 있음"}]},
+{i:"인증·심사 자료",q:"有没有BSCI或者验厂报告？方便发我看看吗？",p:"Yǒu méiyǒu BSCI huòzhě yànchǎng bàogào? Fāngbiàn fā wǒ kànkan ma?",k:"BSCI나 공장 심사 보고서 있어요? 보내줄 수 있어요?",a:[
+{t:"std",z:"有BSCI，回头让文员发你微信。",p:"Yǒu BSCI, huítóu ràng wényuán fā nǐ wēixìn.",k:"BSCI 있어요. 이따 사무직원 시켜서 위챗으로 보내드릴게요."},
+{t:"real",z:"证书在办了，下个月能下来。",p:"Zhèngshū zài bàn le, xià ge yuè néng xiàlái.",k:"인증은 진행 중이고 다음 달에 나옵니다.",n:"※ 검증 필요 — '진행 중'은 실제로 없다는 뜻인 경우가 많음"}]},
+{i:"결제 조건",q:"付款方式一般怎么走？",p:"Fùkuǎn fāngshì yìbān zěnme zǒu?",k:"결제 조건은 보통 어떻게 해요?",a:[
+{t:"std",z:"百分之三十定金，出货前付清尾款。",p:"Bǎi fēn zhī sānshí dìngjīn, chūhuò qián fùqīng wěikuǎn.",k:"30% 선금, 출고 전 잔금 완납입니다."},
+{t:"real",z:"合作久了可以谈月结。",p:"Hézuò jiǔle kěyǐ tán yuèjié.",k:"거래가 오래되면 월결제(외상)도 얘기해볼 수 있죠."}]}
+],
+[
+{i:"견적·세금 확인",q:"这个款报价多少？含不含税？",p:"Zhège kuǎn bàojià duōshao? Hán bu hán shuì?",k:"이 스타일 견적이 얼마예요? 세금 포함이에요?",a:[
+{t:"std",z:"含十三个点的税，二十八块五。",p:"Hán shísān ge diǎn de shuì, èrshíbā kuài wǔ.",k:"13% 부가세 포함 28.5위안입니다."},
+{t:"real",z:"不含税可以给你二十六。",p:"Bù hán shuì kěyǐ gěi nǐ èrshíliù.",k:"세금 빼면 26위안에 드릴 수 있어요."}]},
+{i:"인하 요청",q:"比我们目标价高了，能不能再降一点？",p:"Bǐ wǒmen mùbiāojià gāo le, néng bu néng zài jiàng yìdiǎn?",k:"저희 타깃 가격보다 높은데, 좀 더 내려줄 수 없어요?",a:[
+{t:"std",z:"老板，这个价真没什么水分了，面料就占了一大半。",p:"Lǎobǎn, zhège jià zhēn méi shénme shuǐfèn le, miànliào jiù zhànle yídàbàn.",k:"사장님, 이 가격엔 정말 거품이 없어요. 원단이 절반 이상이에요."},
+{t:"real",z:"数量加到五千件，我再让你五毛。",p:"Shùliàng jiādào wǔqiān jiàn, wǒ zài ràng nǐ wǔ máo.",k:"수량을 5,000장으로 올리면 0.5위안 더 빼드리죠.",n:"※ 조건부 역제안 — 수량 약속 전에 단가만 먼저 확정할 것"},
+{t:"coll",z:"再降我们就白做了，真的。",p:"Zài jiàng wǒmen jiù bái zuò le, zhēn de.",k:"더 내리면 저희 헛장사예요, 진짜로."}]},
+{i:"원단 대체 시 단가",q:"面料换成便宜一点的，单价能差多少？",p:"Miànliào huànchéng piányi yìdiǎn de, dānjià néng chà duōshao?",k:"원단을 좀 싼 걸로 바꾸면 단가가 얼마나 차이 나요?",a:[
+{t:"std",z:"换这个供应商的布，一件能省一块八。",p:"Huàn zhège gōngyìngshāng de bù, yí jiàn néng shěng yí kuài bā.",k:"이 업체 원단으로 바꾸면 장당 1.8위안 절감돼요."},
+{t:"real",z:"便宜是便宜，不过手感会差一点，你要拿样对比一下。",p:"Piányi shì piányi, búguò shǒugǎn huì chà yìdiǎn, nǐ yào ná yàng duìbǐ yíxià.",k:"싸긴 싼데 촉감이 좀 떨어져요. 스와치 받아서 비교해보세요."}]},
+{i:"물량 조건부 단가",q:"数量做到一万件的话，单价能给到多少？",p:"Shùliàng zuòdào yíwàn jiàn dehuà, dānjià néng gěidào duōshao?",k:"1만 장 물량이면 단가를 얼마까지 줄 수 있어요?",a:[
+{t:"std",z:"一万件的话，二十六块给你做。",p:"Yíwàn jiàn dehuà, èrshíliù kuài gěi nǐ zuò.",k:"1만 장이면 26위안에 해드릴게요."},
+{t:"real",z:"你先确认数量，我回去跟老板申请一下。",p:"Nǐ xiān quèrèn shùliàng, wǒ huíqù gēn lǎobǎn shēnqǐng yíxià.",k:"수량 먼저 확정해주시면, 돌아가서 사장님께 품의 올려볼게요.",n:"※ 시간 끌기 패턴 — 회신 기한을 그 자리에서 못 박을 것"}]},
+{i:"원자재 시세",q:"最近棉纱是不是涨价了？对报价影响大吗？",p:"Zuìjìn miánshā shì bu shì zhǎngjià le? Duì bàojià yǐngxiǎng dà ma?",k:"요즘 면사 가격 오르지 않았어요? 견적에 영향이 커요?",a:[
+{t:"std",z:"涨了两个点，我们报价已经消化掉了。",p:"Zhǎngle liǎng ge diǎn, wǒmen bàojià yǐjīng xiāohuà diào le.",k:"2% 올랐는데 저희 견적에서 이미 흡수했어요."},
+{t:"real",z:"纱价天天变，这个价只能保两个礼拜。",p:"Shājià tiāntiān biàn, zhège jià zhǐ néng bǎo liǎng ge lǐbài.",k:"원사 시세가 매일 바뀌어서, 이 가격은 2주밖에 못 잡아드려요."}]},
+{i:"결제 조건 협상",q:"账期能不能做到月结三十天？",p:"Zhàngqī néng bu néng zuòdào yuèjié sānshí tiān?",k:"결제를 월결 30일로 할 수 있어요?",a:[
+{t:"std",z:"前三单还是要定金，做熟了再谈账期。",p:"Qián sān dān háishì yào dìngjīn, zuòshúle zài tán zhàngqī.",k:"처음 세 오더는 선금 주시고, 거래가 익으면 그때 외상 얘기하시죠."},
+{t:"coll",z:"月结可以，但是价格就不是这个价了哦。",p:"Yuèjié kěyǐ, dànshì jiàgé jiù bú shì zhège jià le o.",k:"월결 되긴 하는데, 그럼 가격이 이 가격이 아니에요~"}]},
+{i:"리오더 가격 유지",q:"后面返单的话，价格能保持吗？",p:"Hòumiàn fǎndān dehuà, jiàgé néng bǎochí ma?",k:"나중에 리오더 넣으면 가격 유지돼요?",a:[
+{t:"std",z:"三个月内返单保价。",p:"Sān ge yuè nèi fǎndān bǎojià.",k:"3개월 내 리오더는 가격 보장합니다."},
+{t:"real",z:"超过三个月就要看面料行情了。",p:"Chāoguò sān ge yuè jiù yào kàn miànliào hángqíng le.",k:"3개월 넘으면 원단 시세를 봐야 해요."}]},
+{i:"포장·운임 포함 여부",q:"包装和运费是算在报价里的吗？",p:"Bāozhuāng hé yùnfèi shì suàn zài bàojià lǐ de ma?",k:"포장이랑 운임은 견적에 포함된 거예요?",a:[
+{t:"std",z:"含普通包装，送到你们广州仓库运费我们出。",p:"Hán pǔtōng bāozhuāng, sòngdào nǐmen Guǎngzhōu cāngkù yùnfèi wǒmen chū.",k:"일반 포장 포함이고, 광저우 창고까지 운임은 저희 부담입니다."},
+{t:"real",z:"特殊包装要另外加钱，比如独立胶袋加吊牌。",p:"Tèshū bāozhuāng yào lìngwài jiā qián, bǐrú dúlì jiāodài jiā diàopái.",k:"개별 폴리백+행택 같은 특수 포장은 별도 비용이에요."}]}
+],
+[
+{i:"불량률 초과 제기",q:"这批货次品率超标了，你们怎么解释？",p:"Zhè pī huò cìpǐnlǜ chāobiāo le, nǐmen zěnme jiěshì?",k:"이번 물량 불량률이 기준 초과인데, 어떻게 설명하실 거예요?",a:[
+{t:"std",z:"实在不好意思，我先查一下是哪条线出的问题。",p:"Shízài bù hǎoyìsi, wǒ xiān chá yíxià shì nǎ tiáo xiàn chū de wèntí.",k:"정말 죄송합니다. 어느 라인 문제인지 먼저 확인해볼게요."},
+{t:"real",z:"你先把次品照片和数量发我，我们核实了再说处理方案。",p:"Nǐ xiān bǎ cìpǐn zhàopiàn hé shùliàng fā wǒ, wǒmen héshíle zài shuō chǔlǐ fāng'àn.",k:"불량 사진이랑 수량 먼저 보내주세요. 확인하고 나서 처리방안 얘기하죠.",n:"※ 시간 끌기 패턴 — 회신 기한을 명시할 것"}]},
+{i:"색차 클레임",q:"大货颜色跟确认样对不上，色差太明显了。",p:"Dàhuò yánsè gēn quèrènyàng duìbushàng, sèchā tài míngxiǎn le.",k:"메인 물량 색상이 컨펌 샘플과 안 맞아요. 색차가 너무 심해요.",a:[
+{t:"std",z:"可能是缸差，我们对一下留样。",p:"Kěnéng shì gāngchā, wǒmen duì yíxià liúyàng.",k:"염색 로트 차이일 수 있어요. 보관 샘플과 대조해볼게요."},
+{t:"real",z:"布是同一批染的，你看是不是灯光问题？",p:"Bù shì tóng yì pī rǎn de, nǐ kàn shì bu shì dēngguāng wèntí?",k:"원단은 같은 로트로 염색했어요. 조명 차이 아닐까요?",n:"※ 흔한 회피 답변 — 라이트박스(D65) 기준 재확인을 요구할 것"}]},
+{i:"사이즈 불량",q:"尺寸跳码了，M码做成了L码的尺寸，怎么回事？",p:"Chǐcùn tiàomǎ le, M mǎ zuòchéngle L mǎ de chǐcùn, zěnme huíshì?",k:"사이즈가 널뛰었어요. M이 L 치수로 나왔는데 어떻게 된 거예요?",a:[
+{t:"std",z:"可能是纸样出错了，我马上让版房核对。",p:"Kěnéng shì zhǐyàng chūcuò le, wǒ mǎshàng ràng bǎnfáng héduì.",k:"패턴 오류일 수 있어요. 바로 패턴실에 대조시킬게요."},
+{t:"coll",z:"洗水缩率没算好，这个我们认。",p:"Xǐshuǐ suōlǜ méi suànhǎo, zhège wǒmen rèn.",k:"워싱 수축률 계산을 잘못했네요. 이건 저희 잘못 인정합니다."}]},
+{i:"재작업 기한 압박",q:"返工一个礼拜内能不能搞定？",p:"Fǎngōng yí ge lǐbài nèi néng bu néng gǎodìng?",k:"재작업 일주일 안에 끝낼 수 있어요?",a:[
+{t:"std",z:"一个礼拜有点紧，十天肯定给你。",p:"Yí ge lǐbài yǒudiǎn jǐn, shí tiān kěndìng gěi nǐ.",k:"일주일은 좀 빠듯하고, 열흘이면 확실히 드릴게요."},
+{t:"real",z:"可以，不过要加夜班，加班费你们分担一点？",p:"Kěyǐ, búguò yào jiā yèbān, jiābānfèi nǐmen fēndān yìdiǎn?",k:"되는데 야간작업을 붙여야 해서, 야근비 좀 분담해주시면 안 될까요?",n:"※ 역제안 패턴 — 귀책이 공장에 있으면 단호히 거절"}]},
+{i:"배상 요구",q:"这批的损失怎么赔？",p:"Zhè pī de sǔnshī zěnme péi?",k:"이번 손실은 어떻게 배상하실 거예요?",a:[
+{t:"std",z:"该我们承担的我们承担，按合同来。",p:"Gāi wǒmen chéngdān de wǒmen chéngdān, àn hétong lái.",k:"저희 책임인 부분은 지겠습니다. 계약대로 하시죠."},
+{t:"real",z:"赔可以，不过运费是不是一人一半？",p:"Péi kěyǐ, búguò yùnfèi shì bu shì yì rén yíbàn?",k:"배상은 하는데, 운임은 반반 어때요?",n:"※ 협상 패턴 — 배상 원칙과 항목별 분담을 분리해 대응"}]},
+{i:"재발 방지 요구",q:"下一批你们怎么保证不再出这种问题？",p:"Xià yì pī nǐmen zěnme bǎozhèng bú zài chū zhè zhǒng wèntí?",k:"다음 물량은 재발 안 한다고 어떻게 보증할 거예요?",a:[
+{t:"std",z:"我们加一道中查，出货前你们QC随时可以驻厂。",p:"Wǒmen jiā yí dào zhōngchá, chūhuò qián nǐmen QC suíshí kěyǐ zhùchǎng.",k:"중간검품을 추가하고, 출고 전에 귀사 QC가 언제든 상주 가능합니다."},
+{t:"coll",z:"放心，这次是我们疏忽了，下次我亲自盯。",p:"Fàngxīn, zhè cì shì wǒmen shūhu le, xià cì wǒ qīnzì dīng.",k:"걱정 마세요. 이번엔 저희 실수였고, 다음엔 제가 직접 챙길게요."}]},
+{i:"선적 보류 통보",q:"问题解决之前，这批先不要发货。",p:"Wèntí jiějué zhīqián, zhè pī xiān búyào fāhuò.",k:"문제 해결 전까지 이번 물량 선적 보류하세요.",a:[
+{t:"std",z:"好的，我们先压在仓库，等你们通知。",p:"Hǎo de, wǒmen xiān yā zài cāngkù, děng nǐmen tōngzhī.",k:"네, 일단 창고에 잡아두고 통지 기다리겠습니다."},
+{t:"real",z:"老板，压太久我们仓库放不下，尽快给个结论好吗？",p:"Lǎobǎn, yā tài jiǔ wǒmen cāngkù fàngbuxià, jǐnkuài gěi ge jiélùn hǎo ma?",k:"사장님, 너무 오래 잡아두면 창고가 안 돼요. 빨리 결론 주시면 안 될까요?",n:"※ 압박 패턴 — 판정 일정은 우리 쪽 기준으로 통보"}]}
+]
+];
+
+// HSK 4급 (실무 빈출 우선 100)
+const W4=[
+["安排","ānpái","안배하다·일정을 잡다"],["按时","ànshí","제때에"],["保证","bǎozhèng","보증하다"],["标准","biāozhǔn","표준·기준"],["表格","biǎogé","표·양식"],
+["材料","cáiliào","재료·자료"],["参观","cānguān","견학하다"],["差不多","chàbuduō","비슷하다·거의"],["成功","chénggōng","성공(하다)"],["迟到","chídào","지각하다"],
+["出差","chūchāi","출장 가다"],["打折","dǎzhé","할인하다"],["大概","dàgài","대략"],["道歉","dàoqiàn","사과하다"],["登记","dēngjì","등록하다"],
+["调查","diàochá","조사하다"],["丰富","fēngfù","풍부하다"],["符合","fúhé","부합하다"],["负责","fùzé","책임지다"],["复印","fùyìn","복사하다"],
+["改变","gǎibiàn","바꾸다·변화"],["赶","gǎn","서두르다·대다"],["工资","gōngzī","임금·월급"],["估计","gūjì","추정하다"],["顾客","gùkè","고객"],
+["管理","guǎnlǐ","관리하다"],["规定","guīdìng","규정(하다)"],["国际","guójì","국제"],["过程","guòchéng","과정"],["合格","hégé","합격이다·기준에 맞다"],
+["合适","héshì","적합하다"],["互相","hùxiāng","서로"],["怀疑","huáiyí","의심하다"],["获得","huòdé","얻다"],["积累","jīlěi","쌓다·축적하다"],
+["及时","jíshí","제때에·즉시"],["计划","jìhuà","계획(하다)"],["技术","jìshù","기술"],["继续","jìxù","계속하다"],["加班","jiābān","야근하다"],
+["价格","jiàgé","가격"],["坚持","jiānchí","꾸준히 하다·견지하다"],["减少","jiǎnshǎo","줄이다"],["建议","jiànyì","제안(하다)"],["降低","jiàngdī","낮추다"],
+["交流","jiāoliú","교류하다"],["接受","jiēshòu","받아들이다"],["节约","jiéyuē","절약하다"],["结果","jiéguǒ","결과"],["解释","jiěshì","설명·해명하다"],
+["禁止","jìnzhǐ","금지하다"],["经济","jīngjì","경제"],["经历","jīnglì","경험(하다)·경력"],["经验","jīngyàn","경험·노하우"],["竞争","jìngzhēng","경쟁(하다)"],
+["拒绝","jùjué","거절하다"],["考虑","kǎolǜ","고려하다"],["肯定","kěndìng","확실히·인정하다"],["恐怕","kǒngpà","아마 ~일 것이다(우려)"],["困难","kùnnan","어려움"],
+["来得及","láidejí","(시간이) 늦지 않다"],["浪费","làngfèi","낭비하다"],["厉害","lìhai","대단하다·심하다"],["例如","lìrú","예를 들면"],["联系","liánxì","연락하다"],
+["麻烦","máfan","번거롭다·폐를 끼치다"],["免费","miǎnfèi","무료이다"],["目的","mùdì","목적"],["耐心","nàixīn","인내심(있다)"],["能力","nénglì","능력"],
+["判断","pànduàn","판단하다"],["批评","pīpíng","지적하다·비판하다"],["骗","piàn","속이다"],["普遍","pǔbiàn","보편적이다"],["其中","qízhōng","그중에"],
+["情况","qíngkuàng","상황"],["请假","qǐngjià","휴가를 내다"],["缺点","quēdiǎn","단점"],["缺少","quēshǎo","부족하다"],["确实","quèshí","확실히"],
+["任务","rènwu","임무·과업"],["商量","shāngliang","상의하다"],["稍微","shāowēi","약간"],["剩","shèng","남다"],["失败","shībài","실패하다"],
+["实际","shíjì","실제(의)"],["使用","shǐyòng","사용하다"],["适应","shìyìng","적응하다"],["收入","shōurù","수입·소득"],["熟悉","shúxī","잘 알다·익숙하다"],
+["顺利","shùnlì","순조롭다"],["速度","sùdù","속도"],["态度","tàidu","태도"],["讨论","tǎolùn","토론하다"],["特点","tèdiǎn","특징"],
+["提前","tíqián","앞당기다·미리"],["提供","tígōng","제공하다"],["提醒","tíxǐng","일깨우다·상기시키다"],["推迟","tuīchí","미루다·연기하다"],["误会","wùhuì","오해(하다)"],
+["详细","xiángxì","상세하다"],["消息","xiāoxi","소식·메시지"],["效果","xiàoguǒ","효과"],["辛苦","xīnkǔ","수고하다·고생스럽다"],["信任","xìnrèn","신임하다"],
+["严格","yángé","엄격하다"],["严重","yánzhòng","심각하다"],["原因","yuányīn","원인"],["允许","yǔnxǔ","허락하다"],["暂时","zànshí","잠시·당분간"],
+["增加","zēngjiā","증가하다"],["招聘","zhāopìn","채용하다"],["正常","zhèngcháng","정상적이다"],["证明","zhèngmíng","증명(하다)"],["支持","zhīchí","지지하다"],
+["值得","zhídé","~할 가치가 있다"],["质量","zhìliàng","품질"],["至少","zhìshǎo","최소한"],["重点","zhòngdiǎn","중점"],["重视","zhòngshì","중시하다"],
+["准确","zhǔnquè","정확하다"],["准时","zhǔnshí","제시간에"],["仔细","zǐxì","꼼꼼하다"],["总结","zǒngjié","정리·총결산하다"],["尊重","zūnzhòng","존중하다"]];
+
+// HSK 5급 (실무 빈출 우선 150)
+const W5=[
+["办理","bànlǐ","(수속을) 처리하다"],["保持","bǎochí","유지하다"],["保留","bǎoliú","보류하다·남겨두다"],["报告","bàogào","보고(서)"],["避免","bìmiǎn","피하다"],
+["毕竟","bìjìng","어쨌든·결국"],["补充","bǔchōng","보충하다"],["不足","bùzú","부족(하다)"],["采取","cǎiqǔ","(조치를) 취하다"],["参考","cānkǎo","참고하다"],
+["参与","cānyù","참여하다"],["产品","chǎnpǐn","제품"],["产生","chǎnshēng","생기다·발생하다"],["超过","chāoguò","초과하다"],["成本","chéngběn","원가"],
+["成分","chéngfèn","성분"],["成果","chéngguǒ","성과"],["成立","chénglì","설립하다"],["承担","chéngdān","(책임을) 지다"],["承认","chéngrèn","인정하다"],
+["程度","chéngdù","정도"],["程序","chéngxù","절차·프로그램"],["吃亏","chīkuī","손해를 보다"],["充分","chōngfèn","충분하다"],["重复","chóngfù","반복하다"],
+["出口","chūkǒu","수출(하다)"],["出色","chūsè","뛰어나다"],["出席","chūxí","참석하다"],["处理","chǔlǐ","처리하다"],["达到","dádào","도달하다"],
+["打交道","dǎ jiāodao","(사람과) 상대하다·거래하다"],["打听","dǎting","알아보다"],["单位","dānwèi","기관·직장"],["担任","dānrèn","(직무를) 맡다"],["当地","dāngdì","현지"],
+["导致","dǎozhì","(나쁜 결과를) 초래하다"],["地区","dìqū","지역"],["调整","tiáozhěng","조정하다"],["发挥","fāhuī","발휘하다"],["发票","fāpiào","영수증(파퍄오)"],
+["罚款","fákuǎn","벌금(을 물리다)"],["反应","fǎnyìng","반응"],["范围","fànwéi","범위"],["方案","fāng'àn","방안"],["方式","fāngshì","방식"],
+["分析","fēnxī","분석하다"],["改进","gǎijìn","개선하다"],["改善","gǎishàn","개선하다"],["高档","gāodàng","고급의"],["根本","gēnběn","근본적으로·전혀"],
+["工厂","gōngchǎng","공장"],["功能","gōngnéng","기능"],["沟通","gōutōng","소통하다"],["固定","gùdìng","고정하다"],["观察","guānchá","관찰하다"],
+["观点","guāndiǎn","관점"],["规模","guīmó","규모"],["规则","guīzé","규칙"],["合法","héfǎ","합법적이다"],["合理","hélǐ","합리적이다"],
+["合同","hétong","계약(서)"],["合作","hézuò","협력하다"],["后果","hòuguǒ","(나쁜) 결과"],["恢复","huīfù","회복하다"],["汇报","huìbào","(상부에) 보고하다"],
+["汇率","huìlǜ","환율"],["伙伴","huǒbàn","파트너"],["基本","jīběn","기본(적으로)"],["激烈","jīliè","치열하다"],["集中","jízhōng","집중하다"],
+["记录","jìlù","기록(하다)"],["价值","jiàzhí","가치"],["建立","jiànlì","세우다·구축하다"],["交换","jiāohuàn","교환하다"],["角度","jiǎodù","각도·관점"],
+["结构","jiégòu","구조"],["结论","jiélùn","결론"],["结账","jiézhàng","결제·정산하다"],["尽量","jǐnliàng","가능한 한"],["进口","jìnkǒu","수입(하다)"],
+["经营","jīngyíng","경영하다"],["具备","jùbèi","갖추다"],["具体","jùtǐ","구체적이다"],["克服","kèfú","극복하다"],["客观","kèguān","객관적이다"],
+["控制","kòngzhì","통제하다"],["扩大","kuòdà","확대하다"],["老板","lǎobǎn","사장"],["类型","lèixíng","유형"],["理由","lǐyóu","이유"],
+["立即","lìjí","즉시"],["利润","lìrùn","이윤"],["利益","lìyì","이익"],["利用","lìyòng","이용하다"],["临时","línshí","임시의"],
+["灵活","línghuó","융통성 있다·기민하다"],["落后","luòhòu","뒤떨어지다"],["满足","mǎnzú","만족시키다"],["贸易","màoyì","무역"],["面临","miànlín","직면하다"],
+["明确","míngquè","명확하다"],["目标","mùbiāo","목표"],["目前","mùqián","현재"],["内部","nèibù","내부"],["培训","péixùn","교육·연수하다"],
+["赔偿","péicháng","배상하다"],["配合","pèihé","협조하다"],["批准","pīzhǔn","승인하다"],["平均","píngjūn","평균"],["评价","píngjià","평가(하다)"],
+["期间","qījiān","기간"],["企业","qǐyè","기업"],["签字","qiānzì","서명하다"],["强调","qiángdiào","강조하다"],["亲自","qīnzì","직접·몸소"],
+["取消","qǔxiāo","취소하다"],["确定","quèdìng","확정하다"],["确认","quèrèn","확인하다"],["让步","ràngbù","양보하다"],["人才","réncái","인재"],
+["日程","rìchéng","일정"],["如何","rúhé","어떻게"],["商务","shāngwù","비즈니스"],["设备","shèbèi","설비"],["设计","shèjì","설계·디자인(하다)"],
+["生产","shēngchǎn","생산하다"],["生意","shēngyi","장사·사업"],["失去","shīqù","잃다"],["事先","shìxiān","사전에"],["手续","shǒuxù","수속·절차"],
+["熟练","shúliàn","숙련되다"],["数据","shùjù","데이터"],["双方","shuāngfāng","쌍방"],["说服","shuōfú","설득하다"],["损失","sǔnshī","손실"],
+["缩短","suōduǎn","단축하다"],["谈判","tánpàn","협상(하다)"],["通常","tōngcháng","통상적으로"],["退","tuì","반품하다·물리다"],["完善","wánshàn","보완하다·완비하다"],
+["万一","wànyī","만일"],["违反","wéifǎn","위반하다"],["维修","wéixiū","수리하다"],["文件","wénjiàn","문서·파일"],["稳定","wěndìng","안정적이다"],
+["细节","xìjié","세부 사항"],["现金","xiànjīn","현금"],["限制","xiànzhì","제한(하다)"],["相关","xiāngguān","관련되다"],["消费","xiāofèi","소비하다"],
+["销售","xiāoshòu","판매하다"],["效率","xiàolǜ","효율"],["行业","hángyè","업계"],["形成","xíngchéng","형성하다"],["修改","xiūgǎi","수정하다"],
+["询问","xúnwèn","문의하다"],["迅速","xùnsù","신속하다"],["押金","yājīn","보증금"],["延长","yáncháng","연장하다"],["样式","yàngshì","양식·스타일"],
+["业务","yèwù","업무"],["一致","yízhì","일치하다"],["意外","yìwài","뜻밖이다·사고"],["因素","yīnsù","요인"],["优惠","yōuhuì","우대(혜택)"],
+["优势","yōushì","우세·강점"],["犹豫","yóuyù","망설이다"],["有利","yǒulì","유리하다"],["预订","yùdìng","예약하다"],["运输","yùnshū","운송하다"],
+["造成","zàochéng","야기하다"],["涨","zhǎng","(값이) 오르다"],["掌握","zhǎngwò","숙달하다·장악하다"],["账户","zhànghù","계좌"],["针对","zhēnduì","~을 겨냥하여"],
+["正式","zhèngshì","정식의"],["执行","zhíxíng","실행·집행하다"],["制定","zhìdìng","수립·제정하다"],["制造","zhìzào","제조하다"],["中旬","zhōngxún","중순"],
+["重量","zhòngliàng","중량"],["逐渐","zhújiàn","점차"],["主动","zhǔdòng","먼저 나서다·능동적이다"],["主张","zhǔzhāng","주장(하다)"],["抓紧","zhuājǐn","서둘러 하다"],
+["专家","zhuānjiā","전문가"],["专门","zhuānmén","전문적으로·일부러"],["赚","zhuàn","(돈을) 벌다"],["状态","zhuàngtài","상태"],["资格","zīgé","자격"],
+["资金","zījīn","자금"],["资料","zīliào","자료"],["咨询","zīxún","문의·자문하다"],["遵守","zūnshǒu","준수하다"],["作为","zuòwéi","~로서"]];
+
+// ================= 공통 =================
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+let rate=1.0, zhVoice=null;
+function pickVoice(){const vs=speechSynthesis.getVoices();zhVoice=vs.find(v=>/zh[-_]CN/i.test(v.lang))||vs.find(v=>/^zh/i.test(v.lang))||null;
+if(!zhVoice&&vs.length)document.getElementById('ttsWarn').style.display='block';}
+if('speechSynthesis' in window){pickVoice();speechSynthesis.onvoiceschanged=pickVoice;}
+else document.getElementById('ttsWarn').style.display='block';
+function speak(t,r){if(!('speechSynthesis' in window))return;speechSynthesis.cancel();
+const u=new SpeechSynthesisUtterance(t);u.lang='zh-CN';if(zhVoice)u.voice=zhVoice;u.rate=r!==undefined?r:rate;speechSynthesis.speak(u);}
+
+// ================= 아이템 인덱스 =================
+// 문장: id 's{si}-{qi}-{ai}' / 단어: 'w4-{i}', 'w5-{i}'
+const ITEMS={};
+const SENT_IDS=[], W4_IDS=[], W5_IDS=[];
+DATA.forEach((sc,si)=>sc.forEach((q,qi)=>q.a.forEach((a,ai)=>{
+  const id=`s${si}-${qi}-${ai}`;
+  ITEMS[id]={id,kind:'sent',si,ctx:q.i,z:a.z,p:a.p,k:a.k,n:a.n||''};SENT_IDS.push(id);})));
+W4.forEach((w,i)=>{const id='w4-'+i;ITEMS[id]={id,kind:'word',lv:4,z:w[0],p:w[1],k:w[2]};W4_IDS.push(id);});
+W5.forEach((w,i)=>{const id='w5-'+i;ITEMS[id]={id,kind:'word',lv:5,z:w[0],p:w[1],k:w[2]};W5_IDS.push(id);});
+
+// ================= 저장 (localStorage + Supabase 동기화) =================
+// ▼▼▼ 배포자 설정: 이 두 줄만 본인 Supabase 값으로 바꿔서 업로드하세요 ▼▼▼
+const SB_URL = "https://qmxcfsozzrcdakkiozts.supabase.co/rest/v1/";   // 예: "https://xxxx.supabase.co"
+const SB_KEY = "sb_publishable_fTwyVCtEqz7HhSBJ74X9HQ_OjaVZam8";   // anon public key
+// ▲▲▲ 비워두면 오프라인(기기 저장) 모드로 동작합니다 ▲▲▲
+
+const SKEY='szcn-trainer-v1';
+const CFG_KEY='szcn-trainer-cfg';
+let state={prog:{},stats:{total:0,correct:0,days:{}},mastered:0,
+  goals:{min:220,sent:60,quiz:200,mast:35}};
+let cfg=null; try{cfg=JSON.parse(localStorage.getItem(CFG_KEY)||'null');}catch(e){}
+let saveTimer=null, remoteTimer=null;
+function today(){return new Date().toISOString().slice(0,10);}
+function dayRec(d){
+  d=d||today();
+  if(!state.stats.days[d])state.stats.days[d]={n:0,c:0};
+  const r=state.stats.days[d];
+  ['min','sq','m','am','mv','pm'].forEach(k=>{if(r[k]===undefined)r[k]=0;});
+  return r;
+}
+function setDot(c){document.getElementById('syncDot').style.background=c;}
+function cfgReady(){return SB_URL&&SB_KEY&&cfg&&cfg.sid;}
+function sbHeaders(){return {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};}
+function sbBase(){return SB_URL.replace(/\/+$/,'')+'/rest/v1/trainer';}
+async function remoteLoad(){
+  if(!cfgReady())return null;
+  try{
+    const r=await fetch(sbBase()+'?id=eq.'+encodeURIComponent(cfg.sid)+'&select=data',{headers:sbHeaders()});
+    if(!r.ok)throw new Error(r.status);
+    const j=await r.json();
+    setDot('#2ecc71');
+    return j.length?j[0].data:null;
+  }catch(e){setDot('#e74c3c');return null;}
+}
+async function remoteSave(){
+  if(!cfgReady()){setDot('#c6cbd6');return false;}
+  try{
+    const r=await fetch(sbBase(),{method:'POST',
+      headers:Object.assign(sbHeaders(),{'Prefer':'resolution=merge-duplicates'}),
+      body:JSON.stringify([{id:cfg.sid,data:state,updated_at:new Date().toISOString()}])});
+    setDot(r.ok?'#2ecc71':'#e74c3c');
+    return r.ok;
+  }catch(e){setDot('#e74c3c');return false;}
+}
+function mergePick(local,remote){
+  const score=s=>{let m=0;Object.values(s.stats.days||{}).forEach(d=>m+=(d.min||0));return (s.stats.total||0)*10+m;};
+  return score(remote)>=score(local)?remote:local;
+}
+async function loadState(){
+  try{const l=localStorage.getItem(SKEY);if(l){const s=JSON.parse(l);if(s&&s.prog)state=s;}}catch(e){}
+  const remote=await remoteLoad();
+  if(remote&&remote.prog)state=mergePick(state,remote);
+  if(!state.goals)state.goals={min:220,sent:60,quiz:200,mast:35};
+  if(!cfg||!cfg.sid){
+    document.getElementById('welModal').classList.add('show');
+  }else if(!cfgReady()){
+    document.getElementById('storeBanner').style.display='block';
+  }
+  refreshStats();renderReview();renderWords();
+  if(typeof renderProgress==='function')renderProgress();
+}
+function saveState(){
+  try{localStorage.setItem(SKEY,JSON.stringify(state));}catch(e){}
+  clearTimeout(remoteTimer);
+  remoteTimer=setTimeout(remoteSave,2500);
+}
+function prog(id){if(!state.prog[id])state.prog[id]={w:0,c:0,streak:0,inWrong:false,mastered:false};return state.prog[id];}
+function wrongIds(){return Object.keys(state.prog).filter(id=>state.prog[id].inWrong);}
+
+function grade(id,ok){
+  const p=prog(id);
+  state.stats.total++; if(ok)state.stats.correct++;
+  const r=dayRec();
+  r.n++; if(ok)r.c++;
+  if(ITEMS[id].kind==='sent')r.sq++;
+  if(ok){p.c++;p.streak++;
+    if(p.streak>=2){
+      if(p.inWrong)p.inWrong=false;
+      if(!p.mastered){p.mastered=true;state.mastered++;r.m++;}
+    }
+  }else{p.w++;p.streak=0;p.inWrong=true;}
+  saveState();refreshStats();renderReview();
+}
+function refreshStats(){
+  const d=state.stats.days[today()]||{n:0,c:0};
+  const acc=state.stats.total?Math.round(state.stats.correct/state.stats.total*100)+'%':'–';
+  document.getElementById('hstat').innerHTML=`오늘 <b>${d.n}</b>문<br>정답률 ${acc}`;
+  document.getElementById('stToday').textContent=d.n;
+  document.getElementById('stAcc').textContent=acc;
+  const wn=wrongIds().length;
+  document.getElementById('stWrong').textContent=wn;
+  document.getElementById('stMaster').textContent=state.mastered;
+  const b=document.getElementById('rvBadge');
+  b.style.display=wn?'block':'none'; b.textContent=wn;
+  document.getElementById('btnReview').disabled=!wn;
+}
+
+// ================= 회화 탭 =================
+let curScen=0;
+function renderScen(){
+  document.getElementById('scNote').textContent=SCEN_NOTES[curScen];
+  const wrap=document.getElementById('scList');wrap.innerHTML='';
+  DATA[curScen].forEach((q,qi)=>{
+    const card=document.createElement('div');card.className='qcard';
+    const ansHtml=q.a.map(a=>`<div class="ans"><span class="atag ${a.t}">${TAG_NAMES[a.t]}</span>
+      <div class="arow"><div class="azh zh">${esc(a.z)}</div><button class="playbtn sm" data-t="${esc(a.z)}">▶</button></div>
+      <div class="apy">${esc(a.p)}</div><div class="ako">${esc(a.k)}</div>${a.n?`<div class="anote">${esc(a.n)}</div>`:''}</div>`).join('');
+    card.innerHTML=`<div class="qhead"><div class="qintent">Q${qi+1} · ${esc(q.i)}</div>
+      <div class="qrow"><div class="qzh zh">${esc(q.q)}</div><button class="playbtn" data-t="${esc(q.q)}">▶</button></div>
+      <div class="qpy">${esc(q.p)}</div><div class="qko">${esc(q.k)}</div></div>
+      <button class="atoggle">답변 패턴 듣기 (${q.a.length}종) ▾</button><div class="answers">${ansHtml}</div>`;
+    wrap.appendChild(card);
+  });
+}
+document.querySelectorAll('.sc').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.sc').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  curScen=parseInt(b.dataset.s);renderScen();speechSynthesis.cancel();}));
+renderScen();
+
+// ================= HSK 단어장 탭 =================
+let curLv=4;
+function renderWords(){
+  const wrap=document.getElementById('wordList');wrap.innerHTML='';
+  const ids=curLv===4?W4_IDS:W5_IDS;
+  ids.forEach(id=>{
+    const it=ITEMS[id],p=state.prog[id];
+    let mark='';
+    if(p&&p.inWrong)mark=' style="border-left:3px solid #D51030"';
+    else if(p&&p.mastered)mark=' style="border-left:3px solid #1E7F4F"';
+    const div=document.createElement('div');div.className='rv-item';
+    div.innerHTML=`<div class="rv-row"${mark}><div style="flex:1;padding-left:${mark?'8px':'0'}">
+      <span class="rv-zh zh">${esc(it.z)}</span> <span class="apy" style="margin-left:6px">${esc(it.p)}</span>
+      <div class="rv-ko">${esc(it.k)}</div></div>
+      <button class="playbtn sm" data-t="${esc(it.z)}">▶</button></div>`;
+    wrap.appendChild(div);
+  });
+}
+document.querySelectorAll('.wf').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.wf').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  curLv=parseInt(b.dataset.l);renderWords();}));
+
+// ================= 퀴즈 엔진 =================
+let qzSrc='sent', qzCur=null, qzSession={n:0,c:0}, reviewMode=false;
+function poolIds(){
+  if(reviewMode)return wrongIds();
+  if(qzSrc==='sent')return SENT_IDS;
+  if(qzSrc==='hsk4')return W4_IDS;
+  if(qzSrc==='hsk5')return W5_IDS;
+  return W4_IDS.concat(W5_IDS);
+}
+function pickWeighted(ids){
+  // 오답·미학습 가중치: 오답대기 x4, 미학습 x2, 마스터 x0.5
+  const w=ids.map(id=>{const p=state.prog[id];
+    if(!p)return 2; if(p.inWrong)return 4; if(p.mastered)return 0.5; return 1;});
+  let sum=w.reduce((a,b)=>a+b,0), r=Math.random()*sum;
+  for(let i=0;i<ids.length;i++){r-=w[i];if(r<=0)return ids[i];}
+  return ids[ids.length-1];
+}
+function distractors(item,ids,n){
+  const cands=ids.filter(id=>id!==item.id&&ITEMS[id].k!==item.k);
+  const out=[];const used=new Set();
+  while(out.length<n&&cands.length){
+    const c=cands[Math.floor(Math.random()*cands.length)];
+    if(!used.has(c)){used.add(c);out.push(ITEMS[c]);}
+    if(used.size>=cands.length)break;
+  }
+  return out;
+}
+function newQuiz(){
+  const ids=poolIds();
+  const stage=document.getElementById('qzStage');
+  if(!ids.length){
+    stage.innerHTML=`<div class="qz-empty">${reviewMode?'복습할 오답이 없습니다. 🎉<br>퀴즈 탭에서 새 문제를 풀어보세요.':'문제 풀이를 시작하세요.'}</div>`;
+    return;
+  }
+  const id=pickWeighted(ids);
+  const item=ITEMS[id];
+  // 방향: 문장은 항상 듣기→뜻. 단어는 50% 中→韩(음성), 50% 韩→中
+  const dir=item.kind==='sent'?'z2k':(Math.random()<0.5?'z2k':'k2z');
+  const ds=distractors(item,ids.length>=4?ids:(item.kind==='sent'?SENT_IDS:W4_IDS.concat(W5_IDS)),3);
+  const opts=[item,...ds].sort(()=>Math.random()-0.5);
+  qzCur={item,dir,opts,answered:false};
+  const head=reviewMode?'오답 복습':(qzSrc==='sent'?'회화 듣기':'HSK 단어');
+  let promptHtml;
+  if(dir==='z2k'){
+    promptHtml=item.kind==='sent'
+      ?`<button class="qz-audio" id="qzPlay">▶</button><div class="qz-dir">음성을 듣고 뜻을 고르세요 (문장은 숨김)</div>`
+      :`<div class="qz-zh zh">${esc(item.z)}</div><div class="qz-py qpy">${esc(item.p)}</div>
+         <button class="playbtn" id="qzPlay" style="margin-top:8px">▶</button><div class="qz-dir" style="margin-top:6px">뜻을 고르세요</div>`;
+  }else{
+    promptHtml=`<div class="qz-ko">${esc(item.k)}</div><div class="qz-dir" style="margin-top:8px">알맞은 중국어를 고르세요</div>`;
+  }
+  const optHtml=opts.map((o,i)=>dir==='z2k'
+    ?`<button class="opt" data-i="${i}">${esc(o.k)}</button>`
+    :`<button class="opt zhopt zh" data-i="${i}">${esc(o.z)}</button>`).join('');
+  stage.innerHTML=`
+    <div class="qz-top"><span>${head} · 이번 세션 <b>${qzSession.n}</b>문 (정답 ${qzSession.c})</span><span>복습대기 ${wrongIds().length}</span></div>
+    <div class="qz-prompt">${promptHtml}</div>
+    <div class="opts">${optHtml}</div>
+    <div class="qz-fb" id="qzFb"></div>
+    <button class="qz-next" id="qzNext">다음 문제 ›</button>`;
+  if(dir==='z2k'&&item.kind==='sent')setTimeout(()=>speak(item.z),350);
+  const pb=document.getElementById('qzPlay');
+  if(pb)pb.addEventListener('click',()=>speak(item.z));
+  stage.querySelectorAll('.opt').forEach(b=>b.addEventListener('click',()=>answer(parseInt(b.dataset.i))));
+  document.getElementById('qzNext').addEventListener('click',newQuiz);
+}
+function answer(i){
+  if(!qzCur||qzCur.answered)return;
+  qzCur.answered=true;
+  const {item,opts,dir}=qzCur;
+  const ok=opts[i].id===item.id;
+  qzSession.n++;if(ok)qzSession.c++;
+  grade(item.id,ok);
+  document.querySelectorAll('#qzStage .opt').forEach((b,bi)=>{
+    b.disabled=true;
+    if(opts[bi].id===item.id)b.classList.add('correct');
+    else if(bi===i)b.classList.add('wrongpick');
+  });
+  const fb=document.getElementById('qzFb');
+  let detail=`<div class="d"><b class="zh">${esc(item.z)}</b><br><span style="color:var(--grey)">${esc(item.p)}</span><br>${esc(item.k)}`;
+  if(item.kind==='sent')detail+=`<br><span style="color:var(--grey);font-size:12px">[${SCEN_NAMES[item.si]} · ${esc(item.ctx)}]</span>`;
+  if(item.n)detail+=`<br><span style="color:var(--red);font-size:12px">${esc(item.n)}</span>`;
+  detail+='</div>';
+  fb.innerHTML=`<div class="r ${ok?'ok':'no'}">${ok?'정답! ✓':'오답 → 복습 목록에 추가됨'}</div>${detail}`;
+  fb.classList.add('show');
+  document.getElementById('qzNext').classList.add('show');
+  if(dir==='k2z'||item.kind==='word')speak(item.z);
+}
+document.querySelectorAll('.qsrc').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.qsrc').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  qzSrc=b.dataset.src;reviewMode=false;qzSession={n:0,c:0};newQuiz();}));
+
+// ================= 복습 탭 =================
+function renderReview(){
+  const wrap=document.getElementById('rvList');wrap.innerHTML='';
+  const ids=wrongIds();
+  if(!ids.length){wrap.innerHTML='<div class="qz-empty">현재 복습 대기 항목이 없습니다.</div>';renderWords();return;}
+  ids.forEach(id=>{
+    const it=ITEMS[id],p=state.prog[id];
+    const src=it.kind==='sent'?SCEN_NAMES[it.si]+' · '+it.ctx:'HSK '+it.lv+'급';
+    const div=document.createElement('div');div.className='rv-item';
+    div.innerHTML=`<div class="rv-row"><div style="flex:1">
+      <div class="rv-zh zh">${esc(it.z)}</div><div class="rv-ko">${esc(it.k)}</div>
+      <div class="rv-meta">${esc(src)} · 오답 <b>${p.w}</b>회 · 연속정답 ${p.streak}/2</div></div>
+      <button class="playbtn sm" data-t="${esc(it.z)}">▶</button></div>`;
+    wrap.appendChild(div);
+  });
+  renderWords();
+}
+document.getElementById('btnReview').addEventListener('click',()=>{
+  reviewMode=true;qzSession={n:0,c:0};
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.pane').forEach(x=>x.classList.remove('on'));
+  document.querySelector('.tab[data-p="p1"]').classList.add('on');
+  document.getElementById('p1').classList.add('on');
+  document.querySelectorAll('.qsrc').forEach(x=>x.classList.remove('on'));
+  newQuiz();
+});
+
+// ================= 전역 이벤트 =================
+document.body.addEventListener('click',e=>{
+  const pb=e.target.closest('.playbtn');
+  if(pb&&pb.dataset.t){speak(pb.dataset.t);return;}
+  const tg=e.target.closest('.atoggle');
+  if(tg){const box=tg.nextElementSibling;const open=box.classList.toggle('open');
+    tg.textContent=tg.textContent.replace(open?'▾':'▴',open?'▴':'▾');}
+});
+document.querySelectorAll('.spd').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.spd').forEach(x=>x.classList.remove('on'));b.classList.add('on');rate=parseFloat(b.dataset.r);}));
+document.getElementById('pyToggle').addEventListener('click',function(){
+  document.body.classList.toggle('nopy');this.classList.toggle('off');});
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.pane').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');document.getElementById(b.dataset.p).classList.add('on');
+  speechSynthesis.cancel();
+  if(b.dataset.p==='p1'&&!qzCur){reviewMode=false;newQuiz();}
+  if(b.dataset.p==='p2')renderWords();
+}));
+
+// ================= 학습 시간 자동 측정 =================
+let lastAct=Date.now();
+['click','touchstart','scroll','keydown'].forEach(ev=>document.addEventListener(ev,()=>{lastAct=Date.now();},{passive:true}));
+setInterval(()=>{
+  if(document.visibilityState!=='visible')return;
+  if(Date.now()-lastAct>60000)return; // 1분 무조작 시 일시정지
+  const r=dayRec();
+  r.min=Math.round((r.min+0.25)*100)/100;
+  const h=new Date().getHours();
+  if(h>=5&&h<11)r.am=Math.round((r.am+0.25)*100)/100;
+  else if(h>=11&&h<20)r.mv=Math.round((r.mv+0.25)*100)/100;
+  else r.pm=Math.round((r.pm+0.25)*100)/100;
+  saveState();
+  if(document.getElementById('p4').classList.contains('on'))renderProgress();
+},15000);
+
+// ================= 주간 진척도 =================
+function mondayOf(dstr){
+  const d=new Date(dstr+'T00:00:00');
+  const wd=(d.getDay()+6)%7; // 월=0
+  d.setDate(d.getDate()-wd);
+  return d;
+}
+function fmt(d){return d.toISOString().slice(0,10);}
+function weekDates(){
+  const m=mondayOf(today()),out=[];
+  for(let i=0;i<7;i++){const d=new Date(m);d.setDate(m.getDate()+i);out.push(fmt(d));}
+  return out;
+}
+function setGoalBar(idx,cur,goal,unit){
+  const pct=goal?Math.min(100,Math.round(cur/goal*100)):0;
+  document.getElementById('gT'+idx).textContent=Math.round(cur)+' / '+goal+unit;
+  const pEl=document.getElementById('gP'+idx),fEl=document.getElementById('gF'+idx);
+  pEl.textContent=pct+'%'; pEl.className='pct'+(pct>=100?' done':'');
+  fEl.style.width=pct+'%'; fEl.className='gfill'+(pct>=100?' done':'');
+}
+function calcStreak(){
+  let n=0;const d=new Date();
+  for(;;){
+    const key=fmt(d),r=state.stats.days[key];
+    const att=r&&((r.min||0)>=10||(r.n||0)>=10);
+    if(att)n++;
+    else{if(key===today()){d.setDate(d.getDate()-1);continue;}break;} // 오늘 미달은 스트릭 유지
+    d.setDate(d.getDate()-1);
+  }
+  return n;
+}
+function renderProgress(){
+  const wk=weekDates(),g=state.goals;
+  let min=0,sq=0,q=0,m=0;
+  wk.forEach(d=>{const r=state.stats.days[d];if(!r)return;
+    min+=r.min||0;sq+=r.sq||0;q+=r.n||0;m+=r.m||0;});
+  document.getElementById('weekRange').textContent=wk[0].slice(5).replace('-','/')+' ~ '+wk[6].slice(5).replace('-','/');
+  setGoalBar(1,min,g.min,'분');
+  setGoalBar(2,sq,g.sent,'문');
+  setGoalBar(3,q,g.quiz,'문');
+  setGoalBar(4,m,g.mast,'개');
+  // 일별 차트
+  const chart=document.getElementById('weekChart');chart.innerHTML='';
+  const vals=wk.map(d=>(state.stats.days[d]&&state.stats.days[d].min)||0);
+  const max=Math.max(20,...vals);
+  const labels=['월','화','수','목','금','토','일'];
+  wk.forEach((d,i)=>{
+    const col=document.createElement('div');col.className='wc-col';
+    const h=Math.round(vals[i]/max*62);
+    col.innerHTML=`<div class="wc-val">${vals[i]?Math.round(vals[i]):''}</div>
+      <div class="wc-bar${d===today()?' today':''}" style="height:${h}px"></div>
+      <div class="wc-lbl">${labels[i]}</div>`;
+    chart.appendChild(col);
+  });
+  // 오늘 슬롯
+  const r=dayRec();
+  document.getElementById('slAm').textContent=Math.round(r.am||0);
+  document.getElementById('slMv').textContent=Math.round(r.mv||0);
+  document.getElementById('slPm').textContent=Math.round(r.pm||0);
+  document.getElementById('streakN').textContent=calcStreak();
+  // 목표 입력값
+  document.getElementById('inMin').value=g.min;
+  document.getElementById('inSent').value=g.sent;
+  document.getElementById('inQuiz').value=g.quiz;
+  document.getElementById('inMast').value=g.mast;
+}
+document.getElementById('btnGoalSave').addEventListener('click',()=>{
+  const v=(id,def)=>Math.max(1,parseInt(document.getElementById(id).value)||def);
+  state.goals={min:v('inMin',220),sent:v('inSent',60),quiz:v('inQuiz',200),mast:v('inMast',35)};
+  saveState();renderProgress();
+  const b=document.getElementById('btnGoalSave');b.textContent='저장됨 ✓';
+  setTimeout(()=>b.textContent='목표 저장',1200);
+});
+document.querySelector('.tab[data-p="p4"]').addEventListener('click',renderProgress);
+
+// ================= 초대 코드 =================
+const cfgModal=document.getElementById('cfgModal');
+async function registerCode(sid,statEl){
+  sid=(sid||'').trim();
+  if(sid.length<6){statEl.innerHTML='<span style="color:#C8352E">코드를 정확히 입력해 주세요.</span>';return false;}
+  cfg={sid:sid};
+  localStorage.setItem(CFG_KEY,JSON.stringify(cfg));
+  if(!SB_URL||!SB_KEY){
+    statEl.innerHTML='<span style="color:#1E7F4F">✓ 등록됨 (현재 오프라인 모드)</span>';
+    return true;
+  }
+  statEl.textContent='확인 중...';
+  const remote=await remoteLoad();
+  if(remote&&remote.prog){state=mergePick(state,remote);}
+  const ok=await remoteSave();
+  if(ok){
+    statEl.innerHTML='<span style="color:#1E7F4F">✓ 등록 완료! 이 기기가 동기화됩니다.</span>';
+    document.getElementById('storeBanner').style.display='none';
+    refreshStats();renderReview();renderWords();
+    if(typeof renderProgress==='function')renderProgress();
+    return true;
+  }
+  statEl.innerHTML='<span style="color:#C8352E">연결 실패 — 네트워크를 확인하거나 배포자에게 문의하세요.</span>';
+  return false;
+}
+document.getElementById('btnCfg').addEventListener('click',()=>{
+  document.getElementById('cfgSid').value=cfg&&cfg.sid?cfg.sid:'';
+  document.getElementById('cfgStat').textContent='';
+  cfgModal.classList.add('show');
+});
+document.getElementById('cfgClose').addEventListener('click',()=>cfgModal.classList.remove('show'));
+cfgModal.addEventListener('click',e=>{if(e.target===cfgModal)cfgModal.classList.remove('show');});
+document.getElementById('cfgSave').addEventListener('click',async()=>{
+  const ok=await registerCode(document.getElementById('cfgSid').value,document.getElementById('cfgStat'));
+  if(ok)setTimeout(()=>cfgModal.classList.remove('show'),900);
+});
+// 웰컴 화면
+const welModal=document.getElementById('welModal');
+document.getElementById('welGo').addEventListener('click',async()=>{
+  const ok=await registerCode(document.getElementById('welSid').value,document.getElementById('welStat'));
+  if(ok)setTimeout(()=>welModal.classList.remove('show'),900);
+});
+document.getElementById('welSkip').addEventListener('click',()=>{
+  welModal.classList.remove('show');
+  document.getElementById('storeBanner').style.display='block';
+});
+// 앱 복귀 시 최신 기록 가져오기
+document.addEventListener('visibilitychange',async()=>{
+  if(document.visibilityState==='visible'&&cfgReady()){
+    const remote=await remoteLoad();
+    if(remote&&remote.prog){state=mergePick(state,remote);
+      refreshStats();renderReview();
+      if(typeof renderProgress==='function')renderProgress();}
+  }
+});
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
+
+loadState();
+</script>
+</body>
+</html>
