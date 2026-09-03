@@ -206,7 +206,7 @@
   <div class="seal zh">实战</div>
   <div style="flex:1">
     <div style="color:#b9bac2;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#e58a85;font-size:11px;font-weight:700;vertical-align:2px">BETA 1.4</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#e58a85;font-size:11px;font-weight:700;vertical-align:2px">BETA 1.5</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -1767,8 +1767,29 @@ function pickVoice(){const vs=speechSynthesis.getVoices();zhVoice=vs.find(v=>/zh
 if(!zhVoice&&vs.length)document.getElementById('ttsWarn').style.display='block';}
 if('speechSynthesis' in window){pickVoice();speechSynthesis.onvoiceschanged=pickVoice;}
 else document.getElementById('ttsWarn').style.display='block';
-function speak(t,r){if(!('speechSynthesis' in window))return;speechSynthesis.cancel();
-const u=new SpeechSynthesisUtterance(t);u.lang='zh-CN';if(zhVoice)u.voice=zhVoice;u.rate=r!==undefined?r:rate;speechSynthesis.speak(u);}
+function ttsSpeak(t,rr){if(!('speechSynthesis' in window))return;speechSynthesis.cancel();
+const u=new SpeechSynthesisUtterance(t);u.lang='zh-CN';if(zhVoice)u.voice=zhVoice;u.rate=rr;speechSynthesis.speak(u);}
+// mp3 우선 재생 (원어민 음성), 파일 없으면 TTS 폴백
+const audioCache={}, audioFail={};
+let curAudio=null;
+function fnv(s){let h=0x811c9dc5;const b=new TextEncoder().encode(s);for(const c of b){h^=c;h=Math.imul(h,0x01000193)>>>0;}return h.toString(16).padStart(8,'0');}
+function speak(t,r){
+  const rr=r!==undefined?r:rate;
+  const key=fnv(t);
+  if(audioFail[key]){ttsSpeak(t,rr);return;}
+  try{
+    if(curAudio){curAudio.pause();}
+    if('speechSynthesis' in window)speechSynthesis.cancel();
+    let a=audioCache[key];
+    if(!a){a=new Audio('audio/'+key+'.mp3');a.preload='auto';audioCache[key]=a;}
+    a.onerror=()=>{audioFail[key]=1;ttsSpeak(t,rr);};
+    a.playbackRate=rr;
+    a.currentTime=0;
+    curAudio=a;
+    const p=a.play();
+    if(p&&p.catch)p.catch(()=>{audioFail[key]=1;ttsSpeak(t,rr);});
+  }catch(e){audioFail[key]=1;ttsSpeak(t,rr);}
+}
 
 // ================= 아이템 인덱스 =================
 // 문장: id 's{si}-{qi}-{ai}' / 단어: 'w4-{i}', 'w5-{i}'
