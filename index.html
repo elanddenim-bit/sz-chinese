@@ -94,6 +94,37 @@
   .qz-next{width:100%;margin-top:14px;border:none;background:var(--red);color:#fff;border-radius:9px;padding:13px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;display:none}
   .qz-next.show{display:block}
   .qz-empty{text-align:center;color:var(--grey);font-size:13.5px;padding:30px 10px;line-height:1.7}
+  /* 롤플레잉 */
+  .rp-card{background:#fff;border:1px solid var(--hair);border-radius:11px;padding:15px;margin-bottom:11px}
+  .rp-card .t{font-size:15.5px;font-weight:800;margin-bottom:5px}
+  .rp-card .s{font-size:12.5px;color:#4a5670;line-height:1.6;margin-bottom:11px}
+  .rp-card .best{font-size:11.5px;color:var(--grey);margin-bottom:9px}
+  .rp-start{border:none;background:var(--red);color:#fff;border-radius:8px;padding:10px 18px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit}
+  .rp-setting{background:#26262E;color:#d8d9de;border-radius:10px;padding:12px 14px;font-size:12.5px;line-height:1.6;margin-bottom:13px}
+  .rp-setting b{color:#fff}
+  .rp-chat{display:flex;flex-direction:column;gap:10px;margin-bottom:13px}
+  .bub{max-width:88%;border-radius:12px;padding:11px 13px;line-height:1.5}
+  .bub.npc{align-self:flex-start;background:#fff;border:1px solid var(--hair);border-bottom-left-radius:3px}
+  .bub.me{align-self:flex-end;background:var(--navy);color:#fff;border-bottom-right-radius:3px}
+  .bub .bz{font-size:15.5px;font-weight:600}
+  .bub .bp{font-size:11.5px;color:var(--grey);margin-top:4px}
+  .bub.me .bp{color:#b9bac2}
+  .bub .bk{font-size:12px;color:#4a5670;margin-top:4px}
+  .bub.me .bk{color:#d8d9de}
+  .bub .bplay{background:none;border:none;color:var(--red);font-size:13px;cursor:pointer;padding:2px 0 0;font-family:inherit}
+  body.nopy .bub .bp{display:none}
+  .rp-q{font-size:12.5px;color:var(--grey);text-align:center;margin:6px 0 9px}
+  .rp-choice{display:block;width:100%;text-align:left;border:1.5px solid var(--hair);background:#fff;border-radius:10px;padding:12px 13px;margin-bottom:8px;cursor:pointer;font-family:inherit;line-height:1.5}
+  .rp-choice:active{border-color:var(--navy)}
+  .rp-choice .cz{font-size:14.5px;font-weight:600;color:var(--navy)}
+  .rp-choice .ck{font-size:11.5px;color:var(--grey);margin-top:3px}
+  .rp-fb{font-size:11.5px;color:var(--red);background:var(--nobg);border-radius:7px;padding:8px 11px;margin-bottom:10px;line-height:1.5}
+  .rp-end{background:#fff;border:1px solid var(--hair);border-radius:11px;padding:16px;text-align:center}
+  .rp-stars{font-size:26px;letter-spacing:4px;margin-bottom:8px}
+  .rp-grade{font-size:15px;font-weight:800;margin-bottom:6px}
+  .rp-msg{font-size:13px;color:#4a5670;line-height:1.65;margin-bottom:13px;text-align:left}
+  .rp-keys{text-align:left;border-top:1px solid var(--hair);padding-top:12px;margin-bottom:13px}
+  .rp-keys .kt{font-size:12px;font-weight:700;color:var(--red);margin-bottom:8px}
   /* 조립 퀴즈 */
   .tilebank,.ansrow{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
   .ansrow{min-height:46px;background:#FAFBFC;border:1.5px dashed var(--hair);border-radius:10px;padding:9px;margin-bottom:14px}
@@ -175,7 +206,7 @@
   <div class="seal zh">实战</div>
   <div style="flex:1">
     <div style="color:#b9bac2;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#e58a85;font-size:11px;font-weight:700;vertical-align:2px">BETA 1.3</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#e58a85;font-size:11px;font-weight:700;vertical-align:2px">BETA 1.4</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -209,9 +240,11 @@
     <button class="chip sc" data-s="1">💰 단가 협상</button>
     <button class="chip sc" data-s="2">⚠️ 품질 클레임</button>
     <button class="chip sc" data-s="3">💬 위챗 실전</button>
+    <button class="chip sc" data-s="rp" style="border-color:var(--red);color:var(--red)">🎭 롤플레잉</button>
   </div>
   <div class="scenario-note" id="scNote"></div>
   <div id="scList"></div>
+  <div id="rpArea" style="display:none"></div>
 </div>
 
 <!-- 퀴즈 -->
@@ -1666,6 +1699,67 @@ const TOKPY={"我们": "wǒmen", "主要": "zhǔyào", "做": "zuò", "针织": 
 
 Object.assign(TOKS,{"s3-0-0": ["好的", "朴社长", "麻烦", "你", "了", "我们", "等", "你", "消息"], "s3-0-1": ["老板", "我们", "线", "快", "空", "了", "实在", "不行", "小单", "也", "可以", "接"], "s3-0-2": ["那", "拜托", "了", "有", "单", "第一个", "想到", "我们", "啊"], "s3-1-0": ["放心", "我", "亲自", "盯", "保证", "按时", "寄出"], "s3-1-1": ["好的", "不过", "面料", "还", "没", "到", "到了", "我", "马上", "安排"], "s3-2-0": ["我", "问", "一下", "车间", "下午", "回复", "你", "具体", "日期"], "s3-2-1": ["应该", "周五", "能", "出", "最迟", "下周一"], "s3-2-2": ["尽量", "这周", "给", "你", "搞", "出来"], "s3-3-0": ["整体", "还好", "就是", "订单", "比", "前两年", "少", "一点"], "s3-3-1": ["不太", "乐观", "好几个", "客户", "把", "单", "转到", "越南", "了"], "s3-4-0": ["我们", "理解", "你", "过来", "我们", "当面", "聊", "总有", "办法", "的"], "s3-4-1": ["朴社长", "我们", "利润", "真的", "很", "薄", "要不", "面料", "上", "想想", "办法"], "s3-4-2": ["哎呀", "现在", "这个", "行情", "大家", "都", "难", "啊"], "s3-5-0": ["好", "你", "来", "之前", "说", "一声", "我", "让", "财务", "把", "成本", "明细", "准备", "好"], "s3-5-1": ["欢迎", "欢迎", "顺便", "一起", "吃", "个", "饭"], "s3-6-0": ["收到", "我", "让", "会计", "核对", "没", "问题", "马上", "回", "你"], "s3-6-1": ["老板", "上次", "那", "笔", "尾款", "什么", "时候", "能", "安排"], "s3-7-0": ["明白", "我", "整理", "好", "发", "你", "微信"], "s3-7-1": ["行行行", "我", "下班", "前", "发", "你"]});
 Object.assign(TOKPY,{"好": "hǎo", "的": "de", "朴": "pǔ", "社长": "shèzhǎng", "麻烦": "máfán", "你": "nǐ", "了": "le", "我们": "wǒmen", "等": "děng", "消息": "xiāoxī", "老板": "lǎobǎn", "线快": "xiànkuài", "空": "kōng", "实在": "shízài", "不行": "bùxíng", "小单": "xiǎodān", "也": "yě", "可以": "kěyǐ", "接": "jiē", "那": "nà", "拜托": "bàituō", "有单": "yǒudān", "第一个": "dìyígè", "想到": "xiǎngdào", "啊": "a", "放心": "fàngxīn", "我": "wǒ", "亲自": "qīnzì", "盯": "dīng", "保证": "bǎozhèng", "按时": "ànshí", "寄出": "jìchū", "不过": "bùguò", "面料": "miànliào", "还": "hái", "没到": "méidào", "到": "dào", "马上": "mǎshàng", "安排": "ānpái", "问": "wèn", "一下": "yīxià", "车间": "chējiān", "下午": "xiàwǔ", "回复": "huífù", "具体": "jùtǐ", "日期": "rìqī", "应该": "yīnggāi", "周五": "zhōuwǔ", "能出": "néngchū", "最迟": "zuìchí", "下周一": "xiàzhōuyī", "尽量": "jǐnliàng", "这周": "zhèzhōu", "给": "gěi", "搞": "gǎo", "出来": "chūlái", "整体": "zhěngtǐ", "还好": "háihǎo", "就是": "jiùshì", "订单": "dìngdān", "比前": "bǐqián", "两年": "liǎngnián", "少": "shǎo", "一点": "yìdiǎn", "不太": "bùtài", "乐观": "lèguān", "好几个": "hǎojǐgè", "客户": "kèhù", "把": "bǎ", "单转": "dānzhuǎn", "越南": "yuènán", "理解": "lǐjiě", "过来": "guòlái", "当面": "dāngmiàn", "聊": "liáo", "总有": "zǒngyǒu", "办法": "bànfǎ", "利润": "lìrùn", "真的": "zhēnde", "很": "hěn", "薄": "báo", "要": "yào", "不": "bù", "上": "shàng", "想想": "xiǎngxiǎng", "哎呀": "āiyā", "现在": "xiànzài", "这个": "zhège", "行情": "hángqíng", "大家": "dàjiā", "都": "dōu", "难": "nán", "来": "lái", "之前": "zhīqián", "说": "shuō", "一声": "yīshēng", "让": "ràng", "财务": "cáiwù", "成本": "chéngběn", "明细": "míngxì", "准备": "zhǔnbèi", "欢迎": "huānyíng", "顺便": "shùnbiàn", "一起": "yìqǐ", "吃个": "chīgè", "饭": "fàn", "收到": "shōudào", "会计": "kuàijì", "核对": "héduì", "没": "méi", "问题": "wèntí", "回": "huí", "上次": "shàngcì", "笔": "bǐ", "尾款": "wěikuǎn", "什么": "shénme", "时候": "shíhòu", "能": "néng", "明白": "míngbái", "整理": "zhěnglǐ", "好发": "hǎofā", "微信": "wēixìn", "行行行": "xíngxíngxíng", "下班": "xiàbān", "前发": "qiánfā", "好的": "hǎode", "朴社长": "pǔshèzhǎng", "线": "xiàn", "快": "kuài", "有": "yǒu", "单": "dān", "到了": "dàole", "出": "chū", "比": "bǐ", "前两年": "qiánliǎngnián", "转到": "zhuǎndào", "要不": "yàobù", "吃": "chī", "个": "gè", "发": "fā", "前": "qián"});
+const RP=[
+{id:"delay",icon:"🏭",title:"납기 지연 통보",setting:"수주회 샘플 오더 출고 D-7. 공장 사장에게서 위챗이 왔다. 확정 날짜와 서면 근거를 받아내는 것이 목표.",start:"n1",maxPts:6,
+keys:[{z:"你今天给我一个能落实的日期。",p:"Nǐ jīntiān gěi wǒ yí ge néng luòshí de rìqī.",k:"오늘 실제 지킬 수 있는 날짜를 줘요."},{z:"我这边压不住了。",p:"Wǒ zhèbiān yābuzhù le.",k:"내 선에서 더는 못 막아요."},{z:"你把这个发我微信，我要跟韩国汇报。",p:"Nǐ bǎ zhège fā wǒ wēixìn, wǒ yào gēn Hánguó huìbào.",k:"이거 위챗으로 보내줘요, 한국에 보고해야 해요."}],
+nodes:{
+n1:{npc:{z:"朴社长，不好意思，货期那边有点问题，布厂交布晚了，可能要拖四五天。",p:"Piáo shèzhǎng, bù hǎoyìsi, huòqī nàbiān yǒudiǎn wèntí, bùchǎng jiāobù wǎn le, kěnéng yào tuō sì-wǔ tiān.",k:"박사장님 죄송한데, 납기에 문제가 좀 있어요. 원단공장 납품이 늦어져서 4~5일 밀릴 것 같아요."},choices:[
+{z:"没关系，你们尽量快一点吧。",p:"Méi guānxi, nǐmen jǐnliàng kuài yìdiǎn ba.",k:"괜찮아요, 최대한 빨리 해주세요.",next:"n2a",pts:0,fb:"'괜찮다'로 받으면 공장은 안심하고 미룹니다"},
+{z:"等一下，'可能'不行。布几号到？你今天给我一个能落实的日期。",p:"Děng yíxià, 'kěnéng' bùxíng. Bù jǐ hào dào? Nǐ jīntiān gěi wǒ yí ge néng luòshí de rìqī.",k:"잠깐, '아마도'는 안 돼요. 원단 며칠에 와요? 오늘 지킬 수 있는 날짜를 줘요.",next:"n2b",pts:2},
+{z:"这不行！合同上写得清清楚楚，拖了你们要赔的！",p:"Zhè bùxíng! Hétong shàng xiě de qīngqīngchǔchǔ, tuōle nǐmen yào péi de!",k:"안 돼요! 계약서에 명확히 써 있어요. 늦으면 배상해야 해요!",next:"n2c",pts:1,fb:"틀린 말은 아니지만 첫 반응부터 배상 언급은 관계 경색 리스크"}]},
+n2a:{npc:{z:"好的好的，我们尽量。……（三天后）朴社长，布还没到，可能还要再等等。",p:"Hǎo de hǎo de, wǒmen jǐnliàng. ……(sān tiān hòu) Piáo shèzhǎng, bù hái méi dào, kěnéng hái yào zài děngdeng.",k:"네네, 최대한요. ……(3일 뒤) 박사장님, 원단이 아직 안 와서 좀 더 기다려야 할 것 같아요."},choices:[
+{z:"那没办法，到了告诉我吧。",p:"Nà méi bànfǎ, dàole gàosu wǒ ba.",k:"그럼 어쩔 수 없죠, 오면 알려줘요.",next:"endBad",pts:0},
+{z:"不能再等了。我这边压不住了，你今天必须给我一个能落实的日期。",p:"Bù néng zài děng le. Wǒ zhèbiān yābuzhù le, nǐ jīntiān bìxū gěi wǒ yí ge néng luòshí de rìqī.",k:"더는 못 기다려요. 내 선에서 못 막아요. 오늘 반드시 지킬 수 있는 날짜를 줘요.",next:"n3",pts:2}]},
+n2b:{npc:{z:"布应该周三能到，到了我们加班赶，周六肯定能出货。",p:"Bù yīnggāi zhōusān néng dào, dàole wǒmen jiābān gǎn, zhōuliù kěndìng néng chūhuò.",k:"원단은 수요일엔 올 거예요. 오면 야근해서 토요일엔 확실히 출고 가능해요."},choices:[
+{z:"好，那就定周六。你把这个发我微信，我要跟韩国汇报。",p:"Hǎo, nà jiù dìng zhōuliù. Nǐ bǎ zhège fā wǒ wēixìn, wǒ yào gēn Hánguó huìbào.",k:"좋아요, 토요일로 확정. 이거 위챗으로 보내줘요, 한국에 보고해야 하니까.",next:"n3",pts:2,fb:"서면(위챗) 근거 확보 — 최선의 수"},
+{z:"行，那辛苦你们了。",p:"Xíng, nà xīnkǔ nǐmen le.",k:"알겠어요, 수고해줘요.",next:"n3",pts:1,fb:"말로만 확정 — 서면 근거가 없으면 나중에 근거가 안 됨"}]},
+n2c:{npc:{z:"老板你别生气嘛，我们也不想的呀，布厂那边我们也催不动啊……",p:"Lǎobǎn nǐ bié shēngqì ma, wǒmen yě bù xiǎng de ya, bùchǎng nàbiān wǒmen yě cuībudòng a……",k:"사장님 화내지 마세요~ 저희도 원한 게 아니에요. 원단공장은 저희도 재촉이 안 먹혀요……"},choices:[
+{z:"我不是要怪你们，我是要一个准确日期。今天下班前发我。",p:"Wǒ bú shì yào guài nǐmen, wǒ shì yào yí ge zhǔnquè rìqī. Jīntiān xiàbān qián fā wǒ.",k:"탓하려는 게 아니라 정확한 날짜가 필요한 거예요. 오늘 퇴근 전까지 보내줘요.",next:"n3",pts:2,fb:"감정→요구로 전환. 회복의 정석"},
+{z:"我不管，反正周五必须出货！",p:"Wǒ bù guǎn, fǎnzhèng zhōuwǔ bìxū chūhuò!",k:"난 몰라요, 어쨌든 금요일에 무조건 출고해요!",next:"endBad2",pts:0}]},
+n3:{npc:{z:"明白了。周六出货，我现在发你微信确认，到时候我亲自盯。",p:"Míngbai le. Zhōuliù chūhuò, wǒ xiànzài fā nǐ wēixìn quèrèn, dàoshíhou wǒ qīnzì dīng.",k:"알겠습니다. 토요일 출고로 지금 위챗 확인 보낼게요. 제가 직접 챙기겠습니다."},end:{grade:"good",msg:"확정 날짜 + 위챗 서면 근거 확보. 본사 보고 가능한 상태로 마무리했습니다."}},
+endBad:{npc:{z:"好的，到了我们通知你。",p:"Hǎo de, dàole wǒmen tōngzhī nǐ.",k:"네, 오면 알려드릴게요."},end:{grade:"bad",msg:"날짜 없이 종료 — 지연이 반복될 확률이 높습니다. '可能/尽量'을 들으면 반드시 날짜를 못박으세요."}},
+endBad2:{npc:{z:"……（읽씹）",p:"",k:"(답장이 없다)"},end:{grade:"bad",msg:"요구는 했지만 실행 불가능한 요구 + 감정 충돌로 공장이 입을 닫았습니다. 압박은 '실현 가능한 날짜'를 향해야 합니다."}}
+}},
+{id:"fabric",icon:"🧵",title:"원단시장 스와치 사냥",setting:"광저우 중대(中大) 원단시장. 수주회 샘플용 260g 기모 원단을 찾는 중. 스와치를 확보하고 위챗을 트는 것이 목표.",start:"n1",maxPts:6,
+keys:[{z:"先剪个样，我拿回去打样。",p:"Xiān jiǎn ge yàng, wǒ ná huíqù dǎyàng.",k:"먼저 스와치 잘라줘요, 가져가서 샘플 떠볼게요."},{z:"有没有现货？成分是什么？",p:"Yǒu méiyǒu xiànhuò? Chéngfèn shì shénme?",k:"재고 있어요? 성분이 뭐예요?"},{z:"大货交期一般几天？",p:"Dàhuò jiāoqī yìbān jǐ tiān?",k:"본생산 납기는 보통 며칠이에요?"}],
+nodes:{
+n1:{npc:{z:"老板，看点什么？我们家主要做针织面料。",p:"Lǎobǎn, kàn diǎn shénme? Wǒmen jiā zhǔyào zuò zhēnzhī miànliào.",k:"사장님, 뭐 보세요? 저희는 니트 원단 위주예요."},choices:[
+{z:"我找一款260克左右的卫衣绒布，有没有现货？",p:"Wǒ zhǎo yì kuǎn liǎngbǎi liùshí kè zuǒyòu de wèiyī róngbù, yǒu méiyǒu xiànhuò?",k:"260g 정도 맨투맨 기모 원단 찾는데, 재고 있어요?",next:"n2b",pts:2,fb:"스펙부터 — 프로의 진입"},
+{z:"这个面料怎么卖？",p:"Zhège miànliào zěnme mài?",k:"이 원단 얼마예요?",next:"n2a",pts:1},
+{z:"随便看看。",p:"Suíbiàn kànkan.",k:"그냥 둘러볼게요.",next:"n2a",pts:0,fb:"주인의 관심도가 떨어짐 — 시장에서는 목적을 밝히는 쪽이 대접받습니다"}]},
+n2a:{npc:{z:"这个35一公斤，你要量大有优惠。要多少？",p:"Zhège sānshíwǔ yì gōngjīn, nǐ yào liàng dà yǒu yōuhuì. Yào duōshao?",k:"이거 kg당 35위안이고 물량 많으면 할인돼요. 얼마나 필요해요?"},choices:[
+{z:"先别谈价。这个有没有260克的？成分是什么？",p:"Xiān bié tán jià. Zhège yǒu méiyǒu liǎngbǎi liùshí kè de? Chéngfèn shì shénme?",k:"가격은 이따가요. 이거 260g짜리 있어요? 성분이 뭐예요?",next:"n2b",pts:2,fb:"스펙 확인 전 흥정은 순서가 거꾸로"},
+{z:"太贵了，便宜点吧。",p:"Tài guì le, piányi diǎn ba.",k:"너무 비싸요, 깎아줘요.",next:"n2b",pts:0,fb:"스펙도 모르고 깎으면 '외지 초보' 취급 — 다른 원단으로 바꿔치기당할 수도"}]},
+n2b:{npc:{z:"有，260克全棉的，也有CVC的，CVC便宜两块。你量大概多少？",p:"Yǒu, liǎngbǎi liùshí kè quánmián de, yě yǒu CVC de, CVC piányi liǎng kuài. Nǐ liàng dàgài duōshao?",k:"있어요. 260g 순면도 있고 CVC(혼방)도 있어요. CVC가 2위안 싸요. 물량은 대략 얼마예요?"},choices:[
+{z:"先剪个样，两种都剪。我拿回去打样，合适的话大货一次两三吨。",p:"Xiān jiǎn ge yàng, liǎng zhǒng dōu jiǎn. Wǒ ná huíqù dǎyàng, héshì dehuà dàhuò yí cì liǎng-sān dūn.",k:"먼저 스와치 잘라줘요, 두 종류 다요. 가져가서 샘플 떠보고 맞으면 본생산은 한 번에 2~3톤이에요.",next:"n3",pts:2,fb:"물량 언급 = 스와치 무료 + 대접이 달라짐"},
+{z:"大概一吨左右吧。",p:"Dàgài yì dūn zuǒyòu ba.",k:"대략 1톤 정도요.",next:"n3",pts:1}]},
+n3:{npc:{z:"行，样品免费给你剪。加个微信吧，大货价我给你算优惠点。",p:"Xíng, yàngpǐn miǎnfèi gěi nǐ jiǎn. Jiā ge wēixìn ba, dàhuò jià wǒ gěi nǐ suàn yōuhuì diǎn.",k:"좋아요, 스와치는 무료로 잘라드릴게요. 위챗 추가해요, 본생산 가격은 잘 쳐드릴게요."},choices:[
+{z:"好。对了，大货交期一般几天？缸差你们怎么控制？",p:"Hǎo. Duìle, dàhuò jiāoqī yìbān jǐ tiān? Gāngchā nǐmen zěnme kòngzhì?",k:"좋아요. 참, 본생산 납기는 보통 며칠이에요? 염색 로트 차는 어떻게 관리해요?",next:"endGood",pts:2,fb:"납기+캉차(缸差)까지 물으면 완전한 실무자"},
+{z:"好的，谢谢老板。",p:"Hǎo de, xièxie lǎobǎn.",k:"네, 감사합니다 사장님.",next:"endOk",pts:1}]},
+endGood:{npc:{z:"一般七到十天，缸差我们留样对色，放心。你微信多少？",p:"Yìbān qī dào shí tiān, gāngchā wǒmen liúyàng duìsè, fàngxīn. Nǐ wēixìn duōshao?",k:"보통 7~10일이고, 캉차는 보관샘플로 색 대조하니 안심하세요. 위챗 번호가 어떻게 돼요?"},end:{grade:"good",msg:"스와치 2종 + 납기·품질관리 정보 + 위챗 확보. 스와치 뒤에 매대 명함 스테이플러로 찍어두는 것 잊지 마세요."}},
+endOk:{npc:{z:"好嘞，慢走啊！",p:"Hǎo lei, màn zǒu a!",k:"네~ 살펴 가세요!"},end:{grade:"ok",msg:"스와치는 얻었지만 납기·캉차 정보를 안 물었습니다. 본생산 검토 때 다시 와야 해요."}}
+}},
+{id:"wholesale",icon:"🛍",title:"도매상가 사입 흥정",setting:"광저우 스얼싼항(十三行) 의류 도매상가. 트렌드 파악용 샘플을 사입하러 왔다. 낱장 사입 + 재사입 관계를 트는 것이 목표.",start:"n1",maxPts:6,
+keys:[{z:"拿货的，这个款怎么拿？",p:"Náhuò de, zhège kuǎn zěnme ná?",k:"사입이에요. 이 스타일 어떻게 떼요?"},{z:"一个款拿一件可以吗？我先看看市场反应。",p:"Yí ge kuǎn ná yí jiàn kěyǐ ma? Wǒ xiān kànkan shìchǎng fǎnyìng.",k:"한 스타일에 한 장씩 가능해요? 시장 반응 먼저 볼게요."},{z:"卖得好我再来补货。",p:"Mài de hǎo wǒ zài lái bǔhuò.",k:"잘 팔리면 다시 와서 추가 사입할게요."}],
+nodes:{
+n1:{npc:{z:"靓仔，拿货还是零买？",p:"Liàngzǎi, náhuò háishì língmǎi?",k:"(광둥식 호칭) 사입이에요, 낱장 구매예요?"},choices:[
+{z:"拿货的，这个款怎么拿？",p:"Náhuò de, zhège kuǎn zěnme ná?",k:"사입이에요. 이 스타일 어떻게 떼요?",next:"n2",pts:2,fb:"拿货 한마디로 도매가 라인에 진입"},
+{z:"零买，一件多少钱？",p:"Língmǎi, yí jiàn duōshao qián?",k:"낱개요, 한 장에 얼마예요?",next:"n1b",pts:0,fb:"도매상가에서 零买는 문전박대 코스"}]},
+n1b:{npc:{z:"零买不卖的，我们只做批发。",p:"Língmǎi bú mài de, wǒmen zhǐ zuò pīfā.",k:"낱개는 안 팔아요, 저희는 도매만 해요."},choices:[
+{z:"不好意思，我是做买手的，拿货。这个款怎么拿？",p:"Bù hǎoyìsi, wǒ shì zuò mǎishǒu de, náhuò. Zhège kuǎn zěnme ná?",k:"아 미안해요, 저 바잉MD예요. 사입할게요. 이 스타일 어떻게 떼요?",next:"n2",pts:1,fb:"买手(바이어) 신분 밝히기로 회복"}]},
+n2:{npc:{z:"这个款拿货价45，三件起拿，不挑码。",p:"Zhège kuǎn náhuòjià sìshíwǔ, sān jiàn qǐ ná, bù tiāo mǎ.",k:"이 스타일 도매가 45위안, 3장부터고 사이즈 선택은 안 돼요."},choices:[
+{z:"款式我多拿几个，一个款拿一件可以吗？我先看看市场反应。",p:"Kuǎnshì wǒ duō ná jǐ ge, yí ge kuǎn ná yí jiàn kěyǐ ma? Wǒ xiān kànkan shìchǎng fǎnyìng.",k:"스타일은 여러 개 뗄 건데, 한 스타일당 한 장씩 가능해요? 시장 반응 먼저 보게요.",next:"n3",pts:2,fb:"업계 표준 협상 — 다품종 소량은 '시장 테스트' 명분이 통함"},
+{z:"行，那这个款拿三件。",p:"Xíng, nà zhège kuǎn ná sān jiàn.",k:"알겠어요, 이 스타일 3장 뗄게요.",next:"n3b",pts:1}]},
+n3:{npc:{z:"可以是可以，一件的话拿货价加5块。要开单吗？",p:"Kěyǐ shì kěyǐ, yí jiàn dehuà náhuòjià jiā wǔ kuài. Yào kāidān ma?",k:"되긴 되는데, 한 장이면 도매가에 5위안 붙어요. 전표 끊어드려요?"},choices:[
+{z:"行。名片给我一张，卖得好我再来补货。",p:"Xíng. Míngpiàn gěi wǒ yì zhāng, mài de hǎo wǒ zài lái bǔhuò.",k:"좋아요. 명함 한 장 줘요, 잘 팔리면 다시 와서 추가 사입할게요.",next:"endGood",pts:2,fb:"补货(재사입) 한마디 = 다음부터 단골가"},
+{z:"加5块太贵了，算了不要了。",p:"Jiā wǔ kuài tài guì le, suànle bú yào le.",k:"5위안 붙으면 비싸네, 됐어요 안 살래요.",next:"endBad",pts:0}]},
+n3b:{npc:{z:"好嘞，三件。要开单吗？",p:"Hǎo lei, sān jiàn. Yào kāidān ma?",k:"네~ 3장이요. 전표 끊어드려요?"},choices:[
+{z:"开吧。名片给我一张，卖得好我再来补货。",p:"Kāi ba. Míngpiàn gěi wǒ yì zhāng, mài de hǎo wǒ zài lái bǔhuò.",k:"끊어줘요. 명함도 한 장 줘요, 잘 팔리면 재사입하러 올게요.",next:"endGood",pts:2}]},
+endGood:{npc:{z:"好嘞！这是名片，加我微信，新款我天天发朋友圈。",p:"Hǎo lei! Zhè shì míngpiàn, jiā wǒ wēixìn, xīnkuǎn wǒ tiāntiān fā péngyouquān.",k:"좋아요! 명함 여기요. 위챗 추가해요, 신상은 매일 모멘트에 올려요."},end:{grade:"good",msg:"낱장 사입 + 재사입 관계 + 위챗(신상 피드) 확보. 도매상가 관계의 정석 코스입니다."}},
+endBad:{npc:{z:"那随便你咯。",p:"Nà suíbiàn nǐ lo.",k:"그럼 맘대로 하세요~"},end:{grade:"bad",msg:"5위안 아끼려다 샘플도 관계도 놓쳤습니다. 사입 낱장 할증은 시장의 표준 관행이에요."}}
+}}
+];
+
 // ================= 공통 =================
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;');}
 let rate=1.0, zhVoice=null;
@@ -1699,7 +1793,7 @@ const SB_KEY = "sb_publishable_fTwyVCtEqz7HhSBJ74X9HQ_OjaVZam8";
 
 const SKEY='szcn-trainer-v1';
 const CFG_KEY='szcn-trainer-cfg';
-let state={prog:{},stats:{total:0,correct:0,days:{}},mastered:0,myWords:{},
+let state={prog:{},stats:{total:0,correct:0,days:{}},mastered:0,myWords:{},rp:{},
   goals:{min:220,sent:60,quiz:200,mast:35}};
 let cfg=null; try{cfg=JSON.parse(localStorage.getItem(CFG_KEY)||'null');}catch(e){}
 let saveTimer=null, remoteTimer=null;
@@ -1745,6 +1839,7 @@ async function loadState(){
   if(remote&&remote.prog)state=mergePick(state,remote);
   if(!state.goals)state.goals={min:220,sent:60,quiz:200,mast:35};
   if(!state.myWords)state.myWords={};
+  if(!state.rp)state.rp={};
   if(!cfg||!cfg.sid){
     document.getElementById('welModal').classList.add('show');
   }else if(!cfgReady()){
@@ -1808,7 +1903,89 @@ function renderScen(){
 }
 document.querySelectorAll('.sc').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('.sc').forEach(x=>x.classList.remove('on'));b.classList.add('on');
-  curScen=parseInt(b.dataset.s);renderScen();speechSynthesis.cancel();}));
+  speechSynthesis.cancel();
+  if(b.dataset.s==='rp'){
+    document.getElementById('scList').style.display='none';
+    document.getElementById('scNote').textContent='공장·시장·상가에서 벌어지는 실제 상황. 선택에 따라 결과가 달라집니다. 대응 문장은 소리 내어 따라 읽으세요.';
+    document.getElementById('rpArea').style.display='block';
+    renderRPHome();
+  }else{
+    document.getElementById('rpArea').style.display='none';
+    document.getElementById('scList').style.display='block';
+    curScen=parseInt(b.dataset.s);renderScen();
+  }}));
+
+// ================= 롤플레잉 엔진 =================
+let rpCur=null;
+function renderRPHome(){
+  const area=document.getElementById('rpArea');
+  area.innerHTML=RP.map(s=>{
+    const rec=state.rp[s.id];
+    return `<div class="rp-card">
+      <div class="t">${s.icon} ${esc(s.title)}</div>
+      <div class="s">${esc(s.setting)}</div>
+      <div class="best">${rec?`최고 기록 ★${rec.best}/${s.maxPts} · ${rec.plays}회 플레이`:'아직 플레이 전'}</div>
+      <button class="rp-start" data-rp="${s.id}">시작하기 ▶</button>
+    </div>`;}).join('');
+  area.querySelectorAll('.rp-start').forEach(b=>b.addEventListener('click',()=>startRP(b.dataset.rp)));
+}
+function bub(who,o){
+  return `<div class="bub ${who}"><div class="bz zh">${esc(o.z)}</div>
+    ${o.p?`<div class="bp">${esc(o.p)}</div>`:''}
+    <div class="bk">${esc(o.k)}</div>
+    ${o.z&&o.p?`<button class="bplay" data-t="${esc(o.z)}">▶ 다시 듣기</button>`:''}</div>`;
+}
+function startRP(id){
+  const scen=RP.find(s=>s.id===id);
+  rpCur={scen,pts:0,node:scen.start,log:[]};
+  const area=document.getElementById('rpArea');
+  area.innerHTML=`<div class="rp-setting"><b>${scen.icon} ${esc(scen.title)}</b><br>${esc(scen.setting)}</div>
+    <div class="rp-chat" id="rpChat"></div>
+    <div id="rpCtl"></div>`;
+  playNode(scen.start);
+  area.scrollIntoView({behavior:'smooth'});
+}
+function playNode(nid){
+  const scen=rpCur.scen, node=scen.nodes[nid];
+  rpCur.node=nid;
+  const chat=document.getElementById('rpChat');
+  chat.insertAdjacentHTML('beforeend', bub('npc',node.npc));
+  if(node.npc.z&&node.npc.p)speak(node.npc.z);
+  const ctl=document.getElementById('rpCtl');
+  if(node.end){finishRP(node);return;}
+  ctl.innerHTML=`<div class="rp-q">어떻게 대응할까요?</div>`+
+    node.choices.map((c,i)=>`<button class="rp-choice" data-i="${i}">
+      <div class="cz zh">${esc(c.z)}</div><div class="ck">${esc(c.k)}</div></button>`).join('');
+  ctl.querySelectorAll('.rp-choice').forEach(b=>b.addEventListener('click',()=>{
+    const c=node.choices[parseInt(b.dataset.i)];
+    rpCur.pts+=c.pts;
+    document.getElementById('rpChat').insertAdjacentHTML('beforeend', bub('me',c));
+    speak(c.z);
+    const ctl2=document.getElementById('rpCtl');
+    ctl2.innerHTML=c.fb?`<div class="rp-fb">💡 ${esc(c.fb)}</div>`:'';
+    setTimeout(()=>playNode(c.next), c.fb?1600:900);
+  }));
+}
+function finishRP(node){
+  const scen=rpCur.scen;
+  const ctl=document.getElementById('rpCtl');
+  const stars=Math.max(1,Math.round(rpCur.pts/scen.maxPts*3));
+  const gradeTxt={good:'훌륭한 마무리!',ok:'무난한 마무리',bad:'아쉬운 결과'}[node.end.grade];
+  const rec=state.rp[scen.id]||{best:0,plays:0};
+  rec.plays++;rec.best=Math.max(rec.best,rpCur.pts);state.rp[scen.id]=rec;saveState();
+  ctl.innerHTML=`<div class="rp-end">
+    <div class="rp-stars">${'★'.repeat(stars)}${'☆'.repeat(3-stars)}</div>
+    <div class="rp-grade">${gradeTxt} (${rpCur.pts}/${scen.maxPts}점)</div>
+    <div class="rp-msg">${esc(node.end.msg)}</div>
+    <div class="rp-keys"><div class="kt">이 상황의 핵심 표현 — 소리 내어 3번</div>
+      ${scen.keys.map(k=>bub('npc',k)).join('')}</div>
+    <div class="lbtns">
+      <button class="lbtn ghost" id="rpRetry">다시 도전</button>
+      <button class="lbtn solid" id="rpHome">다른 상황</button>
+    </div></div>`;
+  document.getElementById('rpRetry').addEventListener('click',()=>startRP(scen.id));
+  document.getElementById('rpHome').addEventListener('click',renderRPHome);
+}
 renderScen();
 
 // ================= HSK 단어장 탭 =================
@@ -2077,6 +2254,8 @@ document.getElementById('btnReview').addEventListener('click',()=>{
 document.body.addEventListener('click',e=>{
   const pb=e.target.closest('.playbtn');
   if(pb&&pb.dataset.t){speak(pb.dataset.t);return;}
+  const bp=e.target.closest('.bplay');
+  if(bp&&bp.dataset.t){speak(bp.dataset.t);return;}
   const tg=e.target.closest('.atoggle');
   if(tg){const box=tg.nextElementSibling;const open=box.classList.toggle('open');
     tg.textContent=tg.textContent.replace(open?'▾':'▴',open?'▴':'▾');}
