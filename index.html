@@ -206,7 +206,7 @@
   <div class="seal zh">实战</div>
   <div style="flex:1">
     <div style="color:#b9bac2;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#e58a85;font-size:11px;font-weight:700;vertical-align:2px">BETA 1.8</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#e58a85;font-size:11px;font-weight:700;vertical-align:2px">BETA 1.8.1</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -3494,13 +3494,34 @@ function pickWeighted(ids){
   for(let i=0;i<ids.length;i++){r-=w[i];if(r<=0)return ids[i];}
   return ids[ids.length-1];
 }
+function simScore(a,b){
+  // 유사도: 같은 한자 공유(+3/자), 뜻 끝맛 일치(동사 '~하다', 형용사 '~다' 등 +2), 글자수 동일(+1)
+  let s=0;
+  for(const ch of a.z){if(ch>='\u4e00'&&b.z.includes(ch))s+=3;}
+  const tail=t=>t.k.endsWith('하다')?'v':(t.k.endsWith('다')?'a':(t.k.includes('(양사)')?'m':'n'));
+  if(tail(a)===tail(b))s+=2;
+  if(a.z.length===b.z.length)s+=1;
+  return s;
+}
 function distractors(item,ids,n){
-  const cands=ids.filter(id=>id!==item.id&&ITEMS[id].k!==item.k);
+  const cands=ids.filter(id=>id!==item.id&&ITEMS[id].k!==item.k&&ITEMS[id].z!==item.z);
+  if(!cands.length)return [];
+  if(item.kind==='sent'||cands.length<=n){
+    const out=[];const used=new Set();
+    while(out.length<n&&used.size<cands.length){
+      const c=cands[Math.floor(Math.random()*cands.length)];
+      if(!used.has(c)){used.add(c);out.push(ITEMS[c]);}
+    }
+    return out;
+  }
+  // 단어: 유사도 상위 후보군에서 랜덤 추출 (매번 같은 보기 방지)
+  const scored=cands.map(id=>({id,s:simScore(item,ITEMS[id])+Math.random()*1.5}));
+  scored.sort((x,y)=>y.s-x.s);
+  const poolTop=scored.slice(0,Math.min(12,scored.length));
   const out=[];const used=new Set();
-  while(out.length<n&&cands.length){
-    const c=cands[Math.floor(Math.random()*cands.length)];
-    if(!used.has(c)){used.add(c);out.push(ITEMS[c]);}
-    if(used.size>=cands.length)break;
+  while(out.length<n&&used.size<poolTop.length){
+    const c=poolTop[Math.floor(Math.random()*poolTop.length)];
+    if(!used.has(c.id)){used.add(c.id);out.push(ITEMS[c.id]);}
   }
   return out;
 }
@@ -3515,9 +3536,11 @@ function newQuiz(){
   const item=ITEMS[id];
   if(qzMode==='build'&&!reviewMode&&TOKS[item.id]&&TOKS[item.id].length>=2){buildQuiz(item);return;}
   // 방향: 문장은 항상 듣기→뜻. 단어는 50% 中→韩(음성), 50% 韩→中
-  const dir=item.kind==='sent'?'z2k':(Math.random()<0.5?'z2k':'k2z');
+  const mastered=state.prog[item.id]&&state.prog[item.id].mastered;
+  const dir=item.kind==='sent'?'z2k':(Math.random()<(mastered?0.25:0.5)?'z2k':'k2z');
   const ds=distractors(item,ids.length>=4?ids:(item.kind==='sent'?SENT_IDS:W4_IDS.concat(W5_IDS)),3);
-  const opts=[item,...ds].sort(()=>Math.random()-0.5);
+  const opts=[item,...ds];
+  for(let k=opts.length-1;k>0;k--){const j=Math.floor(Math.random()*(k+1));[opts[k],opts[j]]=[opts[j],opts[k]];}
   qzCur={item,dir,opts,answered:false};
   const head=reviewMode?'오답 복습':({sent:'회화 듣기',hsk4:'HSK 4급',hsk5:'HSK 5급',w301:'301구 단어',s301:'기초 문장'}[qzSrc]||'단어 전체');
   let promptHtml;
