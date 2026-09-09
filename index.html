@@ -12,7 +12,13 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#26262E">
 <style>
-  :root{--red:#C8352E;--navy:#26262E;--grey:#8A8C94;--hair:#E4E2DD;--bg:#F7F6F3;--ok:#1E7F4F;--okbg:#E8F5EE;--nobg:#FBEDEC}
+  :root{--red:#C8352E;--navy:#26262E;--grey:#8A8C94;--hair:#E4E2DD;--bg:#F7F6F3;--ok:#1E7F4F;--okbg:#E8F5EE;--nobg:#FBEDEC;
+    --c0:#3D5A80;--c0bg:#EDF2F8;  /* 실사 인디고 */
+    --c1:#B8860B;--c1bg:#FBF3E0;  /* 협상 앰버 */
+    --c2:#C8352E;--c2bg:#FBEDEC;  /* 클레임 레드 */
+    --c3:#2E7D6B;--c3bg:#E7F4F1;  /* 위챗 그린 */
+    --c4:#5B4B8A;--c4bg:#F0ECF8;  /* 생활 퍼플 */
+    --lv4:#3D8BC4;--lv5:#8A5CB8;--lvS:#C8352E}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   body{font-family:'Noto Sans KR','Noto Sans SC','Noto Sans',sans-serif;background:var(--bg);color:var(--navy);padding-bottom:58px}
   .seal{width:46px;height:46px;background:var(--red);color:#fff;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:900;letter-spacing:1px;box-shadow:inset 0 0 0 2px rgba(255,255,255,.85),inset 0 0 0 4px var(--red);transform:rotate(-2deg);flex-shrink:0}
@@ -30,6 +36,7 @@
   .speedbar .lbl{font-size:12px;color:var(--grey);flex-shrink:0}
   .chip{border:1px solid var(--hair);background:#fff;color:var(--navy);border-radius:16px;padding:5px 11px;font-size:12.5px;font-weight:500;cursor:pointer;flex-shrink:0;font-family:inherit}
   .chip.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .chip.sc.on{background:var(--sc-color,var(--navy));border-color:var(--sc-color,var(--navy))}
   .chip.red.on{background:var(--red);border-color:var(--red)}
   .chip.py-toggle{margin-left:auto}
   .chip.py-toggle.off{color:var(--grey);text-decoration:line-through}
@@ -43,12 +50,14 @@
   .subchips::-webkit-scrollbar{display:none}
   .subchips .chip{flex-shrink:0;white-space:nowrap}
   .scenario-note{font-size:12.5px;color:var(--grey);line-height:1.55;padding:0 3px 12px}
-  .qcard{background:#fff;border:1px solid var(--hair);border-radius:10px;margin-bottom:12px;overflow:hidden}
+  .qcard{background:#fff;border:1px solid var(--hair);border-radius:14px;margin-bottom:12px;overflow:hidden;box-shadow:0 1px 3px rgba(38,38,46,.05)}
+  .qcard{border-left:4px solid var(--sc-color,var(--red))}
+  .qhead{background:var(--sc-bg,#fff)}
   .qhead{padding:13px 14px 11px}
-  .qintent{font-size:11.5px;color:var(--red);font-weight:700;margin-bottom:6px}
+  .qintent{font-size:11.5px;color:var(--sc-color,var(--red));font-weight:700;margin-bottom:6px}
   .qrow{display:flex;gap:10px;align-items:flex-start}
   .qzh{font-size:18px;font-weight:700;line-height:1.45;flex:1}
-  .playbtn{flex-shrink:0;width:35px;height:35px;border-radius:50%;border:none;background:var(--navy);color:#fff;font-size:13px;cursor:pointer}
+  .playbtn{flex-shrink:0;width:35px;height:35px;border-radius:50%;border:none;background:var(--sc-color,var(--navy));color:#fff;font-size:13px;cursor:pointer;box-shadow:0 2px 5px rgba(38,38,46,.15)}
   .playbtn:active{background:var(--red)}
   .qpy{font-size:12.5px;color:var(--grey);margin-top:5px;line-height:1.5}
   .qko{font-size:13px;color:#4a5670;margin-top:4px;line-height:1.5}
@@ -125,6 +134,44 @@
   .rp-msg{font-size:13px;color:#4a5670;line-height:1.65;margin-bottom:13px;text-align:left}
   .rp-keys{text-align:left;border-top:1px solid var(--hair);padding-top:12px;margin-bottom:13px}
   .rp-keys .kt{font-size:12px;font-weight:700;color:var(--red);margin-bottom:8px}
+  .lvbadge{display:inline-block;font-size:10px;font-weight:800;color:#fff;border-radius:20px;padding:2px 8px;margin-right:6px;vertical-align:2px}
+  .lvbadge.l4{background:var(--lv4)} .lvbadge.l5{background:var(--lv5)} .lvbadge.ls{background:var(--lvS)} .lvbadge.l3{background:#6B8E23}
+  /* 10문제 세트 */
+  .setbar{display:flex;align-items:center;gap:9px;margin-bottom:13px}
+  .setprog{flex:1;height:9px;background:#EDEFF3;border-radius:5px;overflow:hidden}
+  .setfill{height:100%;background:linear-gradient(90deg,var(--red),#E8735C);border-radius:5px;transition:width .35s}
+  .setcount{font-size:12px;color:var(--grey);font-weight:700;flex-shrink:0}
+  .setdots{display:flex;gap:4px;flex-shrink:0}
+  .sdot{width:8px;height:8px;border-radius:50%;background:#DEE1E7}
+  .sdot.ok{background:var(--ok)} .sdot.no{background:var(--red)}
+  .result{text-align:center;padding:22px 16px}
+  .rscore{font-size:44px;font-weight:900;color:var(--red);line-height:1.1}
+  .rlabel{font-size:13px;color:var(--grey);margin-top:4px}
+  .rmsg{font-size:14.5px;font-weight:700;margin:14px 0 6px}
+  .rsub{font-size:12.5px;color:#4a5670;line-height:1.6;margin-bottom:16px}
+  .rlist{text-align:left;background:#FAFBFC;border-radius:10px;padding:12px;margin-bottom:16px}
+  .rlist .rt{font-size:11.5px;font-weight:800;color:var(--red);margin-bottom:8px}
+  .rlist .ri{font-size:13px;padding:5px 0;border-bottom:1px solid var(--hair)}
+  .rlist .ri:last-child{border-bottom:none}
+  /* 쉐도잉 플레이어 */
+  .sh-wrap{padding:2px}
+  .sh-head{background:var(--navy);color:#fff;border-radius:14px;padding:14px 16px;margin-bottom:12px}
+  .sh-head .t{font-size:15px;font-weight:800}
+  .sh-head .s{font-size:11.5px;color:#b9bac2;margin-top:3px;line-height:1.5}
+  .sh-line{background:#fff;border:1px solid var(--hair);border-left:4px solid transparent;border-radius:12px;padding:13px 14px;margin-bottom:9px;cursor:pointer}
+  .sh-line.on{border-left-color:var(--red);background:#FFF8F7;box-shadow:0 2px 8px rgba(200,53,46,.10)}
+  .sh-who{font-size:10.5px;font-weight:800;margin-bottom:7px;letter-spacing:.3px}
+  .sh-who.me{color:var(--c0)} .sh-who.npc{color:var(--red)}
+  .ruby{display:flex;flex-wrap:wrap;gap:3px 7px;align-items:flex-end}
+  .rb{display:flex;flex-direction:column;align-items:center;line-height:1.25}
+  .rb .p{font-size:10.5px;color:var(--grey);height:13px}
+  .rb .z{font-size:19px;font-weight:600;font-family:'Noto Sans SC','PingFang SC',sans-serif}
+  body.nopy .rb .p{display:none}
+  .sh-ko{font-size:12.5px;color:#4a5670;margin-top:7px;line-height:1.5}
+  .sh-ctl{position:sticky;bottom:56px;background:#fff;border:1px solid var(--hair);border-radius:14px;padding:10px;display:flex;gap:7px;box-shadow:0 -2px 12px rgba(38,38,46,.08);margin-top:12px;z-index:15}
+  .sh-btn{flex:1;border:1px solid var(--hair);background:#fff;border-radius:10px;padding:11px 4px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:var(--navy)}
+  .sh-btn.main{background:var(--red);color:#fff;border-color:var(--red);flex:1.4}
+  .sh-btn.on{background:var(--navy);color:#fff;border-color:var(--navy)}
   /* 조립 퀴즈 */
   .tilebank,.ansrow{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
   .ansrow{min-height:46px;background:#FAFBFC;border:1.5px dashed var(--hair);border-radius:10px;padding:9px;margin-bottom:14px}
@@ -206,7 +253,7 @@
   <div class="seal zh">实战</div>
   <div style="flex:1">
     <div style="color:#b9bac2;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#e58a85;font-size:11px;font-weight:700;vertical-align:2px">BETA 1.8.1</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#e58a85;font-size:11px;font-weight:700;vertical-align:2px">BETA 2.0</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -242,10 +289,12 @@
     <button class="chip sc" data-s="3">💬 위챗 실전</button>
     <button class="chip sc" data-s="4">🏙 생활 실전</button>
     <button class="chip sc" data-s="rp" style="border-color:var(--red);color:var(--red)">🎭 롤플레잉</button>
+    <button class="chip sc" data-s="sh" style="border-color:var(--c3);color:var(--c3)">🎧 쉐도잉</button>
   </div>
   <div class="scenario-note" id="scNote"></div>
   <div id="scList"></div>
   <div id="rpArea" style="display:none"></div>
+  <div id="shArea" style="display:none"></div>
 </div>
 
 <!-- 퀴즈 -->
@@ -261,7 +310,9 @@
   <div class="subchips">
     <button class="chip qmode on" data-m="pick">뜻 고르기</button>
     <button class="chip qmode" data-m="build">문장 조립 🧩</button>
+    <button class="chip" id="setToggle" style="border-color:var(--red);color:var(--red)">📝 10문제 세트</button>
   </div>
+  <div id="setBar"></div>
   <div class="qz-stage" id="qzStage"></div>
 </div>
 
@@ -3351,11 +3402,18 @@ function refreshStats(){
 
 // ================= 회화 탭 =================
 let curScen=0;
+const SC_COLORS=['c0','c1','c2','c3','c4'];
+function applyScColor(el,si){
+  if(si===null){el.style.removeProperty('--sc-color');el.style.removeProperty('--sc-bg');return;}
+  const c=SC_COLORS[si]||'c0';
+  el.style.setProperty('--sc-color',getComputedStyle(document.documentElement).getPropertyValue('--'+c));
+  el.style.setProperty('--sc-bg',getComputedStyle(document.documentElement).getPropertyValue('--'+c+'bg'));
+}
 function renderScen(){
   document.getElementById('scNote').textContent=SCEN_NOTES[curScen];
   const wrap=document.getElementById('scList');wrap.innerHTML='';
   DATA[curScen].forEach((q,qi)=>{
-    const card=document.createElement('div');card.className='qcard';
+    const card=document.createElement('div');card.className='qcard';applyScColor(card,curScen);
     const ansHtml=q.a.map(a=>`<div class="ans"><span class="atag ${a.t}">${TAG_NAMES[a.t]}</span>
       <div class="arow"><div class="azh zh">${esc(a.z)}</div><button class="playbtn sm" data-t="${esc(a.z)}">▶</button></div>
       <div class="apy">${esc(a.p)}</div><div class="ako">${esc(a.k)}</div>${a.n?`<div class="anote">${esc(a.n)}</div>`:''}</div>`).join('');
@@ -3369,13 +3427,22 @@ function renderScen(){
 document.querySelectorAll('.sc').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('.sc').forEach(x=>x.classList.remove('on'));b.classList.add('on');
   speechSynthesis.cancel();
-  if(b.dataset.s==='rp'){
+  if(!isNaN(parseInt(b.dataset.s)))applyScColor(b,parseInt(b.dataset.s));
+  if(b.dataset.s==='sh'){
+    document.getElementById('scList').style.display='none';
+    document.getElementById('rpArea').style.display='none';
+    document.getElementById('shArea').style.display='block';
+    document.getElementById('scNote').textContent='대화를 연속 재생하며 따라 읽는 훈련입니다. 문장을 누르면 그 문장부터 재생되고, 쉐도잉 모드는 한 문장마다 멈춰 따라 말할 시간을 줍니다.';
+    renderShadowHome();
+  }else if(b.dataset.s==='rp'){
     document.getElementById('scList').style.display='none';
     document.getElementById('scNote').textContent='공장·시장·상가에서 벌어지는 실제 상황. 선택에 따라 결과가 달라집니다. 대응 문장은 소리 내어 따라 읽으세요.';
     document.getElementById('rpArea').style.display='block';
+    document.getElementById('shArea').style.display='none';
     renderRPHome();
   }else{
     document.getElementById('rpArea').style.display='none';
+    document.getElementById('shArea').style.display='none';
     document.getElementById('scList').style.display='block';
     curScen=parseInt(b.dataset.s);renderScen();
   }}));
@@ -3477,6 +3544,45 @@ document.querySelectorAll('.wf').forEach(b=>b.addEventListener('click',()=>{
 
 // ================= 퀴즈 엔진 =================
 let qzSrc='sent', qzMode='pick', qzCur=null, qzSession={n:0,c:0}, reviewMode=false;
+let setMode=false, setState=null;
+const SET_SIZE=10;
+function lvBadge(item){
+  if(item.kind==='sent')return '<span class="lvbadge ls">회화</span>';
+  if(item.lv===4)return '<span class="lvbadge l4">HSK4</span>';
+  if(item.lv===5)return '<span class="lvbadge l5">HSK5</span>';
+  return '<span class="lvbadge l3">301</span>';
+}
+function renderSetBar(){
+  const el=document.getElementById('setBar');
+  if(!setMode||!setState){el.innerHTML='';return;}
+  const pct=setState.n/SET_SIZE*100;
+  el.innerHTML='<div class="setbar"><span class="setcount">'+Math.min(setState.n+1,SET_SIZE)+'/'+SET_SIZE+'</span>'
+    +'<div class="setprog"><div class="setfill" style="width:'+pct+'%"></div></div>'
+    +'<div class="setdots">'+setState.marks.map(function(m){return '<span class="sdot '+(m?'ok':'no')+'"></span>';}).join('')
+    +'<span class="sdot"></span>'.repeat(SET_SIZE-setState.marks.length)+'</div></div>';
+}
+function startSet(){setState={n:0,c:0,marks:[],wrong:[]};qzSession={n:0,c:0};renderSetBar();newQuiz();}
+function finishSet(){
+  const stage=document.getElementById('qzStage');
+  const sc=setState.c*10;
+  const msg=sc>=90?'완벽에 가깝습니다!':(sc>=70?'좋아요, 이 페이스 유지!':(sc>=50?'절반은 넘겼어요':'오답 복습부터 하고 오세요'));
+  const wrongHtml=setState.wrong.length?'<div class="rlist"><div class="rt">복습 목록에 추가된 항목</div>'
+    +setState.wrong.map(function(w){return '<div class="ri"><b class="zh">'+esc(w.z)+'</b> — '+esc(w.k)+'</div>';}).join('')+'</div>':'';
+  stage.innerHTML='<div class="result"><div class="rscore">'+sc+'점</div>'
+    +'<div class="rlabel">'+setState.c+' / '+SET_SIZE+' 정답</div>'
+    +'<div class="rmsg">'+msg+'</div>'
+    +'<div class="rsub">오늘 누적 '+((state.stats.days[today()]||{n:0}).n)+'문 · 복습 대기 '+wrongIds().length+'개</div>'
+    +wrongHtml
+    +'<div class="lbtns"><button class="lbtn ghost" id="setEnd">그만하기</button>'
+    +'<button class="lbtn solid" id="setAgain">한 판 더</button></div></div>';
+  document.getElementById('setAgain').addEventListener('click',startSet);
+  document.getElementById('setEnd').addEventListener('click',function(){
+    setMode=false;document.getElementById('setToggle').classList.remove('on');
+    setState=null;renderSetBar();newQuiz();
+  });
+  renderSetBar();
+}
+
 function poolIds(){
   if(reviewMode)return wrongIds();
   if(qzSrc==='sent')return SENT_IDS;
@@ -3526,6 +3632,7 @@ function distractors(item,ids,n){
   return out;
 }
 function newQuiz(){
+  if(setMode&&setState&&setState.n>=SET_SIZE){finishSet();return;}
   const ids=poolIds();
   const stage=document.getElementById('qzStage');
   if(!ids.length){
@@ -3556,7 +3663,7 @@ function newQuiz(){
     ?`<button class="opt" data-i="${i}">${esc(o.k)}</button>`
     :`<button class="opt zhopt zh" data-i="${i}">${esc(o.z)}</button>`).join('');
   stage.innerHTML=`
-    <div class="qz-top"><span>${head} · 이번 세션 <b>${qzSession.n}</b>문 (정답 ${qzSession.c})</span><span>복습대기 ${wrongIds().length}</span></div>
+    <div class="qz-top"><span>${lvBadge(item)}${head}${setMode?'':` · 이번 세션 <b>${qzSession.n}</b>문`}</span><span>복습대기 ${wrongIds().length}</span></div>
     <div class="qz-prompt">${promptHtml}</div>
     <div class="opts">${optHtml}</div>
     <div class="qz-fb" id="qzFb"></div>
@@ -3573,6 +3680,7 @@ function answer(i){
   const {item,opts,dir}=qzCur;
   const ok=opts[i].id===item.id;
   qzSession.n++;if(ok)qzSession.c++;
+  if(setMode&&setState){setState.n++;if(ok)setState.c++;else setState.wrong.push({z:item.z,k:item.k});setState.marks.push(ok);renderSetBar();}
   grade(item.id,ok);
   document.querySelectorAll('#qzStage .opt').forEach((b,bi)=>{
     b.disabled=true;
@@ -3589,17 +3697,22 @@ function answer(i){
   document.getElementById('qzNext').classList.add('show');
   if(dir==='k2z'||item.kind==='word')speak(item.z);
 }
-function setMode(m){
+function setQuizMode(m){
   qzMode=m;
   document.querySelectorAll('.qmode').forEach(x=>x.classList.toggle('on',x.dataset.m===m));
 }
 document.querySelectorAll('.qsrc').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('.qsrc').forEach(x=>x.classList.remove('on'));b.classList.add('on');
   qzSrc=b.dataset.src;reviewMode=false;qzSession={n:0,c:0};
-  if(qzMode==='build'&&qzSrc!=='sent'&&qzSrc!=='s301')setMode('pick');
+  if(qzMode==='build'&&qzSrc!=='sent'&&qzSrc!=='s301')setQuizMode('pick');
   newQuiz();}));
+document.getElementById('setToggle').addEventListener('click',function(){
+  setMode=!setMode;this.classList.toggle('on',setMode);
+  reviewMode=false;
+  if(setMode)startSet(); else {setState=null;renderSetBar();newQuiz();}
+});
 document.querySelectorAll('.qmode').forEach(b=>b.addEventListener('click',()=>{
-  setMode(b.dataset.m);
+  setQuizMode(b.dataset.m);
   if(qzMode==='build'&&qzSrc!=='sent'&&qzSrc!=='s301'){
     qzSrc='s301';
     document.querySelectorAll('.qsrc').forEach(x=>x.classList.toggle('on',x.dataset.src==='s301'));
@@ -3655,6 +3768,7 @@ function buildQuiz(item){
     qzCur.answered=true;
     const ok=tray.map(x=>x.t).join('')===toks.join('');
     qzSession.n++;if(ok)qzSession.c++;
+    if(setMode&&setState){setState.n++;if(ok)setState.c++;else setState.wrong.push({z:item.z,k:item.k});setState.marks.push(ok);renderSetBar();}
     grade(item.id,ok);
     // 정오 표시
     trayEl.querySelectorAll('.tile').forEach((el,ti)=>{
@@ -3711,6 +3825,111 @@ function renderMyWords(){
     delete state.myWords[el.dataset.del];saveState();renderMyWords();
   }));
 }
+
+// ================= 쉐도잉 플레이어 =================
+let shCur=null; // {items,idx,playing,shadow,loop,timer}
+function shLines(si){
+  const out=[];
+  DATA[si].forEach(function(q,qi){
+    out.push({who:'me',z:q.q,p:q.p,k:q.k,ctx:q.i});
+    q.a.forEach(function(a,ai){out.push({who:'npc',z:a.z,p:a.p,k:a.k,id:'s'+si+'-'+qi+'-'+ai});});
+  });
+  return out;
+}
+function renderShadowHome(){
+  const area=document.getElementById('shArea');
+  area.innerHTML=SCEN_NAMES.map(function(n,i){
+    const cnt=DATA[i].reduce(function(a,q){return a+1+q.a.length;},0);
+    return '<div class="rp-card" style="border-left:4px solid var(--'+SC_COLORS[i]+')">'
+      +'<div class="t">'+esc(n)+'</div>'
+      +'<div class="s">'+cnt+'개 문장 · 연속 재생 / 문장 반복 / 쉐도잉</div>'
+      +'<button class="rp-start" data-sh="'+i+'" style="background:var(--'+SC_COLORS[i]+')">듣기 시작 ▶</button></div>';
+  }).join('');
+  area.querySelectorAll('[data-sh]').forEach(function(b){
+    b.addEventListener('click',function(){startShadow(parseInt(b.dataset.sh));});
+  });
+}
+function rubyHtml(line){
+  const toks=(line.id&&TOKS[line.id])?TOKS[line.id]:null;
+  if(!toks)return '<div class="ruby"><div class="rb"><span class="p">'+esc(line.p)+'</span><span class="z">'+esc(line.z)+'</span></div></div>';
+  return '<div class="ruby">'+toks.map(function(t){
+    return '<span class="rb"><span class="p">'+esc(TOKPY[t]||'')+'</span><span class="z">'+esc(t)+'</span></span>';}).join('')+'</div>';
+}
+function startShadow(si){
+  const items=shLines(si);
+  shCur={si:si,items:items,idx:0,playing:false,shadow:false,loop:false,timer:null};
+  const area=document.getElementById('shArea');
+  area.innerHTML='<div class="sh-wrap"><div class="sh-head"><div class="t">'+esc(SCEN_NAMES[si])+'</div>'
+    +'<div class="s">문장을 누르면 그 지점부터 재생됩니다. 쉐도잉을 켜면 한 문장마다 멈춰 따라 말할 시간을 줍니다.</div></div>'
+    +'<div id="shList"></div>'
+    +'<div class="sh-ctl">'
+    +'<button class="sh-btn" id="shPrev">◀ 이전</button>'
+    +'<button class="sh-btn main" id="shPlay">▶ 재생</button>'
+    +'<button class="sh-btn" id="shNext">다음 ▶</button>'
+    +'<button class="sh-btn" id="shLoop">🔁 반복</button>'
+    +'<button class="sh-btn" id="shShadow">🎤 쉐도잉</button>'
+    +'</div>'
+    +'<button class="bigbtn" id="shBack" style="margin-top:14px;background:#fff;color:var(--navy);border:1px solid var(--hair)">← 다른 대화 선택</button></div>';
+  drawShadow();
+  document.getElementById('shPlay').addEventListener('click',toggleShadowPlay);
+  document.getElementById('shPrev').addEventListener('click',function(){shJump(shCur.idx-1);});
+  document.getElementById('shNext').addEventListener('click',function(){shJump(shCur.idx+1);});
+  document.getElementById('shLoop').addEventListener('click',function(){
+    shCur.loop=!shCur.loop;this.classList.toggle('on',shCur.loop);});
+  document.getElementById('shShadow').addEventListener('click',function(){
+    shCur.shadow=!shCur.shadow;this.classList.toggle('on',shCur.shadow);});
+  document.getElementById('shBack').addEventListener('click',function(){stopShadow();renderShadowHome();});
+}
+function drawShadow(){
+  const list=document.getElementById('shList');
+  if(!list)return;
+  list.innerHTML=shCur.items.map(function(l,i){
+    return '<div class="sh-line'+(i===shCur.idx?' on':'')+'" data-i="'+i+'">'
+      +'<div class="sh-who '+(l.who==='me'?'me':'npc')+'">'+(l.who==='me'?'나':'상대')+(l.ctx?' · '+esc(l.ctx):'')+'</div>'
+      +rubyHtml(l)+'<div class="sh-ko">'+esc(l.k)+'</div></div>';
+  }).join('');
+  list.querySelectorAll('.sh-line').forEach(function(el){
+    el.addEventListener('click',function(){shJump(parseInt(el.dataset.i),true);});
+  });
+  const cur=list.querySelector('.sh-line.on');
+  if(cur)cur.scrollIntoView({behavior:'smooth',block:'center'});
+}
+function shSpeakCur(){
+  const l=shCur.items[shCur.idx];
+  speak(l.z);
+}
+function shJump(i,keepPlay){
+  if(!shCur)return;
+  if(i<0||i>=shCur.items.length){stopShadow();return;}
+  shCur.idx=i;drawShadow();shSpeakCur();
+  if(shCur.playing||keepPlay){shCur.playing=true;document.getElementById('shPlay').textContent='⏸ 일시정지';scheduleNext();}
+}
+function estMs(z){return Math.max(1400, z.length*260/(rate||1));}
+function scheduleNext(){
+  clearTimeout(shCur.timer);
+  const l=shCur.items[shCur.idx];
+  const wait=estMs(l.z)+(shCur.shadow?estMs(l.z)+400:300);
+  shCur.timer=setTimeout(function(){
+    if(!shCur||!shCur.playing)return;
+    if(shCur.loop){shSpeakCur();scheduleNext();return;}
+    if(shCur.idx+1>=shCur.items.length){stopShadow();return;}
+    shCur.idx++;drawShadow();shSpeakCur();scheduleNext();
+  },wait);
+}
+function toggleShadowPlay(){
+  if(!shCur)return;
+  shCur.playing=!shCur.playing;
+  document.getElementById('shPlay').textContent=shCur.playing?'⏸ 일시정지':'▶ 재생';
+  if(shCur.playing){shSpeakCur();scheduleNext();}
+  else{clearTimeout(shCur.timer);speechSynthesis.cancel();if(typeof curAudio!=='undefined'&&curAudio)curAudio.pause();}
+}
+function stopShadow(){
+  if(!shCur)return;
+  shCur.playing=false;clearTimeout(shCur.timer);
+  const b=document.getElementById('shPlay');if(b)b.textContent='▶ 재생';
+  speechSynthesis.cancel();if(typeof curAudio!=='undefined'&&curAudio)curAudio.pause();
+}
+
 // ================= 복습 탭 =================
 function renderReview(){
   const wrap=document.getElementById('rvList');wrap.innerHTML='';
@@ -3756,7 +3975,7 @@ document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
   document.querySelectorAll('.pane').forEach(x=>x.classList.remove('on'));
   b.classList.add('on');document.getElementById(b.dataset.p).classList.add('on');
-  speechSynthesis.cancel();
+  speechSynthesis.cancel();if(typeof stopShadow==='function')stopShadow();
   if(b.dataset.p==='p1'&&!qzCur){reviewMode=false;newQuiz();}
   if(b.dataset.p==='p2')renderWords();
 }));
