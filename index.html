@@ -47,6 +47,30 @@
   .pane{display:none;padding:13px}
   .pane.on{display:block}
   .subchips{display:flex;gap:6px;margin-bottom:10px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:2px}
+  /* 요약줄 (셀렉터) */
+  .selbar{display:flex;gap:8px;margin-bottom:12px;align-items:stretch}
+  .selmain{flex:1;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--hair);border-radius:12px;padding:11px 13px;cursor:pointer;font-family:inherit;text-align:left;box-shadow:0 1px 3px rgba(38,38,46,.05)}
+  .selmain .dot{width:9px;height:9px;border-radius:50%;background:var(--sel-color,var(--red));flex-shrink:0}
+  .selmain .txt{flex:1;font-size:13.5px;font-weight:700;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .selmain .arw{font-size:10px;color:var(--grey);flex-shrink:0}
+  .selside{flex-shrink:0;border:1px solid var(--hair);background:#fff;border-radius:12px;padding:0 14px;font-size:12.5px;font-weight:700;color:var(--grey);cursor:pointer;font-family:inherit}
+  .selside.on{background:var(--red);border-color:var(--red);color:#fff}
+  /* 바텀시트 */
+  .sheet-bg{display:none;position:fixed;inset:0;background:rgba(38,38,46,.45);z-index:60}
+  .sheet-bg.show{display:block}
+  .sheet{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-radius:20px 20px 0 0;padding:8px 16px 26px;z-index:61;transform:translateY(100%);transition:transform .22s ease;max-height:82vh;overflow-y:auto}
+  .sheet.show{transform:translateY(0)}
+  .sheet .grab{width:38px;height:4px;background:#D5D3CE;border-radius:3px;margin:6px auto 14px}
+  .sheet h4{font-size:11.5px;color:var(--grey);font-weight:700;margin:14px 0 9px;letter-spacing:.3px}
+  .sheet h4:first-of-type{margin-top:2px}
+  .optgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .optgrid.c1{grid-template-columns:1fr}
+  .obtn{display:flex;align-items:center;gap:8px;border:1.5px solid var(--hair);background:#fff;border-radius:11px;padding:12px 13px;font-size:13.5px;font-weight:600;color:var(--navy);cursor:pointer;font-family:inherit;text-align:left}
+  .obtn .oi{font-size:15px;flex-shrink:0}
+  .obtn .ot{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .obtn.on{border-color:var(--o-color,var(--red));background:var(--o-bg,#FBEDEC);color:var(--o-color,var(--red))}
+  .obtn .osub{font-size:10.5px;color:var(--grey);font-weight:500;display:block;margin-top:2px}
+  .obtn.on .osub{color:var(--o-color,var(--red));opacity:.75}
   .subchips::-webkit-scrollbar{display:none}
   .subchips .chip{flex-shrink:0;white-space:nowrap}
   .scenario-note{font-size:12.5px;color:var(--grey);line-height:1.55;padding:0 3px 12px}
@@ -259,7 +283,7 @@
   <div class="seal zh">实战</div>
   <div style="flex:1">
     <div style="color:#b9bac2;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#e58a85;font-size:11px;font-weight:700;vertical-align:2px">BETA 2.1</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#e58a85;font-size:11px;font-weight:700;vertical-align:2px">BETA 2.2</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -288,14 +312,8 @@
 
 <!-- 회화 -->
 <div class="pane on" id="p0">
-  <div class="subchips">
-    <button class="chip sc on" data-s="0">🏭 신규 실사</button>
-    <button class="chip sc" data-s="1">💰 단가 협상</button>
-    <button class="chip sc" data-s="2">⚠️ 품질 클레임</button>
-    <button class="chip sc" data-s="3">💬 위챗 실전</button>
-    <button class="chip sc" data-s="4">🏙 생활 실전</button>
-    <button class="chip sc" data-s="rp" style="border-color:var(--red);color:var(--red)">🎭 롤플레잉</button>
-    <button class="chip sc" data-s="sh" style="border-color:var(--c3);color:var(--c3)">🎧 쉐도잉</button>
+  <div class="selbar">
+    <button class="selmain" id="scSel"><span class="dot"></span><span class="txt" id="scSelTxt">🏭 신규 공장 실사</span><span class="arw">▼</span></button>
   </div>
   <div class="scenario-note" id="scNote"></div>
   <div id="scList"></div>
@@ -305,19 +323,9 @@
 
 <!-- 퀴즈 -->
 <div class="pane" id="p1">
-  <div class="subchips">
-    <button class="chip red qsrc on" data-src="sent">회화 문장</button>
-    <button class="chip red qsrc" data-src="hsk4">HSK 4급</button>
-    <button class="chip red qsrc" data-src="hsk5">HSK 5급</button>
-    <button class="chip red qsrc" data-src="w301">301구 단어</button>
-    <button class="chip red qsrc" data-src="s301">기초 문장</button>
-    <button class="chip red qsrc" data-src="word">단어 전체</button>
-  </div>
-  <div class="subchips">
-    <button class="chip qmode on" data-m="pick">뜻 고르기</button>
-    <button class="chip qmode" data-m="build">문장 조립 🧩</button>
-    <button class="chip qmode" data-m="fill">빈칸 채우기 ✏️</button>
-    <button class="chip" id="setToggle" style="border-color:var(--red);color:var(--red)">📝 10문제 세트</button>
+  <div class="selbar">
+    <button class="selmain" id="qzSel"><span class="dot"></span><span class="txt" id="qzSelTxt">회화 문장 · 뜻 고르기</span><span class="arw">▼</span></button>
+    <button class="selside" id="setToggle">📝 세트</button>
   </div>
   <div id="setBar"></div>
   <div class="qz-stage" id="qzStage"></div>
@@ -325,10 +333,8 @@
 
 <!-- HSK 단어장 -->
 <div class="pane" id="p2">
-  <div class="subchips">
-    <button class="chip wf on" data-l="4">4급</button>
-    <button class="chip wf" data-l="5">5급</button>
-    <button class="chip wf" data-l="301">301구</button>
+  <div class="selbar">
+    <button class="selmain" id="wfSel"><span class="dot"></span><span class="txt" id="wfSelTxt">HSK 4급</span><span class="arw">▼</span></button>
   </div>
   <div class="scenario-note">단어를 누르면 발음이 재생됩니다. 학습 상태: <b style="color:#1E7F4F">초록 = 마스터(연속 2회 정답)</b> · <b style="color:#D51030">빨강 = 오답 대기</b>. 암기는 퀴즈 탭에서 하세요.</div>
   <div id="wordList"></div>
@@ -441,6 +447,9 @@
     <div class="mstat" id="welStat"></div>
   </div>
 </div>
+
+<div class="sheet-bg" id="sheetBg"></div>
+<div class="sheet" id="sheet"><div class="grab"></div><div id="sheetBody"></div></div>
 
 <footer>实战 중국어 BETA · 광저우 지사장의 실전 중국어 · 무단 재배포를 삼가 주세요</footer>
 <script>
@@ -3489,28 +3498,25 @@ function renderScen(){
     wrap.appendChild(card);
   });
 }
-document.querySelectorAll('.sc').forEach(b=>b.addEventListener('click',()=>{
-  document.querySelectorAll('.sc').forEach(x=>x.classList.remove('on'));b.classList.add('on');
-  speechSynthesis.cancel();
-  if(!isNaN(parseInt(b.dataset.s)))applyScColor(b,parseInt(b.dataset.s));
-  if(b.dataset.s==='sh'){
-    document.getElementById('scList').style.display='none';
-    document.getElementById('rpArea').style.display='none';
-    document.getElementById('shArea').style.display='block';
-    document.getElementById('scNote').textContent='대화를 연속 재생하며 따라 읽는 훈련입니다. 문장을 누르면 그 문장부터 재생되고, 쉐도잉 모드는 한 문장마다 멈춰 따라 말할 시간을 줍니다.';
-    renderShadowHome();
-  }else if(b.dataset.s==='rp'){
-    document.getElementById('scList').style.display='none';
-    document.getElementById('scNote').textContent='공장·시장·상가에서 벌어지는 실제 상황. 선택에 따라 결과가 달라집니다. 대응 문장은 소리 내어 따라 읽으세요.';
-    document.getElementById('rpArea').style.display='block';
-    document.getElementById('shArea').style.display='none';
+let curView='scen';
+function selectView(v){
+  curView=v;speechSynthesis.cancel();if(typeof stopShadow==='function')stopShadow();
+  const list=document.getElementById('scList'), rp=document.getElementById('rpArea'), sh=document.getElementById('shArea');
+  if(v==='rp'){
+    list.style.display='none';sh.style.display='none';rp.style.display='block';
+    document.getElementById('scNote').textContent='공장·시장·상가에서 벌어지는 실제 상황. 선택에 따라 결과가 달라집니다.';
     renderRPHome();
+  }else if(v==='sh'){
+    list.style.display='none';rp.style.display='none';sh.style.display='block';
+    document.getElementById('scNote').textContent='대화를 연속 재생하며 따라 읽는 훈련입니다. 문장을 누르면 그 지점부터 재생됩니다.';
+    renderShadowHome();
   }else{
-    document.getElementById('rpArea').style.display='none';
-    document.getElementById('shArea').style.display='none';
-    document.getElementById('scList').style.display='block';
-    curScen=parseInt(b.dataset.s);renderScen();
-  }}));
+    rp.style.display='none';sh.style.display='none';list.style.display='block';
+    renderScen();
+  }
+  updateScSel();
+}
+function selectScen(i){curScen=i;selectView('scen');}
 
 // ================= 롤플레잉 엔진 =================
 let rpCur=null;
@@ -3603,9 +3609,6 @@ function renderWords(){
     wrap.appendChild(div);
   });
 }
-document.querySelectorAll('.wf').forEach(b=>b.addEventListener('click',()=>{
-  document.querySelectorAll('.wf').forEach(x=>x.classList.remove('on'));b.classList.add('on');
-  curLv=parseInt(b.dataset.l);renderWords();}));
 
 // ================= 퀴즈 엔진 =================
 let qzSrc='sent', qzMode='pick', qzCur=null, qzSession={n:0,c:0}, reviewMode=false;
@@ -3763,27 +3766,23 @@ function answer(i){
   document.getElementById('qzNext').classList.add('show');
   if(dir==='k2z'||item.kind==='word')speak(item.z);
 }
-function setQuizMode(m){
-  qzMode=m;
-  document.querySelectorAll('.qmode').forEach(x=>x.classList.toggle('on',x.dataset.m===m));
+function applyQzSrc(s){
+  qzSrc=s;reviewMode=false;qzSession={n:0,c:0};
+  if(qzMode==='build'&&s!=='sent'&&s!=='s301')qzMode='pick';
+  updateQzSel();
+  if(setMode)startSet(); else newQuiz();
 }
-document.querySelectorAll('.qsrc').forEach(b=>b.addEventListener('click',()=>{
-  document.querySelectorAll('.qsrc').forEach(x=>x.classList.remove('on'));b.classList.add('on');
-  qzSrc=b.dataset.src;reviewMode=false;qzSession={n:0,c:0};
-  if(qzMode==='build'&&qzSrc!=='sent'&&qzSrc!=='s301')setQuizMode('pick');
-  newQuiz();}));
 document.getElementById('setToggle').addEventListener('click',function(){
   setMode=!setMode;this.classList.toggle('on',setMode);
-  reviewMode=false;
+  reviewMode=false;updateQzSel();
   if(setMode)startSet(); else {setState=null;renderSetBar();newQuiz();}
 });
-document.querySelectorAll('.qmode').forEach(b=>b.addEventListener('click',()=>{
-  setQuizMode(b.dataset.m);
-  if(qzMode==='build'&&qzSrc!=='sent'&&qzSrc!=='s301'){
-    qzSrc='s301';
-    document.querySelectorAll('.qsrc').forEach(x=>x.classList.toggle('on',x.dataset.src==='s301'));
-  }
-  reviewMode=false;qzSession={n:0,c:0};newQuiz();}));
+function applyQzMode(m){
+  qzMode=m;reviewMode=false;qzSession={n:0,c:0};
+  if(m==='build'&&qzSrc!=='sent'&&qzSrc!=='s301')qzSrc='s301';
+  updateQzSel();
+  if(setMode)startSet(); else newQuiz();
+}
 
 
 // ================= 빈칸 채우기 =================
@@ -4079,7 +4078,8 @@ document.getElementById('btnReview').addEventListener('click',()=>{
   document.querySelectorAll('.pane').forEach(x=>x.classList.remove('on'));
   document.querySelector('.tab[data-p="p1"]').classList.add('on');
   document.getElementById('p1').classList.add('on');
-  document.querySelectorAll('.qsrc').forEach(x=>x.classList.remove('on'));
+  if(setMode){setMode=false;document.getElementById('setToggle').classList.remove('on');setState=null;renderSetBar();}
+  document.getElementById('qzSelTxt').textContent='오답 복습';
   newQuiz();
 });
 
@@ -4254,6 +4254,92 @@ document.addEventListener('visibilitychange',async()=>{
 });
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
 
+
+// ================= 선택 시트 =================
+const SCEN_ICONS=['🏭','💰','⚠️','💬','🏙'];
+const SRC_LABEL={sent:'회화 문장',hsk4:'HSK 4급',hsk5:'HSK 5급',w301:'301구 단어',s301:'기초 문장',word:'단어 전체'};
+const SRC_SUB={sent:'공장·생활 회화',hsk4:'414단어',hsk5:'1,316단어',w301:'810단어',s301:'301문장',word:'전체 2,540'};
+const MODE_LABEL={pick:'뜻 고르기',build:'문장 조립',fill:'빈칸 채우기'};
+const MODE_ICON={pick:'🎯',build:'🧩',fill:'✏️'};
+function openSheet(html){
+  document.getElementById('sheetBody').innerHTML=html;
+  document.getElementById('sheetBg').classList.add('show');
+  setTimeout(function(){document.getElementById('sheet').classList.add('show');},10);
+}
+function closeSheet(){
+  document.getElementById('sheet').classList.remove('show');
+  setTimeout(function(){document.getElementById('sheetBg').classList.remove('show');},200);
+}
+document.getElementById('sheetBg').addEventListener('click',closeSheet);
+
+function cssv(n){return getComputedStyle(document.documentElement).getPropertyValue('--'+n);}
+function updateScSel(){
+  const el=document.getElementById('scSelTxt'), bar=document.getElementById('scSel');
+  if(curView==='rp'){el.textContent='🎭 롤플레잉';bar.style.setProperty('--sel-color',cssv('red'));}
+  else if(curView==='sh'){el.textContent='🎧 쉐도잉';bar.style.setProperty('--sel-color',cssv('c3'));}
+  else{el.textContent=SCEN_NAMES[curScen];bar.style.setProperty('--sel-color',cssv(SC_COLORS[curScen]));}
+}
+function updateQzSel(){
+  document.getElementById('qzSelTxt').textContent=(SRC_LABEL[qzSrc]||'')+' · '+(MODE_LABEL[qzMode]||'');
+  document.getElementById('qzSel').style.setProperty('--sel-color',cssv('red'));
+}
+function updateWfSel(){
+  const t=curLv===4?'HSK 4급':(curLv===5?'HSK 5급':'회화 301구');
+  document.getElementById('wfSelTxt').textContent=t;
+  document.getElementById('wfSel').style.setProperty('--sel-color',cssv(curLv===4?'lv4':(curLv===5?'lv5':'c3')));
+}
+// ---- 회화 시트 ----
+document.getElementById('scSel').addEventListener('click',function(){
+  var h='<h4>대화 시나리오</h4><div class="optgrid">';
+  SCEN_NAMES.forEach(function(n,i){
+    var c=cssv(SC_COLORS[i]), bg=cssv(SC_COLORS[i]+'bg');
+    h+='<button class="obtn'+(curView==='scen'&&curScen===i?' on':'')+'" data-scen="'+i+'" style="--o-color:'+c+';--o-bg:'+bg+'">'
+      +'<span class="ot">'+esc(n)+'<span class="osub">'+DATA[i].length+'개 상황</span></span></button>';
+  });
+  h+='</div><h4>학습 모드</h4><div class="optgrid">'
+    +'<button class="obtn'+(curView==='rp'?' on':'')+'" data-view="rp" style="--o-color:'+cssv('red')+';--o-bg:'+cssv('c2bg')+'"><span class="oi">🎭</span><span class="ot">롤플레잉<span class="osub">'+RP.length+'개 상황극</span></span></button>'
+    +'<button class="obtn'+(curView==='sh'?' on':'')+'" data-view="sh" style="--o-color:'+cssv('c3')+';--o-bg:'+cssv('c3bg')+'"><span class="oi">🎧</span><span class="ot">쉐도잉<span class="osub">따라 말하기</span></span></button>'
+    +'</div>';
+  openSheet(h);
+  document.querySelectorAll('#sheetBody [data-scen]').forEach(function(b){
+    b.addEventListener('click',function(){selectScen(parseInt(b.dataset.scen));closeSheet();});
+  });
+  document.querySelectorAll('#sheetBody [data-view]').forEach(function(b){
+    b.addEventListener('click',function(){selectView(b.dataset.view);closeSheet();});
+  });
+});
+// ---- 퀴즈 시트 ----
+document.getElementById('qzSel').addEventListener('click',function(){
+  var h='<h4>출제 범위</h4><div class="optgrid">';
+  ['sent','hsk4','hsk5','w301','s301','word'].forEach(function(s){
+    h+='<button class="obtn'+(qzSrc===s?' on':'')+'" data-src="'+s+'"><span class="ot">'+SRC_LABEL[s]+'<span class="osub">'+SRC_SUB[s]+'</span></span></button>';
+  });
+  h+='</div><h4>문제 유형</h4><div class="optgrid c1">';
+  [['pick','한자·음성을 보고 뜻 고르기'],['build','들은 문장을 단어로 조립'],['fill','문맥에 맞는 단어 채우기']].forEach(function(m){
+    h+='<button class="obtn'+(qzMode===m[0]?' on':'')+'" data-mode="'+m[0]+'"><span class="oi">'+MODE_ICON[m[0]]+'</span><span class="ot">'+MODE_LABEL[m[0]]+'<span class="osub">'+m[1]+'</span></span></button>';
+  });
+  h+='</div>';
+  openSheet(h);
+  document.querySelectorAll('#sheetBody [data-src]').forEach(function(b){
+    b.addEventListener('click',function(){applyQzSrc(b.dataset.src);closeSheet();});
+  });
+  document.querySelectorAll('#sheetBody [data-mode]').forEach(function(b){
+    b.addEventListener('click',function(){applyQzMode(b.dataset.mode);closeSheet();});
+  });
+});
+// ---- 단어장 시트 ----
+document.getElementById('wfSel').addEventListener('click',function(){
+  var h='<h4>단어장</h4><div class="optgrid c1">'
+    +[[4,'HSK 4급','414단어',cssv('lv4')],[5,'HSK 5급','1,316단어',cssv('lv5')],[301,'회화 301구','810단어',cssv('c3')]]
+      .map(function(o){return '<button class="obtn'+(curLv===o[0]?' on':'')+'" data-lv="'+o[0]+'" style="--o-color:'+o[3]+';--o-bg:#fff"><span class="ot">'+o[1]+'<span class="osub">'+o[2]+'</span></span></button>';}).join('')
+    +'</div>';
+  openSheet(h);
+  document.querySelectorAll('#sheetBody [data-lv]').forEach(function(b){
+    b.addEventListener('click',function(){curLv=parseInt(b.dataset.lv);renderWords();updateWfSel();closeSheet();});
+  });
+});
+
+updateScSel();updateQzSel();updateWfSel();
 loadState();
 </script>
 </body>
