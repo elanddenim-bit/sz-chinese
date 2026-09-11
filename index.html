@@ -283,7 +283,7 @@
   <div class="seal zh">实战</div>
   <div style="flex:1">
     <div style="color:#b9bac2;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#e58a85;font-size:11px;font-weight:700;vertical-align:2px">BETA 2.2</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#e58a85;font-size:11px;font-weight:700;vertical-align:2px">BETA 2.2.1</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -1910,26 +1910,69 @@ if('speechSynthesis' in window){pickVoice();speechSynthesis.onvoiceschanged=pick
 else document.getElementById('ttsWarn').style.display='block';
 function ttsSpeak(t,rr){if(!('speechSynthesis' in window))return;speechSynthesis.cancel();
 const u=new SpeechSynthesisUtterance(t);u.lang='zh-CN';if(zhVoice)u.voice=zhVoice;u.rate=rr;speechSynthesis.speak(u);}
-// mp3 우선 재생 (원어민 음성), 파일 없으면 TTS 폴백
-const audioCache={}, audioFail={};
+// mp3 우선 재생 (원어민 음성) — 실패해도 다음 번엔 다시 시도
+const audioCache={}, audioMiss={};   // audioMiss: 파일이 실제로 없는 경우만 기록
 let curAudio=null;
 function fnv(s){let h=0x811c9dc5;const b=new TextEncoder().encode(s);for(const c of b){h^=c;h=Math.imul(h,0x01000193)>>>0;}return h.toString(16).padStart(8,'0');}
+function audioUrl(key){return 'audio/'+key+'.mp3';}
 function speak(t,r){
   const rr=r!==undefined?r:rate;
   const key=fnv(t);
-  if(audioFail[key]){ttsSpeak(t,rr);return;}
+  // 서버에 파일이 없다고 확인된 문장(404)만 바로 TTS
+  if(audioMiss[key]===404){ttsSpeak(t,rr);return;}
   try{
     if(curAudio){curAudio.pause();}
     if('speechSynthesis' in window)speechSynthesis.cancel();
     let a=audioCache[key];
-    if(!a){a=new Audio('audio/'+key+'.mp3');a.preload='auto';audioCache[key]=a;}
-    a.onerror=()=>{audioFail[key]=1;ttsSpeak(t,rr);};
+    if(!a){a=new Audio(audioUrl(key));a.preload='auto';audioCache[key]=a;}
+    a.onerror=function(){
+      // 네트워크 오류는 기록하지 않고 이번만 TTS (다음에 다시 mp3 시도)
+      delete audioCache[key];
+      ttsSpeak(t,rr);
+    };
     a.playbackRate=rr;
-    a.currentTime=0;
+    try{a.currentTime=0;}catch(e){}
     curAudio=a;
     const p=a.play();
-    if(p&&p.catch)p.catch(()=>{audioFail[key]=1;ttsSpeak(t,rr);});
-  }catch(e){audioFail[key]=1;ttsSpeak(t,rr);}
+    if(p&&p.catch)p.catch(function(){delete audioCache[key];ttsSpeak(t,rr);});
+  }catch(e){ttsSpeak(t,rr);}
+}
+// 404(파일 없음) 여부만 한 번 확인해 기록 — 신규 문장은 즉시 TTS로
+function markMissing(t){
+  const key=fnv(t);
+  if(audioMiss[key]!==undefined)return;
+  fetch(audioUrl(key),{method:'HEAD'}).then(function(res){
+    if(res.status===404)audioMiss[key]=404;
+  }).catch(function(){});
+}
+// 음성 선다운로드: 접속이 되는 동안 mp3를 기기에 캐시해 둔다
+function prefetchAudio(list,max){
+  if(!('caches' in window))return;
+  var i=0, n=0;
+  (function step(){
+    if(i>=list.length||n>=(max||9999))return;
+    var t=list[i++];
+    var url=audioUrl(fnv(t));
+    caches.open('szcn-audio').then(function(c){
+      return c.match(url).then(function(hit){
+        if(hit)return;
+        n++;
+        return fetch(url).then(function(res){if(res.ok)return c.put(url,res.clone());});
+      });
+    }).catch(function(){}).then(function(){setTimeout(step,60);});
+  })();
+}
+function collectSentences(){
+  var S=[];
+  try{
+    DATA.forEach(function(sc){sc.forEach(function(q){S.push(q.q);q.a.forEach(function(a){S.push(a.z);});});});
+    RP.forEach(function(s){s.keys.forEach(function(k){S.push(k.z);});
+      Object.keys(s.nodes).forEach(function(k){var n=s.nodes[k];
+        if(n.npc&&n.npc.z&&n.npc.p)S.push(n.npc.z);
+        (n.choices||[]).forEach(function(c){S.push(c.z);});});});
+    S301.forEach(function(w){S.push(w[0]);});
+  }catch(e){}
+  return S;
 }
 
 // ================= 아이템 인덱스 =================
@@ -4341,6 +4384,10 @@ document.getElementById('wfSel').addEventListener('click',function(){
 
 updateScSel();updateQzSel();updateWfSel();
 loadState();
+// 접속 가능한 동안 음성 파일을 기기에 저장해 둔다 (중국 네트워크 대비)
+setTimeout(function(){
+  try{prefetchAudio(collectSentences(),600);}catch(e){}
+},3000);
 </script>
 </body>
 </html>
