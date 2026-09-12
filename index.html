@@ -325,7 +325,7 @@
   <div class="seal zh">实战</div>
   <div style="flex:1">
     <div style="color:#b9bac2;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#e58a85;font-size:11px;font-weight:700;vertical-align:2px">BETA 2.4</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#e58a85;font-size:11px;font-weight:700;vertical-align:2px">BETA 2.4.1</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -2071,6 +2071,7 @@ function collectSentences(){
         if(n.npc&&n.npc.z&&n.npc.p)S.push(n.npc.z);
         (n.choices||[]).forEach(function(c){S.push(c.z);});});});
     S301.forEach(function(w){S.push(w[0]);});
+    if(typeof FILLS!=='undefined')FILLS.forEach(function(f){S.push(f[0]);});
   }catch(e){}
   return S;
 }
