@@ -234,6 +234,51 @@
   .pg-cta{width:100%;border:none;border-radius:11px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;color:#fff;background:var(--red);display:flex;align-items:center;justify-content:space-between}
   .pg-cta.done{background:#1E7F4F}
   .pg-cta small{font-size:11.5px;font-weight:500;opacity:.9}
+  /* 위챗 롤플레잉 */
+  .wx{background:#EDEDED;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(27,31,34,.10);margin-bottom:12px}
+  .wx-bar{background:#2C2C2C;color:#EDEDED;padding:11px 14px;display:flex;align-items:center;gap:10px}
+  .wx-bar .back{font-size:16px;opacity:.75}
+  .wx-bar .nm{font-size:14.5px;font-weight:700;flex:1;text-align:center;margin-left:-16px}
+  .wx-bar .dots{font-size:15px;opacity:.75}
+  .wx-scene{background:#E4E7EB;color:#5a6478;font-size:11.5px;line-height:1.55;padding:10px 14px;border-bottom:1px solid #d6dae0}
+  .wx-body{padding:14px 12px;min-height:180px;max-height:52vh;overflow-y:auto}
+  .wx-day{text-align:center;margin:2px 0 12px}
+  .wx-day span{background:#C9CDD4;color:#fff;font-size:10.5px;padding:2px 9px;border-radius:4px}
+  .wx-row{display:flex;gap:8px;margin-bottom:14px;align-items:flex-start}
+  .wx-row.me{flex-direction:row-reverse}
+  .wx-av{width:36px;height:36px;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:17px;background:#fff}
+  .wx-av.me{background:var(--red);color:#fff;font-size:13px;font-weight:800}
+  .wx-wrap{max-width:74%}
+  .wx-msg{position:relative;background:#fff;border-radius:6px;padding:9px 11px;box-shadow:0 1px 1px rgba(0,0,0,.04)}
+  .wx-row.me .wx-msg{background:#95EC69}
+  .wx-msg:before{content:'';position:absolute;top:11px;left:-5px;width:0;height:0;border:5px solid transparent;border-right-color:#fff;border-left:0}
+  .wx-row.me .wx-msg:before{left:auto;right:-5px;border-right-color:transparent;border-left-color:#95EC69;border-right:0}
+  .wx-z{font-size:15.5px;font-weight:500;line-height:1.5;color:#1B1F22;font-family:'Noto Sans SC','PingFang SC',sans-serif}
+  .wx-p{font-size:11px;color:#8f939b;margin-top:4px;line-height:1.45}
+  .wx-k{font-size:12px;color:#5a6478;margin-top:5px;line-height:1.45;padding-top:5px;border-top:1px solid rgba(0,0,0,.06)}
+  body.nopy .wx-p{display:none}
+  /* 음성 메시지 버블 */
+  .wx-voice{display:flex;align-items:center;gap:9px;cursor:pointer;min-width:108px}
+  .wx-voice .ic{font-size:15px;color:#4a5565}
+  .wx-wave{display:flex;gap:2.5px;align-items:flex-end;height:15px;flex:1}
+  .wx-wave i{width:2.5px;background:#8a9099;border-radius:2px;display:block}
+  .wx-voice.playing .wx-wave i{background:var(--red)}
+  .wx-sec{font-size:11px;color:#8f939b;flex-shrink:0}
+  .wx-unread{width:7px;height:7px;border-radius:50%;background:#FA5151;align-self:center;flex-shrink:0}
+  /* 입력 중 */
+  .wx-typing{display:flex;gap:4px;padding:12px 13px;background:#fff;border-radius:6px;width:52px}
+  .wx-typing i{width:6px;height:6px;border-radius:50%;background:#c2c6cc;display:block;animation:wxblink 1.2s infinite}
+  .wx-typing i:nth-child(2){animation-delay:.2s}
+  .wx-typing i:nth-child(3){animation-delay:.4s}
+  @keyframes wxblink{0%,60%,100%{opacity:.35;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
+  /* 입력창 영역(선택지) */
+  .wx-input{background:#F7F7F7;border-top:1px solid #dcdfe4;padding:10px 12px}
+  .wx-input .lbl{font-size:11.5px;color:#8f939b;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+  .wx-opt{display:block;width:100%;text-align:left;background:#fff;border:1px solid #dcdfe4;border-radius:9px;padding:11px 12px;margin-bottom:7px;cursor:pointer;font-family:inherit;line-height:1.45}
+  .wx-opt:active{background:#F0F7FF;border-color:var(--red)}
+  .wx-opt .oz{font-size:14.5px;font-weight:600;color:#1B1F22;font-family:'Noto Sans SC','PingFang SC',sans-serif}
+  .wx-opt .ok2{font-size:11.5px;color:#8f939b;margin-top:3px}
+  .wx-tip{font-size:11.5px;color:var(--danger);background:#FBEDEC;border-radius:8px;padding:9px 11px;margin-bottom:8px;line-height:1.5}
   /* 회화 카드 아코디언 */
   .qcard.folded .qhead{padding:11px 14px}
   .qcard.folded .qpy,.qcard.folded .qko,.qcard.folded .atoggle,.qcard.folded .answers{display:none}
@@ -325,7 +370,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 2.5</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 2.6</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -3755,41 +3800,87 @@ function renderRPHome(){
   area.querySelectorAll('.rp-start').forEach(b=>b.addEventListener('click',()=>startRP(b.dataset.rp)));
 }
 function bub(who,o){
-  return `<div class="bub ${who}"><div class="bz zh">${esc(o.z)}</div>
-    ${o.p?`<div class="bp">${esc(o.p)}</div>`:''}
-    <div class="bk">${esc(o.k)}</div>
-    ${o.z&&o.p?`<button class="bplay" data-t="${esc(o.z)}">▶ 다시 듣기</button>`:''}</div>`;
+  return '<div class="wx-row '+(who==='me'?'me':'')+'">'
+    +'<div class="wx-av '+(who==='me'?'me':'')+'">'+(who==='me'?'나':(rpCur&&rpCur.scen?rpCur.scen.icon:'👤'))+'</div>'
+    +'<div class="wx-wrap"><div class="wx-msg"><div class="wx-z">'+esc(o.z)+'</div>'
+    +(o.p?'<div class="wx-p">'+esc(o.p)+'</div>':'')
+    +'<div class="wx-k">'+esc(o.k)+'</div></div></div></div>';
+}
+function waveHtml(n){
+  var h='';
+  for(var i=0;i<n;i++){var v=5+Math.round(Math.abs(Math.sin(i*1.7))*10);h+='<i style="height:'+v+'px"></i>';}
+  return h;
+}
+function voiceRow(who,o,unread){
+  const sec=Math.max(1,Math.round(o.z.length/3.2));
+  const bars=Math.min(14,Math.max(5,Math.round(o.z.length/2)));
+  const id='v'+Math.random().toString(36).slice(2,8);
+  return '<div class="wx-row '+(who==='me'?'me':'')+'">'
+    +'<div class="wx-av '+(who==='me'?'me':'')+'">'+(who==='me'?'나':(rpCur&&rpCur.scen?rpCur.scen.icon:'👤'))+'</div>'
+    +'<div class="wx-wrap">'
+    +'<div class="wx-msg"><div class="wx-voice" data-v="'+id+'" data-t="'+esc(o.z)+'">'
+    +'<span class="ic">🔊</span><span class="wx-wave">'+waveHtml(bars)+'</span><span class="wx-sec">'+sec+'″</span></div>'
+    +'<div class="wx-z" style="margin-top:8px" id="tx-'+id+'">'+esc(o.z)+'</div>'
+    +(o.p?'<div class="wx-p">'+esc(o.p)+'</div>':'')
+    +'<div class="wx-k">'+esc(o.k)+'</div></div></div>'
+    +(unread?'<div class="wx-unread"></div>':'')+'</div>';
+}
+function wxScroll(){
+  const b=document.getElementById('rpChat');
+  if(b)b.scrollTop=b.scrollHeight;
 }
 function startRP(id){
   const scen=RP.find(s=>s.id===id);
-  rpCur={scen,pts:0,node:scen.start,log:[]};
+  rpCur={scen:scen,pts:0,node:scen.start,log:[]};
   const area=document.getElementById('rpArea');
-  area.innerHTML=`<div class="rp-setting"><b>${scen.icon} ${esc(scen.title)}</b><br>${esc(scen.setting)}</div>
-    <div class="rp-chat" id="rpChat"></div>
-    <div id="rpCtl"></div>`;
-  playNode(scen.start);
-  area.scrollIntoView({behavior:'smooth'});
+  area.innerHTML='<div class="wx">'
+    +'<div class="wx-bar"><span class="back">‹</span><span class="nm">'+esc(scen.title.replace(/^[^ ]+ /,''))+'</span><span class="dots">⋯</span></div>'
+    +'<div class="wx-scene">'+scen.icon+' '+esc(scen.setting)+'</div>'
+    +'<div class="wx-body" id="rpChat"><div class="wx-day"><span>오늘</span></div></div>'
+    +'<div class="wx-input" id="rpCtl"></div></div>'
+    +'<button class="bigbtn" id="rpBack" style="background:#fff;color:var(--navy);border:1px solid var(--hair)">← 다른 상황 선택</button>';
+  document.getElementById('rpBack').addEventListener('click',renderRPHome);
+  playNode(scen.start,true);
+  area.scrollIntoView({behavior:'smooth',block:'start'});
 }
-function playNode(nid){
+function playNode(nid,first){
   const scen=rpCur.scen, node=scen.nodes[nid];
   rpCur.node=nid;
   const chat=document.getElementById('rpChat');
-  chat.insertAdjacentHTML('beforeend', bub('npc',node.npc));
-  if(node.npc.z&&node.npc.p)speak(node.npc.z);
   const ctl=document.getElementById('rpCtl');
-  if(node.end){finishRP(node);return;}
-  ctl.innerHTML=`<div class="rp-q">어떻게 대응할까요?</div>`+
-    node.choices.map((c,i)=>`<button class="rp-choice" data-i="${i}">
-      <div class="cz zh">${esc(c.z)}</div><div class="ck">${esc(c.k)}</div></button>`).join('');
-  ctl.querySelectorAll('.rp-choice').forEach(b=>b.addEventListener('click',()=>{
-    const c=node.choices[parseInt(b.dataset.i)];
-    rpCur.pts+=c.pts;
-    document.getElementById('rpChat').insertAdjacentHTML('beforeend', bub('me',c));
-    speak(c.z);
-    const ctl2=document.getElementById('rpCtl');
-    ctl2.innerHTML=c.fb?`<div class="rp-fb">💡 ${esc(c.fb)}</div>`:'';
-    setTimeout(()=>playNode(c.next), c.fb?1600:900);
-  }));
+  const hasVoice=node.npc.z&&node.npc.p;
+  // 상대가 입력 중… → 메시지 도착
+  ctl.innerHTML='';
+  chat.insertAdjacentHTML('beforeend','<div class="wx-row" id="wxTyping"><div class="wx-av">'+scen.icon+'</div><div class="wx-typing"><i></i><i></i><i></i></div></div>');
+  wxScroll();
+  setTimeout(function(){
+    const t=document.getElementById('wxTyping'); if(t)t.remove();
+    chat.insertAdjacentHTML('beforeend', hasVoice?voiceRow('npc',node.npc,true):bub('npc',node.npc));
+    wxScroll();
+    if(hasVoice)speak(node.npc.z);
+    if(node.end){finishRP(node);return;}
+    renderChoices(node);
+  }, first?500:900);
+}
+function renderChoices(node){
+  const ctl=document.getElementById('rpCtl');
+  ctl.innerHTML='<div class="lbl">✍️ 어떻게 답장할까요?</div>'
+    +node.choices.map(function(c,i){
+      return '<button class="wx-opt" data-i="'+i+'"><div class="oz">'+esc(c.z)+'</div><div class="ok2">'+esc(c.k)+'</div></button>';
+    }).join('');
+  ctl.querySelectorAll('.wx-opt').forEach(function(b){
+    b.addEventListener('click',function(){
+      const c=node.choices[parseInt(b.dataset.i)];
+      rpCur.pts+=c.pts;
+      const chat=document.getElementById('rpChat');
+      chat.insertAdjacentHTML('beforeend', voiceRow('me',c,false));
+      wxScroll();
+      speak(c.z);
+      ctl.innerHTML=c.fb?'<div class="wx-tip">💡 '+esc(c.fb)+'</div>':'';
+      setTimeout(function(){playNode(c.next);}, c.fb?1700:1000);
+    });
+  });
+  wxScroll();
 }
 function finishRP(node){
   const scen=rpCur.scen;
@@ -3798,18 +3889,18 @@ function finishRP(node){
   const gradeTxt={good:'훌륭한 마무리!',ok:'무난한 마무리',bad:'아쉬운 결과'}[node.end.grade];
   const rec=state.rp[scen.id]||{best:0,plays:0};
   rec.plays++;rec.best=Math.max(rec.best,rpCur.pts);state.rp[scen.id]=rec;saveState();
-  ctl.innerHTML=`<div class="rp-end">
-    <div class="rp-stars">${'★'.repeat(stars)}${'☆'.repeat(3-stars)}</div>
-    <div class="rp-grade">${gradeTxt} (${rpCur.pts}/${scen.maxPts}점)</div>
-    <div class="rp-msg">${esc(node.end.msg)}</div>
-    <div class="rp-keys"><div class="kt">이 상황의 핵심 표현 — 소리 내어 3번</div>
-      ${scen.keys.map(k=>bub('npc',k)).join('')}</div>
-    <div class="lbtns">
-      <button class="lbtn ghost" id="rpRetry">다시 도전</button>
-      <button class="lbtn solid" id="rpHome">다른 상황</button>
-    </div></div>`;
-  document.getElementById('rpRetry').addEventListener('click',()=>startRP(scen.id));
+  ctl.innerHTML='<div class="rp-end" style="background:transparent;border:none;padding:10px 2px">'
+    +'<div class="rp-stars">'+'★'.repeat(stars)+'☆'.repeat(3-stars)+'</div>'
+    +'<div class="rp-grade">'+gradeTxt+' ('+rpCur.pts+'/'+scen.maxPts+'점)</div>'
+    +'<div class="rp-msg">'+esc(node.end.msg)+'</div>'
+    +'<div class="rp-keys"><div class="kt">이 상황의 핵심 표현 — 소리 내어 3번</div>'
+    +scen.keys.map(function(k){return '<div class="wx-msg" style="margin-bottom:7px"><div class="wx-z">'+esc(k.z)+'</div><div class="wx-p">'+esc(k.p)+'</div><div class="wx-k">'+esc(k.k)+'</div><button class="bplay" data-t="'+esc(k.z)+'">▶ 듣기</button></div>';}).join('')
+    +'</div><div class="lbtns">'
+    +'<button class="lbtn ghost" id="rpRetry">다시 도전</button>'
+    +'<button class="lbtn solid" id="rpHome">다른 상황</button></div></div>';
+  document.getElementById('rpRetry').addEventListener('click',function(){startRP(scen.id);});
   document.getElementById('rpHome').addEventListener('click',renderRPHome);
+  wxScroll();
 }
 renderScen();
 
@@ -4325,6 +4416,15 @@ document.body.addEventListener('click',e=>{
   if(pb&&pb.dataset.t){speak(pb.dataset.t);return;}
   const bp=e.target.closest('.bplay');
   if(bp&&bp.dataset.t){speak(bp.dataset.t);return;}
+  const vb=e.target.closest('.wx-voice');
+  if(vb&&vb.dataset.t){
+    speak(vb.dataset.t);
+    vb.classList.add('playing');
+    const un=vb.closest('.wx-row').querySelector('.wx-unread');
+    if(un)un.remove();
+    setTimeout(function(){vb.classList.remove('playing');}, Math.max(1200,vb.dataset.t.length*260));
+    return;
+  }
   const tg=e.target.closest('.atoggle');
   if(tg){const box=tg.nextElementSibling;const open=box.classList.toggle('open');
     tg.textContent=tg.textContent.replace(open?'▾':'▴',open?'▴':'▾');}
