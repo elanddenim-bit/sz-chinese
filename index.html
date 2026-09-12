@@ -234,6 +234,38 @@
   .pg-cta{width:100%;border:none;border-radius:11px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;color:#fff;background:var(--red);display:flex;align-items:center;justify-content:space-between}
   .pg-cta.done{background:#1E7F4F}
   .pg-cta small{font-size:11.5px;font-weight:500;opacity:.9}
+  /* 작문 교정 */
+  .wx-write{width:100%;border:1px solid #dcdfe4;border-radius:9px;padding:11px 12px;font-size:15px;font-family:'Noto Sans SC','PingFang SC',sans-serif;line-height:1.5;resize:none;min-height:64px;background:#fff;color:#1B1F22}
+  .wx-write:focus{outline:none;border-color:var(--red)}
+  .wx-wbar{display:flex;gap:7px;margin-top:8px;align-items:center}
+  .wx-send{flex:1;border:none;background:var(--red);color:#fff;border-radius:9px;padding:11px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+  .wx-send:disabled{background:#c2c6cc}
+  .wx-skip{border:1px solid #dcdfe4;background:#fff;color:#8f939b;border-radius:9px;padding:11px 13px;font-size:12.5px;cursor:pointer;font-family:inherit;flex-shrink:0}
+  .wx-mode{display:flex;gap:6px;margin-bottom:9px}
+  .wx-mode button{flex:1;border:1px solid #dcdfe4;background:#fff;border-radius:8px;padding:7px;font-size:11.5px;font-weight:700;color:#8f939b;cursor:pointer;font-family:inherit}
+  .wx-mode button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .wx-intent{font-size:12px;color:#5a6478;background:#EEF2F7;border-radius:8px;padding:9px 11px;margin-bottom:9px;line-height:1.5}
+  .wx-intent b{color:var(--red)}
+  /* 교정 결과 카드 */
+  .fb-card{background:#fff;border-radius:12px;padding:14px;margin-bottom:9px;border:1px solid var(--hair)}
+  .fb-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .fb-score{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:900;color:#fff;flex-shrink:0}
+  .fb-verd{font-size:14px;font-weight:800;line-height:1.4}
+  .fb-sub{font-size:11.5px;color:var(--grey);margin-top:2px}
+  .fb-sec{font-size:11px;font-weight:800;color:var(--grey);margin:12px 0 6px;letter-spacing:.3px}
+  .fb-iss{border-left:3px solid var(--danger);background:#FDF6F5;border-radius:0 8px 8px 0;padding:9px 11px;margin-bottom:7px}
+  .fb-iss .x{font-size:13.5px;color:var(--danger);text-decoration:line-through;font-family:'Noto Sans SC',sans-serif}
+  .fb-iss .o{font-size:14.5px;color:var(--ok);font-weight:700;font-family:'Noto Sans SC',sans-serif;margin-left:7px}
+  .fb-iss .w{font-size:11.5px;color:#5a6478;margin-top:4px;line-height:1.5}
+  .fb-good{border-left:3px solid var(--ok);background:var(--okbg);border-radius:0 8px 8px 0;padding:9px 11px;font-size:12px;color:#1E5F42;line-height:1.5;margin-bottom:7px}
+  .fb-tip{border-left:3px solid var(--wash);background:#F1F4F9;border-radius:0 8px 8px 0;padding:9px 11px;font-size:12px;color:#39507a;line-height:1.5}
+  .fb-model{background:var(--okbg);border-radius:9px;padding:11px 12px}
+  .fb-model .z{font-size:16px;font-weight:700;font-family:'Noto Sans SC',sans-serif;line-height:1.5}
+  .fb-model .p{font-size:11.5px;color:var(--grey);margin-top:4px}
+  .fb-model .k{font-size:12px;color:#5a6478;margin-top:4px;line-height:1.5}
+  .fb-loading{text-align:center;padding:22px;color:var(--grey);font-size:13px}
+  .fb-dots i{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--wash);margin:0 3px;animation:wxblink 1.2s infinite}
+  .fb-dots i:nth-child(2){animation-delay:.2s} .fb-dots i:nth-child(3){animation-delay:.4s}
   /* 위챗 롤플레잉 */
   .wx{background:#EDEDED;border-radius:14px;overflow:hidden;box-shadow:0 2px 10px rgba(27,31,34,.10);margin-bottom:12px}
   .wx-bar{background:#2C2C2C;color:#EDEDED;padding:11px 14px;display:flex;align-items:center;gap:10px}
@@ -370,7 +402,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 2.6</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 2.7</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -505,6 +537,8 @@
     <div class="desc">등록된 초대 코드로 모든 기기에서 학습 기록이 동기화됩니다. 다른 기기에서도 같은 코드를 입력하세요.</div>
     <label>내 초대 코드</label>
     <input id="cfgSid" placeholder="예: sz-3fk9-mj" autocapitalize="none" autocomplete="off">
+    <label>AI 교정 기능 (선택)</label>
+    <input id="cfgAi" placeholder="교정 서버 주소 (없으면 비워두세요)" autocapitalize="none" autocomplete="off">
     <div class="mrow">
       <button class="mbtn ghost" id="cfgClose">닫기</button>
       <button class="mbtn navy" id="cfgSave">등록</button>
@@ -3862,23 +3896,125 @@ function playNode(nid,first){
     renderChoices(node);
   }, first?500:900);
 }
+
+// ================= 작문 교정 =================
+let wxWriteMode=false;
+function aiUrl(){
+  try{var c=JSON.parse(localStorage.getItem(CFG_KEY)||'null');return (c&&c.ai)?c.ai.replace(/\/+$/,''):'';}catch(e){return '';}
+}
 function renderChoices(node){
   const ctl=document.getElementById('rpCtl');
-  ctl.innerHTML='<div class="lbl">✍️ 어떻게 답장할까요?</div>'
-    +node.choices.map(function(c,i){
-      return '<button class="wx-opt" data-i="'+i+'"><div class="oz">'+esc(c.z)+'</div><div class="ok2">'+esc(c.k)+'</div></button>';
-    }).join('');
+  const canAI=!!aiUrl();
+  var h='';
+  if(canAI){
+    h+='<div class="wx-mode">'
+      +'<button data-wm="pick" class="'+(wxWriteMode?'':'on')+'">답장 고르기</button>'
+      +'<button data-wm="write" class="'+(wxWriteMode?'on':'')+'">✍️ 직접 쓰기</button></div>';
+  }
+  if(wxWriteMode&&canAI){
+    const intent=node.choices[0]?node.choices[0].k:'';
+    h+='<div class="wx-intent">이렇게 답장해 보세요 → <b>'+esc(intent)+'</b></div>'
+      +'<textarea class="wx-write" id="wxWrite" placeholder="중국어로 직접 써보세요"></textarea>'
+      +'<div class="wx-wbar"><button class="wx-send" id="wxSend">교정 받고 보내기</button>'
+      +'<button class="wx-skip" id="wxSkip">모르겠어요</button></div>';
+  }else{
+    h+='<div class="lbl">✍️ 어떻게 답장할까요?</div>'
+      +node.choices.map(function(c,i){
+        return '<button class="wx-opt" data-i="'+i+'"><div class="oz">'+esc(c.z)+'</div><div class="ok2">'+esc(c.k)+'</div></button>';
+      }).join('');
+  }
+  ctl.innerHTML=h;
+  ctl.querySelectorAll('[data-wm]').forEach(function(b){
+    b.addEventListener('click',function(){wxWriteMode=(b.dataset.wm==='write');renderChoices(node);});
+  });
   ctl.querySelectorAll('.wx-opt').forEach(function(b){
-    b.addEventListener('click',function(){
-      const c=node.choices[parseInt(b.dataset.i)];
-      rpCur.pts+=c.pts;
-      const chat=document.getElementById('rpChat');
-      chat.insertAdjacentHTML('beforeend', voiceRow('me',c,false));
-      wxScroll();
-      speak(c.z);
-      ctl.innerHTML=c.fb?'<div class="wx-tip">💡 '+esc(c.fb)+'</div>':'';
-      setTimeout(function(){playNode(c.next);}, c.fb?1700:1000);
+    b.addEventListener('click',function(){pickChoice(node,parseInt(b.dataset.i));});
+  });
+  const sendBtn=document.getElementById('wxSend');
+  if(sendBtn){
+    sendBtn.addEventListener('click',function(){submitWriting(node);});
+    const ta=document.getElementById('wxWrite');
+    if(ta)setTimeout(function(){ta.focus();},100);
+  }
+  const skip=document.getElementById('wxSkip');
+  if(skip)skip.addEventListener('click',function(){wxWriteMode=false;renderChoices(node);});
+  wxScroll();
+}
+function pickChoice(node,i){
+  const c=node.choices[i];
+  rpCur.pts+=c.pts;
+  const chat=document.getElementById('rpChat');
+  chat.insertAdjacentHTML('beforeend', voiceRow('me',c,false));
+  wxScroll();
+  speak(c.z);
+  const ctl=document.getElementById('rpCtl');
+  ctl.innerHTML=c.fb?'<div class="wx-tip">💡 '+esc(c.fb)+'</div>':'';
+  setTimeout(function(){playNode(c.next);}, c.fb?1700:1000);
+}
+async function submitWriting(node){
+  const ta=document.getElementById('wxWrite');
+  const text=(ta&&ta.value||'').trim();
+  if(!text)return;
+  const ctl=document.getElementById('rpCtl');
+  const chat=document.getElementById('rpChat');
+  // 내가 쓴 문장을 그대로 전송
+  chat.insertAdjacentHTML('beforeend','<div class="wx-row me"><div class="wx-av me">나</div>'
+    +'<div class="wx-wrap"><div class="wx-msg"><div class="wx-z">'+esc(text)+'</div></div></div></div>');
+  wxScroll();
+  ctl.innerHTML='<div class="fb-loading">교정 중입니다 <span class="fb-dots"><i></i><i></i><i></i></span></div>';
+  const best=node.choices.reduce(function(a,b){return (b.pts>a.pts)?b:a;},node.choices[0]);
+  let r=null;
+  try{
+    const res=await fetch(aiUrl()+'/correct',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({text:text,situation:(rpCur.scen.title+' — '+rpCur.scen.setting),intent:best.k})
     });
+    r=await res.json();
+  }catch(e){ r=null; }
+  if(!r||r.error||!r.corrected){
+    ctl.innerHTML='<div class="wx-tip">교정 서버에 연결하지 못했습니다. 잠시 후 다시 시도하거나 답장 고르기로 진행하세요.</div>'
+      +'<button class="wx-send" id="wxRetry" style="margin-top:8px">답장 고르기로 계속</button>';
+    document.getElementById('wxRetry').addEventListener('click',function(){wxWriteMode=false;renderChoices(node);});
+    return;
+  }
+  showFeedback(r,node,text);
+}
+function showFeedback(r,node,myText){
+  const ctl=document.getElementById('rpCtl');
+  const sc=Math.max(0,Math.min(100,parseInt(r.score)||0));
+  const col=sc>=85?'#1E7F4F':(sc>=65?'#2E4A73':'#C8352E');
+  var h='<div class="fb-card">'
+    +'<div class="fb-head"><div class="fb-score" style="background:'+col+'">'+sc+'</div>'
+    +'<div><div class="fb-verd">'+esc(r.verdict||'')+'</div>'
+    +'<div class="fb-sub">내가 쓴 문장: '+esc(myText)+'</div></div></div>';
+  if(r.issues&&r.issues.length){
+    h+='<div class="fb-sec">고칠 부분 '+r.issues.length+'</div>';
+    r.issues.forEach(function(is){
+      h+='<div class="fb-iss"><span class="x">'+esc(is.wrong||'')+'</span><span class="o">'+esc(is.right||'')+'</span>'
+        +'<div class="w">'+esc(is.why||'')+'</div></div>';
+    });
+  }
+  if(r.good)h+='<div class="fb-good">👍 '+esc(r.good)+'</div>';
+  if(r.tip)h+='<div class="fb-tip">💡 '+esc(r.tip)+'</div>';
+  h+='<div class="fb-sec">이렇게 쓰면 자연스럽습니다</div>'
+    +'<div class="fb-model"><div class="z zh">'+esc(r.corrected)+'</div>'
+    +(r.corrected_pinyin?'<div class="p">'+esc(r.corrected_pinyin)+'</div>':'')
+    +(r.corrected_ko?'<div class="k">'+esc(r.corrected_ko)+'</div>':'')
+    +'<button class="bplay" data-t="'+esc(r.corrected)+'" style="color:var(--red);margin-top:7px">▶ 듣기</button></div>'
+    +'</div>'
+    +'<button class="wx-send" id="wxGo">모범 문장으로 보내고 계속 →</button>';
+  ctl.innerHTML=h;
+  speak(r.corrected);
+  // 점수를 롤플레잉 점수에 반영 (모범 선택지 대비)
+  const best=node.choices.reduce(function(a,b){return (b.pts>a.pts)?b:a;},node.choices[0]);
+  rpCur.pts+=Math.round((best.pts||2)*(sc/100));
+  document.getElementById('wxGo').addEventListener('click',function(){
+    const chat=document.getElementById('rpChat');
+    chat.insertAdjacentHTML('beforeend', voiceRow('me',{z:r.corrected,p:r.corrected_pinyin||'',k:r.corrected_ko||''},false));
+    wxScroll();
+    ctl.innerHTML='';
+    setTimeout(function(){playNode(best.next);},900);
   });
   wxScroll();
 }
@@ -4557,7 +4693,8 @@ const cfgModal=document.getElementById('cfgModal');
 async function registerCode(sid,statEl){
   sid=(sid||'').trim();
   if(sid.length<6){statEl.innerHTML='<span style="color:#C8352E">코드를 정확히 입력해 주세요.</span>';return false;}
-  cfg={sid:sid};
+  var aiIn=document.getElementById('cfgAi');
+  cfg={sid:sid, ai:(aiIn&&aiIn.value||'').trim()};
   localStorage.setItem(CFG_KEY,JSON.stringify(cfg));
   if(!SB_URL||!SB_KEY){
     statEl.innerHTML='<span style="color:#1E7F4F">✓ 등록됨 (현재 오프라인 모드)</span>';
@@ -4579,6 +4716,7 @@ async function registerCode(sid,statEl){
 }
 document.getElementById('btnCfg').addEventListener('click',()=>{
   document.getElementById('cfgSid').value=cfg&&cfg.sid?cfg.sid:'';
+  var aiEl=document.getElementById('cfgAi'); if(aiEl)aiEl.value=(cfg&&cfg.ai)?cfg.ai:'';
   document.getElementById('cfgStat').textContent='';
   cfgModal.classList.add('show');
 });
