@@ -459,7 +459,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 2.9</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 2.9.1</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -2177,37 +2177,56 @@ function buildAudioSet(){
   try{collectSentences().forEach(function(t){AUDIO_SET.add(t);});}catch(e){}
   try{Object.keys(ITEMS).forEach(function(id){var it=ITEMS[id];if(it&&it.kind==='word')AUDIO_SET.add(it.z);});}catch(e){}
 }
-let speakSeq=0;
+let speakSeq=0, audioUnlocked=false;
 function stopAll(){
   if(curAudio){try{curAudio.pause();}catch(e){}}
   if('speechSynthesis' in window)speechSynthesis.cancel();
 }
+// 첫 사용자 조작 때 오디오를 한 번 열어둔다 (iOS 자동재생 차단 해제)
+function unlockAudio(){
+  if(audioUnlocked)return;
+  audioUnlocked=true;
+  try{
+    const a=new Audio('data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA');
+    a.volume=0;const p=a.play();
+    if(p&&p.catch)p.catch(function(){});
+  }catch(e){}
+}
+['touchstart','mousedown','keydown'].forEach(function(ev){
+  document.addEventListener(ev,unlockAudio,{once:true,passive:true});
+});
 function speak(t,r){
   if(!t)return;
   const rr=r!==undefined?r:rate;
   if(!AUDIO_SET)buildAudioSet();
   const key=fnv(t);
-  const my=++speakSeq;          // 이번 재생 요청 번호 (나중 요청이 이전 것을 무효화)
+  const my=++speakSeq;
   stopAll();
   // mp3 대상이 아니거나, 서버에 없다고 확인된 텍스트 → 즉시 TTS
-  if(!AUDIO_SET.has(t)||audioMiss[key]){ttsSpeak(t,rr);return;}
+  if(!AUDIO_SET.has(t)||audioMiss[key]===404){ttsSpeak(t,rr);return;}
   try{
     let a=audioCache[key];
     if(!a){a=new Audio(audioUrl(key));a.preload='auto';audioCache[key]=a;}
-    let settled=false;          // 성공/실패 중 하나만 처리
-    const fallback=function(){
-      if(settled||my!==speakSeq)return;   // 이미 처리됐거나 더 새로운 요청이 있으면 무시
+    let settled=false;
+    const fallback=function(reason){
+      if(settled||my!==speakSeq)return;
       settled=true;
-      audioMiss[key]=1;delete audioCache[key];
+      // 파일이 없을 때만 영구 기록, 자동재생 차단 등 일시적 실패는 기록하지 않음
+      if(reason==='error'){audioMiss[key]=404;delete audioCache[key];}
       ttsSpeak(t,rr);
     };
-    a.onerror=fallback;
-    a.onplaying=function(){settled=true;};   // 재생이 시작되면 폴백 차단
+    a.onerror=function(){fallback('error');};
+    a.onplaying=function(){settled=true;};
     a.playbackRate=rr;
     try{a.currentTime=0;}catch(e){}
     curAudio=a;
     const p=a.play();
-    if(p&&p.then)p.then(function(){settled=true;}).catch(fallback);
+    if(p&&p.then){
+      p.then(function(){settled=true;}).catch(function(){fallback('blocked');});
+    }else{
+      // play()가 Promise를 주지 않는 브라우저: 잠시 뒤에도 재생이 없으면 폴백
+      setTimeout(function(){ if(!settled&&a.paused)fallback('blocked'); },420);
+    }
   }catch(e){ttsSpeak(t,rr);}
 }
 // 음성 선다운로드: 접속이 되는 동안 mp3를 기기에 캐시해 둔다
@@ -4277,7 +4296,7 @@ function newQuiz(){
     <div class="opts">${optHtml}</div>
     <div class="qz-fb" id="qzFb"></div>
     <button class="qz-next" id="qzNext">다음 문제 ›</button>`;
-  if(dir==='z2k'&&item.kind==='sent')setTimeout(()=>speak(item.z),350);
+  if(dir==='z2k'&&item.kind==='sent')setTimeout(()=>speak(item.z),120);
   const pb=document.getElementById('qzPlay');
   if(pb)pb.addEventListener('click',()=>speak(item.z));
   stage.querySelectorAll('.opt').forEach(b=>b.addEventListener('click',()=>answer(parseInt(b.dataset.i))));
@@ -4425,7 +4444,7 @@ function buildQuiz(item){
     }));
   }
   draw();
-  setTimeout(()=>speak(item.z),350);
+  setTimeout(()=>speak(item.z),120);
   document.getElementById('qzPlay').addEventListener('click',()=>speak(item.z));
   document.getElementById('btnUndo').addEventListener('click',()=>{tray.pop();draw();});
   document.getElementById('btnCheck').addEventListener('click',()=>{
