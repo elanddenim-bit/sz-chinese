@@ -234,6 +234,24 @@
   .pg-cta{width:100%;border:none;border-radius:11px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;color:#fff;background:var(--red);display:flex;align-items:center;justify-content:space-between}
   .pg-cta.done{background:#1E7F4F}
   .pg-cta small{font-size:11.5px;font-weight:500;opacity:.9}
+  /* 문법 오답 노트 */
+  .gm-card{background:#fff;border:1px solid var(--hair);border-left:3px solid var(--danger);border-radius:0 11px 11px 0;padding:12px 13px;margin-bottom:9px}
+  .gm-card.hot{background:#FDF6F5}
+  .gm-top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .gm-label{font-size:13px;font-weight:800;color:var(--navy);flex:1}
+  .gm-count{font-size:11px;font-weight:800;color:#fff;background:var(--danger);border-radius:20px;padding:2px 9px;flex-shrink:0}
+  .gm-ex{font-size:12.5px;line-height:1.6}
+  .gm-ex .x{color:var(--danger);text-decoration:line-through;font-family:'Noto Sans SC',sans-serif}
+  .gm-ex .o{color:var(--ok);font-weight:700;font-family:'Noto Sans SC',sans-serif;margin-left:6px}
+  .gm-why{font-size:11.5px;color:#5a6478;margin-top:5px;line-height:1.5}
+  .gm-drill{width:100%;border:none;background:var(--navy);color:#fff;border-radius:10px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin:4px 0 14px;display:flex;align-items:center;justify-content:space-between}
+  .gm-drill small{font-size:11.5px;opacity:.85;font-weight:500}
+  .gm-repeat{background:#C8352E;color:#fff;font-size:10px;font-weight:800;border-radius:20px;padding:2px 8px;margin-left:6px;vertical-align:2px}
+  /* 재작성 드릴 */
+  .dr-wrap{background:#fff;border:1px solid var(--hair);border-radius:12px;padding:15px}
+  .dr-sit{font-size:11.5px;color:var(--grey);margin-bottom:8px}
+  .dr-ko{font-size:15px;font-weight:700;line-height:1.55;margin-bottom:6px}
+  .dr-warn{font-size:11.5px;color:var(--danger);background:#FDF6F5;border-radius:8px;padding:8px 10px;margin:10px 0;line-height:1.5}
   /* 작문 교정 */
   .wx-write{width:100%;border:1px solid #dcdfe4;border-radius:9px;padding:11px 12px;font-size:15px;font-family:'Noto Sans SC','PingFang SC',sans-serif;line-height:1.5;resize:none;min-height:64px;background:#fff;color:#1B1F22}
   .wx-write:focus{outline:none;border-color:var(--red)}
@@ -402,7 +420,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 2.7</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 2.8.1</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -477,6 +495,10 @@
   <div class="scenario-note">틀린 문장·단어는 자동으로 여기에 쌓입니다. 복습 퀴즈에서 <b>연속 2회 정답</b>이면 목록에서 빠지고 마스터로 기록됩니다.</div>
   <div id="rvList"></div>
   <div class="pgcard" style="margin-top:16px">
+    <h3>✍️ 내 문법 오답 노트 <small>AI 교정에서 자동 적립</small></h3>
+    <div id="gramList"></div>
+  </div>
+  <div class="pgcard" style="margin-top:16px">
     <h3>내 단어장 — 몰랐던 단어 <small>조립 퀴즈에서 탭한 단어</small></h3>
     <div id="mwList"><div class="qz-empty" style="padding:14px">아직 저장된 단어가 없습니다.<br>문장 조립 퀴즈에서 몰랐던 단어를 탭하면 여기에 쌓입니다.</div></div>
   </div>
@@ -513,6 +535,10 @@
       <div class="slot"><div class="sv" id="slPm">0</div><div class="sk">자기 전 (20~5시)</div></div>
     </div>
     <div style="font-size:11px;color:var(--grey);margin-top:9px;line-height:1.5">앱을 열고 사용하는 동안 자동으로 측정됩니다 (1분 이상 조작이 없으면 일시정지).</div>
+  </div>
+  <div class="pgcard">
+    <h3>✍️ 이번 주 반복 실수 <small>AI 교정 기준</small></h3>
+    <div id="gramWeek"></div>
   </div>
   <div class="pgcard">
     <div class="streakline"><span>🔥 연속 학습</span><span><b id="streakN">0</b>일째</span></div>
@@ -2089,7 +2115,7 @@ function pickVoice(){const vs=speechSynthesis.getVoices();zhVoice=vs.find(v=>/zh
 if(!zhVoice&&vs.length)document.getElementById('ttsWarn').style.display='block';}
 if('speechSynthesis' in window){pickVoice();speechSynthesis.onvoiceschanged=pickVoice;}
 else document.getElementById('ttsWarn').style.display='block';
-function ttsSpeak(t,rr){if(!('speechSynthesis' in window))return;speechSynthesis.cancel();
+function ttsSpeak(t,rr){if(!('speechSynthesis' in window))return;speechSynthesis.cancel();if(curAudio){try{curAudio.pause();}catch(e){}}
 const u=new SpeechSynthesisUtterance(t);u.lang='zh-CN';if(zhVoice)u.voice=zhVoice;u.rate=rr;speechSynthesis.speak(u);}
 // mp3 우선 재생 (원어민 음성). mp3 대상이 아닌 텍스트는 즉시 TTS (아이폰은 탭 직후에만 TTS 허용)
 const audioCache={}, audioMiss={};
@@ -2101,27 +2127,37 @@ function buildAudioSet(){
   try{collectSentences().forEach(function(t){AUDIO_SET.add(t);});}catch(e){}
   try{Object.keys(ITEMS).forEach(function(id){var it=ITEMS[id];if(it&&it.kind==='word')AUDIO_SET.add(it.z);});}catch(e){}
 }
+let speakSeq=0;
+function stopAll(){
+  if(curAudio){try{curAudio.pause();}catch(e){}}
+  if('speechSynthesis' in window)speechSynthesis.cancel();
+}
 function speak(t,r){
+  if(!t)return;
   const rr=r!==undefined?r:rate;
   if(!AUDIO_SET)buildAudioSet();
   const key=fnv(t);
-  // mp3 대상이 아니거나, 서버에 없다고 확인된 텍스트 → 탭 직후 동기 TTS
+  const my=++speakSeq;          // 이번 재생 요청 번호 (나중 요청이 이전 것을 무효화)
+  stopAll();
+  // mp3 대상이 아니거나, 서버에 없다고 확인된 텍스트 → 즉시 TTS
   if(!AUDIO_SET.has(t)||audioMiss[key]){ttsSpeak(t,rr);return;}
   try{
-    if(curAudio){curAudio.pause();}
-    if('speechSynthesis' in window)speechSynthesis.cancel();
     let a=audioCache[key];
     if(!a){a=new Audio(audioUrl(key));a.preload='auto';audioCache[key]=a;}
-    a.onerror=function(){
-      // 파일이 아직 없음(미생성) → 다음부터는 즉시 TTS. 이번엔 시도만.
+    let settled=false;          // 성공/실패 중 하나만 처리
+    const fallback=function(){
+      if(settled||my!==speakSeq)return;   // 이미 처리됐거나 더 새로운 요청이 있으면 무시
+      settled=true;
       audioMiss[key]=1;delete audioCache[key];
       ttsSpeak(t,rr);
     };
+    a.onerror=fallback;
+    a.onplaying=function(){settled=true;};   // 재생이 시작되면 폴백 차단
     a.playbackRate=rr;
     try{a.currentTime=0;}catch(e){}
     curAudio=a;
     const p=a.play();
-    if(p&&p.catch)p.catch(function(){delete audioCache[key];ttsSpeak(t,rr);});
+    if(p&&p.then)p.then(function(){settled=true;}).catch(fallback);
   }catch(e){ttsSpeak(t,rr);}
 }
 // 음성 선다운로드: 접속이 되는 동안 mp3를 기기에 캐시해 둔다
@@ -3658,7 +3694,7 @@ const SB_KEY = "sb_publishable_fTwyVCtEqz7HhSBJ74X9HQ_OjaVZam8";
 
 const SKEY='szcn-trainer-v1';
 const CFG_KEY='szcn-trainer-cfg';
-let state={prog:{},stats:{total:0,correct:0,days:{}},mastered:0,myWords:{},rp:{},
+let state={prog:{},stats:{total:0,correct:0,days:{}},mastered:0,myWords:{},rp:{},gram:{},
   goals:{min:220,sent:60,quiz:200,mast:35}};
 let cfg=null; try{cfg=JSON.parse(localStorage.getItem(CFG_KEY)||'null');}catch(e){}
 let saveTimer=null, remoteTimer=null;
@@ -3704,6 +3740,7 @@ async function loadState(){
   if(remote&&remote.prog)state=mergePick(state,remote);
   if(!state.goals)state.goals={min:220,sent:60,quiz:200,mast:35};
   if(!state.myWords)state.myWords={};
+  if(!state.gram)state.gram={};
   if(!state.rp)state.rp={};
   if(!cfg||!cfg.sid){
     document.getElementById('welModal').classList.add('show');
@@ -3968,7 +4005,7 @@ async function submitWriting(node){
     const res=await fetch(aiUrl()+'/correct',{
       method:'POST',
       headers:{'content-type':'application/json'},
-      body:JSON.stringify({text:text,situation:(rpCur.scen.title+' — '+rpCur.scen.setting),intent:best.k})
+      body:JSON.stringify({text:text,situation:(rpCur.scen.title+' — '+rpCur.scen.setting),intent:best.k,history:gramHistory()})
     });
     r=await res.json();
   }catch(e){ r=null; }
@@ -3978,6 +4015,7 @@ async function submitWriting(node){
     document.getElementById('wxRetry').addEventListener('click',function(){wxWriteMode=false;renderChoices(node);});
     return;
   }
+  gramRecord(r,text,(rpCur.scen.title+' — '+rpCur.scen.setting));
   showFeedback(r,node,text);
 }
 function showFeedback(r,node,myText){
@@ -3992,6 +4030,7 @@ function showFeedback(r,node,myText){
     h+='<div class="fb-sec">고칠 부분 '+r.issues.length+'</div>';
     r.issues.forEach(function(is){
       h+='<div class="fb-iss"><span class="x">'+esc(is.wrong||'')+'</span><span class="o">'+esc(is.right||'')+'</span>'
+        +(is.repeat?'<span class="gm-repeat">반복 '+((state.gram[(is.pattern||'').toLowerCase()]||{}).count||'')+'회</span>':'')
         +'<div class="w">'+esc(is.why||'')+'</div></div>';
     });
   }
@@ -4506,11 +4545,141 @@ function stopShadow(){
   speechSynthesis.cancel();if(typeof curAudio!=='undefined'&&curAudio)curAudio.pause();
 }
 
+
+// ================= 문법 오답 노트 =================
+function gramHistory(){
+  const g=state.gram||{};
+  return Object.keys(g).map(function(k){return {pattern:k,label:g[k].label,count:g[k].count,example:g[k].wrong};})
+    .sort(function(a,b){return b.count-a.count;}).slice(0,12);
+}
+function gramRecord(r,myText,situation){
+  if(!r||!r.issues||!r.issues.length)return;
+  if(!state.gram)state.gram={};
+  const d=today();
+  r.issues.forEach(function(is){
+    const key=(is.pattern||'etc').toLowerCase();
+    const g=state.gram[key]||{label:is.label||'기타',count:0,wrong:'',right:'',why:'',last:'',ex:[],fixed:0};
+    g.count++; g.label=is.label||g.label;
+    g.wrong=is.wrong||g.wrong; g.right=is.right||g.right; g.why=is.why||g.why;
+    g.last=d;
+    g.ex=(g.ex||[]);
+    g.ex.unshift({my:myText,fix:r.corrected,sit:situation||'',d:d});
+    if(g.ex.length>5)g.ex.length=5;
+    state.gram[key]=g;
+  });
+  saveState();
+}
+function gramTop(n){
+  const g=state.gram||{};
+  return Object.keys(g).map(function(k){return Object.assign({pattern:k},g[k]);})
+    .sort(function(a,b){return (b.count-b.fixed)-(a.count-a.fixed);}).slice(0,n||99);
+}
+function renderGram(){
+  const wrap=document.getElementById('gramList');
+  if(!wrap)return;
+  const list=gramTop(99).filter(function(x){return x.count>x.fixed;});
+  if(!list.length){
+    wrap.innerHTML='<div class="qz-empty" style="padding:16px">아직 기록된 문법 실수가 없습니다.<br>롤플레잉에서 ✍️ 직접 쓰기로 작문하면 여기에 쌓입니다.</div>';
+    return;
+  }
+  var h='<button class="gm-drill" id="gramDrill"><span>▶ 취약 문법 다시 쓰기</span><small>'+list.length+'개 유형 · 내가 틀린 문장으로</small></button>';
+  list.forEach(function(x){
+    h+='<div class="gm-card'+(x.count>=3?' hot':'')+'">'
+      +'<div class="gm-top"><span class="gm-label">'+esc(x.label)+'</span><span class="gm-count">'+x.count+'회</span></div>'
+      +'<div class="gm-ex"><span class="x">'+esc(x.wrong)+'</span><span class="o">'+esc(x.right)+'</span></div>'
+      +'<div class="gm-why">'+esc(x.why)+'</div></div>';
+  });
+  wrap.innerHTML=h;
+  const b=document.getElementById('gramDrill');
+  if(b)b.addEventListener('click',startGramDrill);
+}
+// ---- 취약 문법 재작성 드릴 ----
+let drillCur=null;
+function startGramDrill(){
+  const list=gramTop(99).filter(function(x){return x.count>x.fixed && x.ex && x.ex.length;});
+  if(!list.length)return;
+  const pick=list[Math.floor(Math.random()*Math.min(3,list.length))];
+  const ex=pick.ex[Math.floor(Math.random()*pick.ex.length)];
+  drillCur={g:pick,ex:ex};
+  goTab('p1');
+  const stage=document.getElementById('qzStage');
+  document.getElementById('qzSelTxt').textContent='취약 문법 다시 쓰기';
+  if(setMode){setMode=false;document.getElementById('setToggle').classList.remove('on');setState=null;renderSetBar();}
+  stage.innerHTML='<div class="dr-wrap">'
+    +'<div class="dr-sit">'+esc(ex.sit||'')+'</div>'
+    +'<div class="dr-ko">'+esc(ex.fix?('이 뜻을 중국어로 다시 써보세요'):'다시 써보세요')+'</div>'
+    +'<div class="wx-intent">전에 이렇게 썼습니다 → <b>'+esc(ex.my)+'</b></div>'
+    +'<div class="dr-warn">⚠️ '+esc(pick.label)+' — 이 실수를 '+pick.count+'번 했습니다. 이번엔 피해서 써보세요.</div>'
+    +'<textarea class="wx-write" id="drWrite" placeholder="중국어로 다시 써보세요"></textarea>'
+    +'<div class="wx-wbar"><button class="wx-send" id="drSend">교정 받기</button>'
+    +'<button class="wx-skip" id="drSkip">그만</button></div>'
+    +'<div id="drFb"></div></div>';
+  document.getElementById('drSend').addEventListener('click',submitDrill);
+  document.getElementById('drSkip').addEventListener('click',function(){reviewMode=false;updateQzSel();newQuiz();});
+  setTimeout(function(){var t=document.getElementById('drWrite');if(t)t.focus();},100);
+}
+async function submitDrill(){
+  const ta=document.getElementById('drWrite');
+  const text=(ta&&ta.value||'').trim();
+  if(!text||!drillCur)return;
+  const fb=document.getElementById('drFb');
+  fb.innerHTML='<div class="fb-loading">교정 중입니다 <span class="fb-dots"><i></i><i></i><i></i></span></div>';
+  let r=null;
+  try{
+    const res=await fetch(aiUrl()+'/correct',{method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({text:text,situation:drillCur.ex.sit||'작문 연습',intent:drillCur.ex.fix,history:gramHistory()})});
+    r=await res.json();
+  }catch(e){r=null;}
+  if(!r||r.error||!r.corrected){
+    fb.innerHTML='<div class="wx-tip">교정 서버에 연결하지 못했습니다.</div>';return;
+  }
+  gramRecord(r,text,drillCur.ex.sit);
+  const again=(r.issues||[]).some(function(is){return (is.pattern||'').toLowerCase()===drillCur.g.pattern;});
+  if(!again){
+    const g=state.gram[drillCur.g.pattern];
+    if(g){g.fixed=(g.fixed||0)+1;saveState();}
+  }
+  var h='<div style="margin-top:12px">'
+    +(again?'<div class="dr-warn">😣 같은 실수가 또 나왔습니다 — '+esc(drillCur.g.label)+'</div>'
+           :'<div class="fb-good" style="margin-bottom:9px">🎉 이번엔 '+esc(drillCur.g.label)+' 실수를 피했습니다! (교정 '+(state.gram[drillCur.g.pattern]?state.gram[drillCur.g.pattern].fixed:1)+'회)</div>')
+    +'</div>';
+  fb.innerHTML=h+drillFeedbackHtml(r,text)
+    +'<div class="lbtns" style="margin-top:12px"><button class="lbtn ghost" id="drMore">한 문제 더</button>'
+    +'<button class="lbtn solid" id="drEnd">그만하기</button></div>';
+  speak(r.corrected);
+  document.getElementById('drMore').addEventListener('click',startGramDrill);
+  document.getElementById('drEnd').addEventListener('click',function(){reviewMode=false;updateQzSel();newQuiz();});
+  renderGram();
+}
+function drillFeedbackHtml(r,myText){
+  const sc=Math.max(0,Math.min(100,parseInt(r.score)||0));
+  const col=sc>=85?'#1E7F4F':(sc>=65?'#2E4A73':'#C8352E');
+  var h='<div class="fb-card"><div class="fb-head"><div class="fb-score" style="background:'+col+'">'+sc+'</div>'
+    +'<div><div class="fb-verd">'+esc(r.verdict||'')+'</div>'
+    +'<div class="fb-sub">내가 쓴 문장: '+esc(myText)+'</div></div></div>';
+  if(r.issues&&r.issues.length){
+    h+='<div class="fb-sec">고칠 부분 '+r.issues.length+'</div>';
+    r.issues.forEach(function(is){
+      h+='<div class="fb-iss"><span class="x">'+esc(is.wrong||'')+'</span><span class="o">'+esc(is.right||'')+'</span>'
+        +(is.repeat?'<span class="gm-repeat">반복</span>':'')
+        +'<div class="w">'+esc(is.why||'')+'</div></div>';
+    });
+  }
+  if(r.good)h+='<div class="fb-good">👍 '+esc(r.good)+'</div>';
+  if(r.tip)h+='<div class="fb-tip">💡 '+esc(r.tip)+'</div>';
+  h+='<div class="fb-sec">이렇게 쓰면 자연스럽습니다</div>'
+    +'<div class="fb-model"><div class="z zh">'+esc(r.corrected)+'</div>'
+    +(r.corrected_pinyin?'<div class="p">'+esc(r.corrected_pinyin)+'</div>':'')
+    +(r.corrected_ko?'<div class="k">'+esc(r.corrected_ko)+'</div>':'')
+    +'<button class="bplay" data-t="'+esc(r.corrected)+'" style="color:var(--red);margin-top:7px">▶ 듣기</button></div></div>';
+  return h;
+}
+
 // ================= 복습 탭 =================
 function renderReview(){
   const wrap=document.getElementById('rvList');wrap.innerHTML='';
   const ids=wrongIds();
-  if(!ids.length){wrap.innerHTML='<div class="qz-empty">현재 복습 대기 항목이 없습니다.</div>';renderWords();renderMyWords();return;}
+  if(!ids.length){wrap.innerHTML='<div class="qz-empty">현재 복습 대기 항목이 없습니다.</div>';renderWords();renderMyWords();renderGram();return;}
   // 마스터 임박(연속 1회 정답)을 위로
   const near=ids.filter(id=>(state.prog[id].streak||0)>=1);
   const rest=ids.filter(id=>(state.prog[id].streak||0)<1);
@@ -4533,7 +4702,7 @@ function renderReview(){
     const h=document.createElement('div');h.className='rv-sec';h.textContent='🔴 복습 필요 ('+rest.length+')';wrap.appendChild(h);
     rest.forEach(id=>wrap.appendChild(row(id)));
   }
-  renderWords();renderMyWords();
+  renderWords();renderMyWords();renderGram();
 }
 document.getElementById('btnReview').addEventListener('click',()=>{
   reviewMode=true;qzSession={n:0,c:0};
@@ -4673,6 +4842,18 @@ function renderProgress(){
   document.getElementById('slMv').textContent=Math.round(r.mv||0);
   document.getElementById('slPm').textContent=Math.round(r.pm||0);
   document.getElementById('streakN').textContent=calcStreak();
+  (function(){
+    const el=document.getElementById('gramWeek'); if(!el)return;
+    const top=gramTop(3).filter(function(x){return x.count>x.fixed;});
+    if(!top.length){el.innerHTML='<div style="font-size:12.5px;color:var(--grey);line-height:1.6">아직 기록이 없습니다. 롤플레잉에서 직접 써보면 자주 하는 실수가 여기 모입니다.</div>';return;}
+    el.innerHTML=top.map(function(x,i){
+      return '<div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--hair)">'
+        +'<span style="font-size:15px;font-weight:900;color:var(--danger);width:18px">'+(i+1)+'</span>'
+        +'<span style="flex:1;font-size:13px;font-weight:700">'+esc(x.label)+'</span>'
+        +'<span style="font-size:11.5px;color:var(--grey)">'+x.count+'회'+(x.fixed?' · 교정 '+x.fixed:'')+'</span></div>';
+    }).join('')+'<button class="pg-cta" id="gramGo" style="margin-top:11px"><span>▶ 취약 문법 다시 쓰기</span><small>내가 틀린 문장으로</small></button>';
+    var gb=document.getElementById('gramGo'); if(gb)gb.addEventListener('click',startGramDrill);
+  })();
   // 목표 입력값
   document.getElementById('inMin').value=g.min;
   document.getElementById('inSent').value=g.sent;
@@ -4807,6 +4988,12 @@ function renderHome(){
     +'<div class="l2">10문제 시작<span class="arrow">→</span></div>'
     +'<div class="l3">'+(d.n?('오늘 '+d.n+'문 완료 · 정답률 '+(d.n?Math.round(d.c/d.n*100):0)+'%'):'아직 시작 전입니다')+'</div></button>';
   // 바로가기
+  var gtop=(typeof gramTop==='function')?gramTop(1).filter(function(x){return x.count>=2&&x.count>x.fixed;}):[];
+  if(gtop.length){
+    html+='<button class="hcta" id="ctaGram" style="background:linear-gradient(135deg,#8a4a3a,#b06a52)"><div class="l1">반복 실수 '+gtop[0].count+'회</div>'
+      +'<div class="l2">'+esc(gtop[0].label)+' 고치기<span class="arrow">→</span></div>'
+      +'<div class="l3">내가 틀렸던 문장으로 다시 써보기</div></button>';
+  }
   html+='<div class="hrow">'
     +'<button class="hmini" data-go="shadow"><div class="mi">🎧</div><div class="mt">쉐도잉</div><div class="ms">따라 말하기</div></button>'
     +'<button class="hmini" data-go="rp"><div class="mi">🎭</div><div class="mt">롤플레잉</div><div class="ms">'+RP.length+'개 상황</div></button>'
@@ -4825,6 +5012,7 @@ function renderHome(){
     +(wpct>=100?'이번 주 목표 달성! 👏':(wpct>=60?'좋은 페이스입니다':'조금만 더 하면 따라잡습니다'))+'</div></div>';
   el.innerHTML=html;
   var r=document.getElementById('ctaRev'); if(r)r.addEventListener('click',startReview);
+  var gg=document.getElementById('ctaGram'); if(gg)gg.addEventListener('click',startGramDrill);
   document.getElementById('ctaDaily').addEventListener('click',function(){startDaily('pick','word');});
   el.querySelectorAll('[data-go]').forEach(function(b){
     b.addEventListener('click',function(){
