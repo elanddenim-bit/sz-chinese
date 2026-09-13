@@ -234,6 +234,45 @@
   .pg-cta{width:100%;border:none;border-radius:11px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;color:#fff;background:var(--red);display:flex;align-items:center;justify-content:space-between}
   .pg-cta.done{background:#1E7F4F}
   .pg-cta small{font-size:11.5px;font-weight:500;opacity:.9}
+  /* 현장 도구 */
+  .fd-modes{display:flex;gap:7px;margin-bottom:13px}
+  .fd-mode{flex:1;border:1px solid var(--hair);background:#fff;border-radius:12px;padding:11px 6px;cursor:pointer;font-family:inherit;text-align:center}
+  .fd-mode.on{background:var(--navy);border-color:var(--navy)}
+  .fd-mode .fi{display:block;font-size:17px}
+  .fd-mode .ft{display:block;font-size:12px;font-weight:700;color:var(--navy);margin-top:4px}
+  .fd-mode .fs{display:block;font-size:10.5px;color:var(--grey);margin-top:1px}
+  .fd-mode.on .ft{color:#fff} .fd-mode.on .fs{color:var(--wash)}
+  .fd-card{background:#fff;border:1px solid var(--hair);border-radius:13px;padding:15px;margin-bottom:11px}
+  .fd-lbl{font-size:12px;color:var(--grey);margin-bottom:7px;line-height:1.5}
+  .fd-in{width:100%;border:1px solid var(--hair);border-radius:10px;padding:12px;font-size:14.5px;font-family:'Noto Sans KR','Noto Sans SC',sans-serif;line-height:1.55;resize:vertical;min-height:92px;background:#fff;color:var(--navy)}
+  .fd-in:focus{outline:none;border-color:var(--red)}
+  .fd-sit{width:100%;border:1px solid var(--hair);border-radius:10px;padding:10px 12px;font-size:13px;font-family:inherit;margin-bottom:8px;color:var(--navy)}
+  .fd-go{width:100%;border:none;background:var(--red);color:#fff;border-radius:10px;padding:13px;font-size:14.5px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:9px}
+  .fd-go:disabled{background:#c2c6cc}
+  .fd-res{margin-top:12px}
+  .fd-final{background:var(--okbg);border-radius:11px;padding:13px}
+  .fd-final .z{font-size:16px;font-weight:700;line-height:1.6;font-family:'Noto Sans SC',sans-serif}
+  .fd-final .p{font-size:11.5px;color:var(--grey);margin-top:5px;line-height:1.5}
+  .fd-final .k{font-size:12.5px;color:#5a6478;margin-top:5px;line-height:1.5}
+  .fd-copy{width:100%;border:none;background:var(--ok);color:#fff;border-radius:9px;padding:11px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;margin-top:10px}
+  .fd-sec{font-size:11px;font-weight:800;color:var(--grey);margin:13px 0 7px;letter-spacing:.3px}
+  .fd-sig{border-left:3px solid var(--c1);background:#FBF7EC;border-radius:0 9px 9px 0;padding:10px 12px;margin-bottom:7px}
+  .fd-sig .ph{font-size:14.5px;font-weight:700;font-family:'Noto Sans SC',sans-serif;color:var(--c1)}
+  .fd-sig .mn{font-size:12px;color:#5a6478;margin-top:4px;line-height:1.5}
+  .fd-miss{border-left:3px solid var(--danger);background:#FDF6F5;border-radius:0 9px 9px 0;padding:10px 12px;font-size:12.5px;color:#8a3a33;line-height:1.6;margin-bottom:7px}
+  .fd-risk{display:inline-block;font-size:10.5px;font-weight:800;color:#fff;border-radius:20px;padding:3px 10px}
+  .fd-risk.high{background:var(--danger)} .fd-risk.mid{background:var(--c1)} .fd-risk.low{background:var(--ok)}
+  .fd-q{background:#fff;border:1px solid var(--hair);border-left:3px solid var(--c0);border-radius:0 11px 11px 0;padding:12px 13px;margin-bottom:8px}
+  .fd-q .z{font-size:15.5px;font-weight:700;font-family:'Noto Sans SC',sans-serif;line-height:1.5}
+  .fd-q .p{font-size:11.5px;color:var(--grey);margin-top:4px}
+  .fd-q .k{font-size:12.5px;color:#4a5670;margin-top:4px;line-height:1.5}
+  .fd-q .w{font-size:11.5px;color:var(--c0);margin-top:6px;line-height:1.5;padding-top:6px;border-top:1px solid var(--hair)}
+  .fd-chk{display:flex;gap:9px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--hair);font-size:13px;line-height:1.5}
+  .fd-chk:last-child{border-bottom:none}
+  .fd-chk .bx{width:16px;height:16px;border:1.5px solid var(--grey);border-radius:4px;flex-shrink:0;margin-top:2px}
+  .fd-hist{font-size:12px;color:var(--grey);padding:9px 0;border-bottom:1px solid var(--hair);cursor:pointer;line-height:1.5}
+  .fd-hist:last-child{border-bottom:none}
+  body.nopy .fd-final .p,body.nopy .fd-q .p{display:none}
   /* 문법 오답 노트 */
   .gm-card{background:#fff;border:1px solid var(--hair);border-left:3px solid var(--danger);border-radius:0 11px 11px 0;padding:12px 13px;margin-bottom:9px}
   .gm-card.hot{background:#FDF6F5}
@@ -420,7 +459,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 2.8.1</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 2.9</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -445,6 +484,7 @@
   <button class="tab" data-p="p1">퀴즈</button>
   <button class="tab" data-p="p2">HSK 단어</button>
   <button class="tab" data-p="p3">복습<span class="badge" id="rvBadge" style="display:none">0</span></button>
+  <button class="tab" data-p="p5">현장</button>
   <button class="tab" data-p="p4">진척</button>
 </nav>
 
@@ -511,6 +551,16 @@
       <li>오늘의 중국어 단어시험(이미지 업로드)과 병행</li>
     </ol>
   </div>
+</div>
+
+<!-- 현장 도구 -->
+<div class="pane" id="p5">
+  <div class="fd-modes">
+    <button class="fd-mode on" data-fd="send"><span class="fi">✍️</span><span class="ft">보낼 메시지</span><span class="fs">검사받기</span></button>
+    <button class="fd-mode" data-fd="read"><span class="fi">🔍</span><span class="ft">받은 메시지</span><span class="fs">속뜻 읽기</span></button>
+    <button class="fd-mode" data-fd="brief"><span class="fi">📋</span><span class="ft">방문 브리핑</span><span class="fs">질문지 생성</span></button>
+  </div>
+  <div id="fdBody"></div>
 </div>
 
 <!-- 진척 -->
@@ -4546,6 +4596,168 @@ function stopShadow(){
 }
 
 
+
+// ================= 현장 도구 =================
+let fdMode='send', fdBusy=false;
+function fieldUrl(){var u=aiUrl();return u?u+'/field':'';}
+function fdCopy(t,btn){
+  try{
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t);}
+    else{var ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);}
+    if(btn){var o=btn.textContent;btn.textContent='복사됨 ✓';setTimeout(function(){btn.textContent=o;},1400);}
+  }catch(e){}
+}
+function renderField(){
+  const el=document.getElementById('fdBody');
+  if(!el)return;
+  if(!aiUrl()){
+    el.innerHTML='<div class="fd-card"><div class="fd-lbl">현장 도구는 AI 교정 서버가 필요합니다.<br>좌측 상단 ⚙︎에서 교정 서버 주소를 등록하세요.</div></div>';
+    return;
+  }
+  var h='';
+  if(fdMode==='send'){
+    h='<div class="fd-card">'
+      +'<div class="fd-lbl">공장·거래처에 보낼 메시지를 검사합니다. 한국어로 의도만 적어도 되고, 중국어 초안을 써도 됩니다.</div>'
+      +'<input class="fd-sit" id="fdSit" placeholder="상황 (예: A공장 납기 지연 통보 받은 뒤 답장)">'
+      +'<textarea class="fd-in" id="fdIn" placeholder="예) 납기가 밀리면 곤란하다고, 확정 날짜를 오늘 안에 달라고 하고 싶어요"></textarea>'
+      +'<button class="fd-go" id="fdGo">검사하고 완성 문장 받기</button></div>';
+  }else if(fdMode==='read'){
+    h='<div class="fd-card">'
+      +'<div class="fd-lbl">공장에서 받은 중국어 메시지를 붙여넣으세요. 번역과 함께 <b>속뜻·협상 신호</b>를 읽어드립니다.</div>'
+      +'<input class="fd-sit" id="fdSit" placeholder="상황 (예: 샘플 납기 확인 중)">'
+      +'<textarea class="fd-in" id="fdIn" placeholder="받은 위챗 메시지를 그대로 붙여넣으세요"></textarea>'
+      +'<button class="fd-go" id="fdGo">속뜻 읽기</button></div>';
+  }else{
+    h='<div class="fd-card">'
+      +'<div class="fd-lbl">방문 전 브리핑을 만듭니다. 어디에 왜 가는지만 적으세요.</div>'
+      +'<textarea class="fd-in" id="fdIn" placeholder="예) 내일 오후 하이닝 캐시미어 코트 공장 첫 방문. 26FW 물량 500~800장, 공임과 납기 확인이 목적"></textarea>'
+      +'<button class="fd-go" id="fdGo">브리핑 만들기</button></div>';
+  }
+  h+='<div id="fdRes" class="fd-res"></div>';
+  el.innerHTML=h;
+  document.getElementById('fdGo').addEventListener('click',runField);
+}
+async function runField(){
+  if(fdBusy)return;
+  const inEl=document.getElementById('fdIn');
+  const sitEl=document.getElementById('fdSit');
+  const text=(inEl&&inEl.value||'').trim();
+  if(!text)return;
+  const res=document.getElementById('fdRes');
+  const btn=document.getElementById('fdGo');
+  fdBusy=true; btn.disabled=true;
+  res.innerHTML='<div class="fb-loading">분석 중입니다 <span class="fb-dots"><i></i><i></i><i></i></span></div>';
+  let r=null;
+  try{
+    const resp=await fetch(fieldUrl(),{method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({mode:fdMode,text:text,situation:(sitEl&&sitEl.value||'')})});
+    r=await resp.json();
+  }catch(e){r=null;}
+  fdBusy=false; btn.disabled=false;
+  if(!r||r.error){
+    res.innerHTML='<div class="wx-tip">서버에 연결하지 못했습니다. 잠시 후 다시 시도하세요.<br>(현장 도구는 field 함수 배포가 필요합니다)</div>';
+    return;
+  }
+  if(fdMode==='send')res.innerHTML=fdSendHtml(r);
+  else if(fdMode==='read')res.innerHTML=fdReadHtml(r);
+  else res.innerHTML=fdBriefHtml(r);
+  res.querySelectorAll('[data-copy]').forEach(function(b){
+    b.addEventListener('click',function(){fdCopy(b.dataset.copy,b);});
+  });
+  res.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function fdSendHtml(r){
+  var h='<div class="fd-card">'
+    +'<div style="display:flex;align-items:center;gap:9px;margin-bottom:11px">'
+    +'<span class="fd-risk '+(r.ready?'low':'mid')+'">'+(r.ready?'보내도 좋음':'수정 권장')+'</span>'
+    +'<span style="font-size:14px;font-weight:800">'+esc(r.verdict||'')+'</span></div>';
+  if(r.missing&&r.missing.length){
+    h+='<div class="fd-sec">빠진 것</div>';
+    r.missing.forEach(function(m){h+='<div class="fd-miss">⚠️ '+esc(m)+'</div>';});
+  }
+  if(r.fixes&&r.fixes.length&&r.fixes[0].right){
+    h+='<div class="fd-sec">고친 부분</div>';
+    r.fixes.forEach(function(f){
+      h+='<div class="fb-iss">'+(f.wrong?'<span class="x">'+esc(f.wrong)+'</span>':'')
+        +'<span class="o">'+esc(f.right)+'</span><div class="w">'+esc(f.why||'')+'</div></div>';
+    });
+  }
+  if(r.strategy)h+='<div class="fb-tip">💡 '+esc(r.strategy)+'</div>';
+  h+='<div class="fd-sec">이대로 보내세요</div>'
+    +'<div class="fd-final"><div class="z zh">'+esc(r.final||'')+'</div>'
+    +(r.final_pinyin?'<div class="p">'+esc(r.final_pinyin)+'</div>':'')
+    +(r.final_ko?'<div class="k">'+esc(r.final_ko)+'</div>':'')
+    +'<button class="bplay" data-t="'+esc(r.final||'')+'" style="color:var(--red);margin-top:7px">▶ 듣기</button></div>'
+    +'<button class="fd-copy" data-copy="'+esc(r.final||'')+'">📋 복사해서 위챗에 붙여넣기</button></div>';
+  return h;
+}
+function fdReadHtml(r){
+  const rk=(r.risk||'low');
+  var h='<div class="fd-card">'
+    +'<div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">'
+    +'<span class="fd-risk '+esc(rk)+'">'+(rk==='high'?'주의':(rk==='mid'?'확인 필요':'양호'))+'</span>'
+    +'<span style="font-size:12.5px;color:var(--grey)">상대 태도: <b style="color:var(--navy)">'+esc(r.tone||'')+'</b></span></div>'
+    +'<div style="font-size:15px;font-weight:800;line-height:1.5;margin-bottom:9px">'+esc(r.gist||'')+'</div>'
+    +'<div style="font-size:13.5px;color:#4a5670;line-height:1.65;background:#FAFBFC;border-radius:9px;padding:11px 12px">'+esc(r.translation||'')+'</div>';
+  if(r.signals&&r.signals.length){
+    h+='<div class="fd-sec">🔍 이 표현의 진짜 뜻</div>';
+    r.signals.forEach(function(s){
+      h+='<div class="fd-sig"><div class="ph">'+esc(s.phrase||'')+'</div><div class="mn">'+esc(s.means||'')+'</div></div>';
+    });
+  }
+  if(r.watch)h+='<div class="fd-miss">⚠️ '+esc(r.watch)+'</div>';
+  if(r.reply){
+    h+='<div class="fd-sec">추천 답장</div>'
+      +'<div class="fd-final"><div class="z zh">'+esc(r.reply)+'</div>'
+      +(r.reply_pinyin?'<div class="p">'+esc(r.reply_pinyin)+'</div>':'')
+      +(r.reply_ko?'<div class="k">'+esc(r.reply_ko)+'</div>':'')
+      +'<button class="bplay" data-t="'+esc(r.reply)+'" style="color:var(--red);margin-top:7px">▶ 듣기</button></div>'
+      +(r.reply_why?'<div class="fb-tip" style="margin-top:8px">💡 '+esc(r.reply_why)+'</div>':'')
+      +'<button class="fd-copy" data-copy="'+esc(r.reply)+'">📋 답장 복사하기</button>';
+  }
+  h+='</div>';
+  return h;
+}
+function fdBriefHtml(r){
+  var h='<div class="fd-card">'
+    +'<div style="font-size:16px;font-weight:800;margin-bottom:5px">'+esc(r.title||'')+'</div>'
+    +'<div style="font-size:12.5px;color:#4a5670;line-height:1.6">🎯 '+esc(r.goal||'')+'</div></div>';
+  if(r.questions&&r.questions.length){
+    h+='<div class="fd-card"><div class="fd-sec" style="margin-top:0">현장에서 물어볼 질문</div>';
+    r.questions.forEach(function(q){
+      h+='<div class="fd-q"><div class="z">'+esc(q.z||'')+'</div>'
+        +(q.p?'<div class="p">'+esc(q.p)+'</div>':'')
+        +'<div class="k">'+esc(q.k||'')+'</div>'
+        +(q.why?'<div class="w">'+esc(q.why)+'</div>':'')
+        +'<button class="bplay" data-t="'+esc(q.z||'')+'" style="color:var(--red);margin-top:6px">▶ 듣기</button></div>';
+    });
+    h+='</div>';
+  }
+  if(r.answers&&r.answers.length){
+    h+='<div class="fd-card"><div class="fd-sec" style="margin-top:0">이런 답이 올 겁니다</div>';
+    r.answers.forEach(function(a){
+      h+='<div class="fd-sig"><div class="ph">'+esc(a.z||'')+'</div>'
+        +'<div class="mn">'+esc(a.k||'')+'</div>'
+        +(a.read?'<div class="mn" style="color:var(--c1);font-weight:600;margin-top:5px">→ '+esc(a.read)+'</div>':'')
+        +'<button class="bplay" data-t="'+esc(a.z||'')+'" style="color:var(--red);margin-top:6px">▶ 듣기</button></div>';
+    });
+    h+='</div>';
+  }
+  if(r.checklist&&r.checklist.length){
+    h+='<div class="fd-card"><div class="fd-sec" style="margin-top:0">눈으로 확인할 것</div>';
+    r.checklist.forEach(function(c){h+='<div class="fd-chk"><span class="bx"></span><span>'+esc(c)+'</span></div>';});
+    h+='</div>';
+  }
+  if(r.closing&&r.closing.z){
+    h+='<div class="fd-card"><div class="fd-sec" style="margin-top:0">마무리 인사</div>'
+      +'<div class="fd-final"><div class="z zh">'+esc(r.closing.z)+'</div>'
+      +(r.closing.p?'<div class="p">'+esc(r.closing.p)+'</div>':'')
+      +(r.closing.k?'<div class="k">'+esc(r.closing.k)+'</div>':'')
+      +'<button class="bplay" data-t="'+esc(r.closing.z)+'" style="color:var(--red);margin-top:7px">▶ 듣기</button></div></div>';
+  }
+  return h;
+}
+
 // ================= 문법 오답 노트 =================
 function gramHistory(){
   const g=state.gram||{};
@@ -4744,6 +4956,7 @@ document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
   b.classList.add('on');document.getElementById(b.dataset.p).classList.add('on');
   speechSynthesis.cancel();if(typeof stopShadow==='function')stopShadow();
   if(b.dataset.p==='ph')renderHome();
+  if(b.dataset.p==='p5')renderField();
   if(b.dataset.p==='p1'&&!qzCur){reviewMode=false;newQuiz();}
   if(b.dataset.p==='p2')renderWords();
 }));
@@ -4997,7 +5210,7 @@ function renderHome(){
   html+='<div class="hrow">'
     +'<button class="hmini" data-go="shadow"><div class="mi">🎧</div><div class="mt">쉐도잉</div><div class="ms">따라 말하기</div></button>'
     +'<button class="hmini" data-go="rp"><div class="mi">🎭</div><div class="mt">롤플레잉</div><div class="ms">'+RP.length+'개 상황</div></button>'
-    +'<button class="hmini" data-go="fill"><div class="mi">✏️</div><div class="mt">빈칸</div><div class="ms">'+FILLS.length+'문제</div></button>'
+    +'<button class="hmini" data-go="field"><div class="mi">🛠</div><div class="mt">현장 도구</div><div class="ms">메시지 검사</div></button>'
     +'</div>';
   // 통계
   html+='<div class="hstats">'
@@ -5019,6 +5232,7 @@ function renderHome(){
       var g=b.dataset.go;
       if(g==='shadow'){goTab('p0');selectView('sh');}
       else if(g==='rp'){goTab('p0');selectView('rp');}
+      else if(g==='field'){goTab('p5');renderField();}
       else{startDaily('fill','word');}
     });
   });
@@ -5109,6 +5323,12 @@ document.getElementById('wfSel').addEventListener('click',function(){
 });
 
 updateScSel();updateQzSel();updateWfSel();
+document.querySelectorAll('.fd-mode').forEach(function(b){
+  b.addEventListener('click',function(){
+    document.querySelectorAll('.fd-mode').forEach(function(x){x.classList.remove('on');});
+    b.classList.add('on'); fdMode=b.dataset.fd; renderField();
+  });
+});
 loadState();
 // 접속 가능한 동안 음성 파일을 기기에 저장해 둔다 (중국 네트워크 대비)
 setTimeout(function(){
