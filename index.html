@@ -327,6 +327,51 @@
   .gm-drill{width:100%;border:none;background:var(--navy);color:#fff;border-radius:10px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin:4px 0 14px;display:flex;align-items:center;justify-content:space-between}
   .gm-drill small{font-size:11.5px;opacity:.85;font-weight:500}
   .gm-repeat{background:#C8352E;color:#fff;font-size:10px;font-weight:800;border-radius:20px;padding:2px 8px;margin-left:6px;vertical-align:2px}
+  /* 핸즈프리 */
+  .hf-setup{padding:2px}
+  .hf-sec{font-size:11.5px;font-weight:800;color:var(--grey);margin:14px 0 8px;letter-spacing:.3px}
+  .hf-sec:first-child{margin-top:2px}
+  .hf-opt{display:flex;align-items:center;gap:10px;border:1.5px solid var(--hair);background:#fff;border-radius:12px;padding:13px 14px;margin-bottom:8px;cursor:pointer;font-family:inherit;width:100%;text-align:left}
+  .hf-opt.on{border-color:var(--red);background:#F4F6FA}
+  .hf-opt .i{font-size:19px;flex-shrink:0}
+  .hf-opt .t{font-size:14px;font-weight:700;color:var(--navy)}
+  .hf-opt .s{font-size:11.5px;color:var(--grey);margin-top:2px;line-height:1.45}
+  .hf-go{width:100%;border:none;background:var(--red);color:#fff;border-radius:13px;padding:16px;font-size:16px;font-weight:800;cursor:pointer;font-family:inherit;margin-top:14px}
+  /* 재생 화면 */
+  .hf-play{position:fixed;inset:0;background:var(--navy);z-index:70;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:26px;text-align:center}
+  .hf-play .top{position:absolute;top:0;left:0;right:0;padding:16px 18px;display:flex;align-items:center;gap:10px;padding-top:calc(16px + env(safe-area-inset-top,0px))}
+  .hf-play .top .x{background:none;border:none;color:#8f939b;font-size:22px;cursor:pointer;font-family:inherit}
+  .hf-play .top .ttl{font-size:13px;color:var(--wash);font-weight:700;flex:1;text-align:left}
+  .hf-play .top .cnt{font-size:12px;color:#8f939b}
+  .hf-mode{font-size:12px;color:var(--wash);font-weight:700;letter-spacing:.5px;margin-bottom:18px}
+  .hf-z{font-size:27px;font-weight:800;color:#fff;line-height:1.55;font-family:'Noto Sans SC','PingFang SC',sans-serif;margin-bottom:12px;word-break:keep-all}
+  .hf-p{font-size:14px;color:var(--wash);line-height:1.5;margin-bottom:14px}
+  .hf-k{font-size:15px;color:#c9ccd4;line-height:1.55}
+  .hf-z.hidden,.hf-p.hidden,.hf-k.hidden{opacity:0}
+  .hf-wait{font-size:15px;color:var(--wash);font-weight:700;margin-top:20px}
+  .hf-bar{position:absolute;bottom:0;left:0;right:0;height:5px;background:rgba(255,255,255,.12)}
+  .hf-bar i{display:block;height:100%;background:var(--wash);width:0;transition:width .15s linear}
+  .hf-ctl{position:absolute;bottom:0;left:0;right:0;display:flex;gap:10px;padding:18px;padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))}
+  .hf-btn{flex:1;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.08);color:#fff;border-radius:12px;padding:15px 6px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
+  .hf-btn.main{flex:1.6;background:var(--red);border-color:var(--red)}
+  .hf-tap{position:absolute;inset:0;background:transparent;border:none;cursor:pointer}
+  /* 오늘 요약 */
+  .td-hero{background:linear-gradient(135deg,#2E4A73,#4E6E9C);color:#fff;border-radius:16px;padding:18px;margin-bottom:12px}
+  .td-hero .d{font-size:11.5px;color:var(--wash);font-weight:700}
+  .td-hero .h{font-size:19px;font-weight:800;margin-top:4px}
+  .td-hero .row{display:flex;margin-top:14px}
+  .td-hero .row div{flex:1;text-align:center}
+  .td-hero .v{font-size:21px;font-weight:900}
+  .td-hero .l{font-size:10.5px;color:var(--wash);margin-top:2px}
+  .td-play{width:100%;border:none;background:#fff;color:var(--red);border-radius:11px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;font-family:inherit;margin-top:14px}
+  .td-item{background:#fff;border:1px solid var(--hair);border-radius:11px;padding:12px 13px;margin-bottom:8px}
+  .td-item .z{font-size:15.5px;font-weight:700;font-family:'Noto Sans SC',sans-serif;line-height:1.5}
+  .td-item .k{font-size:12.5px;color:#5a6478;margin-top:4px;line-height:1.5}
+  .td-item .m{font-size:11px;color:var(--grey);margin-top:5px}
+  .td-item.wrong{border-left:3px solid var(--danger)}
+  .td-item.word{border-left:3px solid var(--c0)}
+  .td-item.gram{border-left:3px solid var(--c1)}
+  .td-empty{text-align:center;color:var(--grey);font-size:13px;padding:22px 10px;line-height:1.7}
   /* 재작성 드릴 v2 */
   .dr-head{display:flex;align-items:center;gap:9px;margin-bottom:11px}
   .dr-tag{font-size:12px;font-weight:800;color:#fff;background:var(--danger);border-radius:20px;padding:3px 11px}
@@ -519,7 +564,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.1.1</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.2</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -625,6 +670,7 @@
 
 <!-- 진척 -->
 <div class="pane" id="p4">
+  <div id="tdBody"></div>
   <div class="pgcard">
     <h3>이번 주 목표 <small id="weekRange"></small></h3>
     <div class="goal"><div class="g-top"><span>⏱ 학습 시간</span><span><b id="gT1"></b> <span class="pct" id="gP1"></span></span></div><div class="gbar"><div class="gfill" id="gF1"></div></div></div>
@@ -4418,9 +4464,13 @@ function renderScen(){
 }
 let curView='scen';
 function selectView(v){
-  curView=v;speechSynthesis.cancel();if(typeof stopShadow==='function')stopShadow();
+  curView=v;speechSynthesis.cancel();if(typeof stopShadow==='function')stopShadow();if(typeof hfStop==='function'&&document.getElementById('hfPlay'))hfStop();
   const list=document.getElementById('scList'), rp=document.getElementById('rpArea'), sh=document.getElementById('shArea');
-  if(v==='rp'){
+  if(v==='hf'){
+    list.style.display='none';rp.style.display='none';sh.style.display='block';
+    document.getElementById('scNote').textContent='화면을 보지 않고 귀로만 하는 훈련입니다. 운전·샤워·걷기 중에 쓰세요.';
+    renderHandsFree();
+  }else if(v==='rp'){
     list.style.display='none';sh.style.display='none';rp.style.display='block';
     document.getElementById('scNote').textContent='공장·시장·상가에서 벌어지는 실제 상황. 선택에 따라 결과가 달라집니다.';
     renderRPHome();
@@ -5505,6 +5555,285 @@ function ndFinish(){
   document.getElementById('ndNext').classList.add('show');
 }
 
+
+// ================= 핸즈프리 =================
+let hfCfg={mode:'shadow',src:0,speed:1.0}, hfRun=null;
+function hfSources(){
+  const out=[];
+  SCEN_NAMES.forEach(function(n,i){out.push({id:'s'+i,label:n,sub:DATA[i].reduce(function(a,q){return a+1+q.a.length;},0)+'개 문장'});});
+  out.push({id:'wrong',label:'🔴 오늘 틀린 것',sub:'복습 대기에서'});
+  out.push({id:'s301',label:'📗 기초 문장 301',sub:'301개'});
+  return out;
+}
+function hfLines(src){
+  if(src==='wrong'){
+    return wrongIds().map(function(id){return ITEMS[id];})
+      .filter(function(it){return it&&it.z;})
+      .map(function(it){return {z:it.z,p:it.p,k:it.k};});
+  }
+  if(src==='s301'){
+    return S301.slice().sort(function(){return Math.random()-0.5;}).slice(0,40)
+      .map(function(w){return {z:w[0],p:w[1],k:w[2]};});
+  }
+  const si=parseInt(String(src).replace('s',''));
+  return shLines(si).map(function(l){return {z:l.z,p:l.p,k:l.k,who:l.who};});
+}
+function renderHandsFree(){
+  const area=document.getElementById('shArea');
+  const modes=[
+    ['shadow','🗣','쉐도잉','중국어를 듣고 그대로 따라 말합니다'],
+    ['interp','🔄','통역','한국어 뜻을 보고 중국어로 말한 뒤 정답을 듣습니다'],
+    ['listen','👂','듣기만','흘려듣기. 멈춤 없이 이어서 재생합니다']
+  ];
+  var h='<div class="hf-setup"><div class="hf-sec">무엇을 할까요</div>';
+  modes.forEach(function(m){
+    h+='<button class="hf-opt'+(hfCfg.mode===m[0]?' on':'')+'" data-hm="'+m[0]+'">'
+      +'<span class="i">'+m[1]+'</span><span><span class="t">'+m[2]+'</span>'
+      +'<span class="s">'+m[3]+'</span></span></button>';
+  });
+  h+='<div class="hf-sec">어떤 문장으로</div>';
+  hfSources().forEach(function(s){
+    h+='<button class="hf-opt'+(hfCfg.src===s.id||hfCfg.src===parseInt(String(s.id).replace('s',''))?' on':'')+'" data-hs="'+s.id+'">'
+      +'<span><span class="t">'+esc(s.label)+'</span><span class="s">'+esc(s.sub)+'</span></span></button>';
+  });
+  h+='<button class="hf-go" id="hfGo">▶ 시작하기</button>'
+    +'<div style="font-size:11.5px;color:var(--grey);margin-top:12px;line-height:1.6">'
+    +'화면을 꺼도 소리는 계속됩니다. 화면을 탭하면 일시정지, 좌우 버튼으로 이전·다음 문장으로 이동합니다.</div></div>';
+  area.innerHTML=h;
+  area.querySelectorAll('[data-hm]').forEach(function(b){
+    b.addEventListener('click',function(){hfCfg.mode=b.dataset.hm;renderHandsFree();});
+  });
+  area.querySelectorAll('[data-hs]').forEach(function(b){
+    b.addEventListener('click',function(){
+      var v=b.dataset.hs;
+      hfCfg.src=(v==='wrong'||v==='s301')?v:parseInt(v.replace('s',''));
+      renderHandsFree();
+    });
+  });
+  document.getElementById('hfGo').addEventListener('click',hfStart);
+}
+function hfStart(){
+  const srcId=(typeof hfCfg.src==='number')?('s'+hfCfg.src):hfCfg.src;
+  const lines=hfLines(srcId);
+  if(!lines.length){alert('재생할 문장이 없습니다.');return;}
+  hfRun={lines:lines,idx:0,playing:true,phase:'',timer:null,t0:0};
+  const wrap=document.createElement('div');
+  wrap.className='hf-play';wrap.id='hfPlay';
+  wrap.innerHTML='<button class="hf-tap" id="hfTap"></button>'
+    +'<div class="top"><button class="x" id="hfClose">✕</button>'
+    +'<span class="ttl" id="hfTtl"></span><span class="cnt" id="hfCnt"></span></div>'
+    +'<div class="hf-mode" id="hfMode"></div>'
+    +'<div class="hf-z" id="hfZ"></div>'
+    +'<div class="hf-p" id="hfP"></div>'
+    +'<div class="hf-k" id="hfK"></div>'
+    +'<div class="hf-wait" id="hfWait"></div>'
+    +'<div class="hf-ctl">'
+    +'<button class="hf-btn" id="hfPrev">◀</button>'
+    +'<button class="hf-btn main" id="hfPause">⏸ 일시정지</button>'
+    +'<button class="hf-btn" id="hfNext">▶▶</button></div>'
+    +'<div class="hf-bar"><i id="hfBar"></i></div>';
+  document.body.appendChild(wrap);
+  const names={shadow:'쉐도잉 — 듣고 따라 말하세요',interp:'통역 — 중국어로 말해보세요',listen:'듣기만'};
+  document.getElementById('hfMode').textContent=names[hfCfg.mode]||'';
+  document.getElementById('hfTtl').textContent=(typeof hfCfg.src==='number')?SCEN_NAMES[hfCfg.src]:(hfCfg.src==='wrong'?'오늘 틀린 것':'기초 문장 301');
+  document.getElementById('hfClose').addEventListener('click',hfStop);
+  document.getElementById('hfTap').addEventListener('click',hfToggle);
+  document.getElementById('hfPause').addEventListener('click',function(e){e.stopPropagation();hfToggle();});
+  document.getElementById('hfPrev').addEventListener('click',function(e){e.stopPropagation();hfJump(-1);});
+  document.getElementById('hfNext').addEventListener('click',function(e){e.stopPropagation();hfJump(1);});
+  hfStep();
+}
+function hfEst(z){return Math.max(1300, z.length*270/(rate||1));}
+function hfSet(id,txt,hide){
+  const el=document.getElementById(id);
+  if(!el)return;
+  el.textContent=txt||'';
+  el.classList.toggle('hidden',!!hide);
+}
+function hfBar(ms){
+  const b=document.getElementById('hfBar');
+  if(!b)return;
+  b.style.transition='none';b.style.width='0';
+  setTimeout(function(){b.style.transition='width '+ms+'ms linear';b.style.width='100%';},20);
+}
+function hfStep(){
+  if(!hfRun||!hfRun.playing)return;
+  const l=hfRun.lines[hfRun.idx];
+  if(!l){hfStop();return;}
+  document.getElementById('hfCnt').textContent=(hfRun.idx+1)+' / '+hfRun.lines.length;
+  const dur=hfEst(l.z);
+  clearTimeout(hfRun.timer);
+  if(hfCfg.mode==='interp'){
+    // 한국어 뜻 먼저 → 생각할 시간 → 중국어
+    hfSet('hfZ','',true);hfSet('hfP','',true);hfSet('hfK',l.k);
+    hfSet('hfWait','중국어로 말해보세요…');
+    hfBar(dur+900);
+    hfRun.timer=setTimeout(function(){
+      if(!hfRun||!hfRun.playing)return;
+      hfSet('hfZ',l.z);hfSet('hfP',l.p);hfSet('hfWait','');
+      speak(l.z);
+      hfBar(dur+400);
+      hfRun.timer=setTimeout(hfAdvance,dur+400);
+    },dur+900);
+    return;
+  }
+  // shadow / listen
+  hfSet('hfZ',l.z);hfSet('hfP',l.p);hfSet('hfK',l.k);
+  hfSet('hfWait','');
+  speak(l.z);
+  if(hfCfg.mode==='shadow'){
+    hfBar(dur*2+500);
+    hfRun.timer=setTimeout(function(){
+      if(!hfRun||!hfRun.playing)return;
+      hfSet('hfWait','따라 말하세요');
+      hfRun.timer=setTimeout(hfAdvance,dur+400);
+    },dur+100);
+  }else{
+    hfBar(dur+350);
+    hfRun.timer=setTimeout(hfAdvance,dur+350);
+  }
+}
+function hfAdvance(){
+  if(!hfRun||!hfRun.playing)return;
+  hfRun.idx++;
+  if(hfRun.idx>=hfRun.lines.length){
+    hfSet('hfZ','完成！');hfSet('hfP','');hfSet('hfK','한 바퀴 다 돌았습니다');
+    hfSet('hfWait','');
+    hfRun.playing=false;
+    const b=document.getElementById('hfPause');
+    if(b)b.textContent='↻ 처음부터';
+    return;
+  }
+  hfStep();
+}
+function hfToggle(){
+  if(!hfRun)return;
+  if(!hfRun.playing&&hfRun.idx>=hfRun.lines.length){hfRun.idx=0;}
+  hfRun.playing=!hfRun.playing;
+  const b=document.getElementById('hfPause');
+  if(b)b.textContent=hfRun.playing?'⏸ 일시정지':'▶ 계속';
+  if(hfRun.playing)hfStep();
+  else{clearTimeout(hfRun.timer);stopAll();
+    const bar=document.getElementById('hfBar');if(bar){bar.style.transition='none';}}
+}
+function hfJump(d){
+  if(!hfRun)return;
+  clearTimeout(hfRun.timer);stopAll();
+  hfRun.idx=Math.max(0,Math.min(hfRun.lines.length-1,hfRun.idx+d));
+  hfRun.playing=true;
+  const b=document.getElementById('hfPause');if(b)b.textContent='⏸ 일시정지';
+  hfStep();
+}
+function hfStop(){
+  if(hfRun){clearTimeout(hfRun.timer);hfRun.playing=false;hfRun=null;}
+  stopAll();
+  const el=document.getElementById('hfPlay');
+  if(el)el.remove();
+}
+// ================= 오늘 배운 것 =================
+function todayItems(){
+  const d=today();
+  const out={wrong:[],words:[],gram:[]};
+  // 오늘 틀린 항목
+  wrongIds().forEach(function(id){
+    const it=ITEMS[id];
+    if(it)out.wrong.push({z:it.z,p:it.p,k:it.k,w:(state.prog[id].w||0)});
+  });
+  // 오늘 저장한 단어
+  const t0=new Date(); t0.setHours(0,0,0,0);
+  Object.keys(state.myWords||{}).forEach(function(w){
+    const m=state.myWords[w];
+    if(m.ts&&m.ts>=t0.getTime())out.words.push({z:w,p:m.py||'',k:(VOCAB_BY_ZH[w]?ITEMS[VOCAB_BY_ZH[w]].k:'')});
+  });
+  // 오늘 교정에서 나온 표현
+  Object.keys(state.gram||{}).forEach(function(k){
+    const g=state.gram[k];
+    if(g.last===d&&g.ex&&g.ex.length&&g.ex[0].d===d){
+      out.gram.push({label:g.label,z:g.ex[0].fix,k:g.ex[0].ko||'',my:g.ex[0].my});
+    }
+  });
+  return out;
+}
+function renderToday(){
+  const el=document.getElementById('tdBody');
+  if(!el)return;
+  const d=state.stats.days[today()]||{n:0,c:0,min:0};
+  const it=todayItems();
+  const total=it.wrong.length+it.words.length+it.gram.length;
+  var h='<div class="td-hero"><div class="d">'+new Date().toLocaleDateString('ko-KR',{month:'long',day:'numeric',weekday:'short'})+'</div>'
+    +'<div class="h">오늘 배운 것</div>'
+    +'<div class="row">'
+    +'<div><div class="v">'+d.n+'</div><div class="l">푼 문제</div></div>'
+    +'<div><div class="v">'+(d.n?Math.round(d.c/d.n*100):0)+'%</div><div class="l">정답률</div></div>'
+    +'<div><div class="v">'+Math.round(d.min||0)+'</div><div class="l">학습 분</div></div>'
+    +'<div><div class="v">'+total+'</div><div class="l">복습거리</div></div>'
+    +'</div>';
+  if(total)h+='<button class="td-play" id="tdPlay">🔊 오늘 복습 재생 ('+total+'개)</button>';
+  h+='</div>';
+  if(!total){
+    h+='<div class="td-empty">오늘 쌓인 복습거리가 없습니다.<br>퀴즈를 풀거나 롤플레잉에서 작문하면 여기에 모입니다.</div>';
+    el.innerHTML=h;return;
+  }
+  if(it.wrong.length){
+    h+='<div class="hf-sec">🔴 틀린 것 '+it.wrong.length+'</div>';
+    it.wrong.slice(0,20).forEach(function(x){
+      h+='<div class="td-item wrong"><div class="z">'+esc(x.z)+'</div><div class="k">'+esc(x.k)+'</div>'
+        +'<div class="m">오답 '+x.w+'회</div>'
+        +'<button class="bplay" data-t="'+esc(x.z)+'" style="color:var(--red);margin-top:5px">▶ 듣기</button></div>';
+    });
+  }
+  if(it.words.length){
+    h+='<div class="hf-sec">📘 오늘 저장한 단어 '+it.words.length+'</div>';
+    it.words.forEach(function(x){
+      h+='<div class="td-item word"><div class="z">'+esc(x.z)+' <span style="font-size:12px;color:var(--grey);font-weight:400">'+esc(x.p)+'</span></div>'
+        +(x.k?'<div class="k">'+esc(x.k)+'</div>':'')
+        +'<button class="bplay" data-t="'+esc(x.z)+'" style="color:var(--red);margin-top:5px">▶ 듣기</button></div>';
+    });
+  }
+  if(it.gram.length){
+    h+='<div class="hf-sec">✍️ 오늘 교정받은 표현 '+it.gram.length+'</div>';
+    it.gram.forEach(function(x){
+      h+='<div class="td-item gram"><div class="z">'+esc(x.z)+'</div>'
+        +(x.k?'<div class="k">'+esc(x.k)+'</div>':'')
+        +'<div class="m">'+esc(x.label)+' · 전: '+esc(x.my)+'</div>'
+        +'<button class="bplay" data-t="'+esc(x.z)+'" style="color:var(--red);margin-top:5px">▶ 듣기</button></div>';
+    });
+  }
+  el.innerHTML=h;
+  const pb=document.getElementById('tdPlay');
+  if(pb)pb.addEventListener('click',function(){
+    const lines=[].concat(
+      it.wrong.map(function(x){return {z:x.z,p:x.p||'',k:x.k};}),
+      it.words.map(function(x){return {z:x.z,p:x.p,k:x.k};}),
+      it.gram.map(function(x){return {z:x.z,p:'',k:x.k};})
+    );
+    hfCfg.mode='shadow';
+    hfRun={lines:lines,idx:0,playing:true,phase:'',timer:null};
+    hfStartWith(lines,'오늘 복습');
+  });
+}
+function hfStartWith(lines,title){
+  const wrap=document.createElement('div');
+  wrap.className='hf-play';wrap.id='hfPlay';
+  wrap.innerHTML='<button class="hf-tap" id="hfTap"></button>'
+    +'<div class="top"><button class="x" id="hfClose">✕</button>'
+    +'<span class="ttl" id="hfTtl">'+esc(title)+'</span><span class="cnt" id="hfCnt"></span></div>'
+    +'<div class="hf-mode" id="hfMode">쉐도잉 — 듣고 따라 말하세요</div>'
+    +'<div class="hf-z" id="hfZ"></div><div class="hf-p" id="hfP"></div><div class="hf-k" id="hfK"></div>'
+    +'<div class="hf-wait" id="hfWait"></div>'
+    +'<div class="hf-ctl"><button class="hf-btn" id="hfPrev">◀</button>'
+    +'<button class="hf-btn main" id="hfPause">⏸ 일시정지</button>'
+    +'<button class="hf-btn" id="hfNext">▶▶</button></div>'
+    +'<div class="hf-bar"><i id="hfBar"></i></div>';
+  document.body.appendChild(wrap);
+  document.getElementById('hfClose').addEventListener('click',hfStop);
+  document.getElementById('hfTap').addEventListener('click',hfToggle);
+  document.getElementById('hfPause').addEventListener('click',function(e){e.stopPropagation();hfToggle();});
+  document.getElementById('hfPrev').addEventListener('click',function(e){e.stopPropagation();hfJump(-1);});
+  document.getElementById('hfNext').addEventListener('click',function(e){e.stopPropagation();hfJump(1);});
+  hfStep();
+}
+
 // ================= 문법 오답 노트 =================
 function gramHistory(){
   const g=state.gram||{};
@@ -5856,6 +6185,7 @@ function renderProgress(){
   document.getElementById('slMv').textContent=Math.round(r.mv||0);
   document.getElementById('slPm').textContent=Math.round(r.pm||0);
   document.getElementById('streakN').textContent=calcStreak();
+  if(typeof renderToday==='function')renderToday();
   (function(){
     const el=document.getElementById('gramWeek'); if(!el)return;
     const top=gramTop(3).filter(function(x){return x.count>x.fixed;});
@@ -6009,7 +6339,7 @@ function renderHome(){
       +'<div class="l3">내가 틀렸던 문장으로 다시 써보기</div></button>';
   }
   html+='<div class="hrow">'
-    +'<button class="hmini" data-go="shadow"><div class="mi">🎧</div><div class="mt">쉐도잉</div><div class="ms">따라 말하기</div></button>'
+    +'<button class="hmini" data-go="handsfree"><div class="mi">🚗</div><div class="mt">핸즈프리</div><div class="ms">귀로만 학습</div></button>'
     +'<button class="hmini" data-go="rp"><div class="mi">🎭</div><div class="mt">롤플레잉</div><div class="ms">'+RP.length+'개 상황</div></button>'
     +'<button class="hmini" data-go="pattern"><div class="mi">📐</div><div class="mt">패턴 드릴</div><div class="ms">'+PATTERNS.length+'개 문법</div></button>'
     +'<button class="hmini" data-go="field"><div class="mi">🛠</div><div class="mt">현장 도구</div><div class="ms">메시지 검사</div></button>'
@@ -6032,7 +6362,8 @@ function renderHome(){
   el.querySelectorAll('[data-go]').forEach(function(b){
     b.addEventListener('click',function(){
       var g=b.dataset.go;
-      if(g==='shadow'){goTab('p0');selectView('sh');}
+      if(g==='handsfree'){goTab('p0');selectView('hf');}
+      else if(g==='shadow'){goTab('p0');selectView('sh');}
       else if(g==='rp'){goTab('p0');selectView('rp');}
       else if(g==='field'){goTab('p5');renderField();}
       else if(g==='pattern'){goTab('p1');qzMode='pattern';reviewMode=false;if(setMode){setMode=false;document.getElementById('setToggle').classList.remove('on');setState=null;renderSetBar();}updateQzSel();ptStart();}
@@ -6061,7 +6392,8 @@ document.getElementById('sheetBg').addEventListener('click',closeSheet);
 function cssv(n){return getComputedStyle(document.documentElement).getPropertyValue('--'+n);}
 function updateScSel(){
   const el=document.getElementById('scSelTxt'), bar=document.getElementById('scSel');
-  if(curView==='rp'){el.textContent='🎭 롤플레잉';bar.style.setProperty('--sel-color',cssv('red'));}
+  if(curView==='hf'){el.textContent='🚗 핸즈프리';bar.style.setProperty('--sel-color',cssv('c1'));}
+  else if(curView==='rp'){el.textContent='🎭 롤플레잉';bar.style.setProperty('--sel-color',cssv('red'));}
   else if(curView==='sh'){el.textContent='🎧 쉐도잉';bar.style.setProperty('--sel-color',cssv('c3'));}
   else{el.textContent=SCEN_NAMES[curScen];bar.style.setProperty('--sel-color',cssv(SC_COLORS[curScen]));}
 }
@@ -6084,7 +6416,8 @@ document.getElementById('scSel').addEventListener('click',function(){
   });
   h+='</div><h4>학습 모드</h4><div class="optgrid">'
     +'<button class="obtn'+(curView==='rp'?' on':'')+'" data-view="rp" style="--o-color:'+cssv('red')+';--o-bg:'+cssv('c2bg')+'"><span class="oi">🎭</span><span class="ot">롤플레잉<span class="osub">'+RP.length+'개 상황극</span></span></button>'
-    +'<button class="obtn'+(curView==='sh'?' on':'')+'" data-view="sh" style="--o-color:'+cssv('c3')+';--o-bg:'+cssv('c3bg')+'"><span class="oi">🎧</span><span class="ot">쉐도잉<span class="osub">따라 말하기</span></span></button>'
+    +'<button class="obtn'+(curView==='sh'?' on':'')+'" data-view="sh" style="--o-color:'+cssv('c3')+';--o-bg:'+cssv('c3bg')+'"><span class="oi">🎧</span><span class="ot">쉐도잉<span class="osub">화면 보며 따라 읽기</span></span></button>'
+    +'<button class="obtn'+(curView==='hf'?' on':'')+'" data-view="hf" style="--o-color:'+cssv('c1')+';--o-bg:'+cssv('c1bg')+'"><span class="oi">🚗</span><span class="ot">핸즈프리<span class="osub">화면 없이 귀로만</span></span></button>'
     +'</div>';
   openSheet(h);
   document.querySelectorAll('#sheetBody [data-scen]').forEach(function(b){
