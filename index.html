@@ -327,6 +327,25 @@
   .gm-drill{width:100%;border:none;background:var(--navy);color:#fff;border-radius:10px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;margin:4px 0 14px;display:flex;align-items:center;justify-content:space-between}
   .gm-drill small{font-size:11.5px;opacity:.85;font-weight:500}
   .gm-repeat{background:#C8352E;color:#fff;font-size:10px;font-weight:800;border-radius:20px;padding:2px 8px;margin-left:6px;vertical-align:2px}
+  /* 재작성 드릴 v2 */
+  .dr-head{display:flex;align-items:center;gap:9px;margin-bottom:11px}
+  .dr-tag{font-size:12px;font-weight:800;color:#fff;background:var(--danger);border-radius:20px;padding:3px 11px}
+  .dr-cnt{font-size:11.5px;color:var(--grey);margin-left:auto}
+  .dr-task{background:var(--navy);color:#fff;border-radius:12px;padding:14px 15px;margin-bottom:11px}
+  .dr-task-l{font-size:11px;color:var(--wash);font-weight:700;letter-spacing:.3px}
+  .dr-task-k{font-size:17px;font-weight:800;line-height:1.55;margin-top:5px}
+  .dr-rule{font-size:12px;color:#8a3a33;margin-top:7px;padding-top:7px;border-top:1px solid rgba(200,53,46,.2);line-height:1.5;font-weight:400}
+  .dr-tools{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+  .dr-link{border:none;background:none;font-size:12px;color:var(--grey);cursor:pointer;font-family:inherit;padding:4px 0;text-decoration:underline}
+  .dr-peek{background:#F7F7F7;border:1px dashed var(--hair);border-radius:10px;padding:11px 12px;margin-top:9px;font-size:11.5px;color:var(--grey)}
+  .dr-peek .z{font-size:15px;color:var(--danger);font-weight:600;margin-top:5px;line-height:1.5}
+  .dr-peek-w{font-size:11px;color:var(--grey);margin-top:6px;line-height:1.5}
+  .dr-cmp{background:#FAFBFC;border-radius:10px;padding:11px 12px;margin-top:9px}
+  .dr-cmp-r{display:flex;gap:9px;align-items:flex-start;padding:5px 0}
+  .dr-cmp-r .l{font-size:10.5px;font-weight:800;color:#fff;background:var(--grey);border-radius:4px;padding:2px 7px;flex-shrink:0;margin-top:2px}
+  .dr-cmp-r .z{font-size:14.5px;line-height:1.5;flex:1}
+  .dr-cmp-r .z.old{color:var(--danger);text-decoration:line-through;opacity:.75}
+  .dr-cmp-r .z.new{color:var(--ok);font-weight:700}
   /* 재작성 드릴 */
   .dr-wrap{background:#fff;border:1px solid var(--hair);border-radius:12px;padding:15px}
   .dr-sit{font-size:11.5px;color:var(--grey);margin-bottom:8px}
@@ -500,7 +519,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.1</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.1.1</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -5503,7 +5522,7 @@ function gramRecord(r,myText,situation){
     g.wrong=is.wrong||g.wrong; g.right=is.right||g.right; g.why=is.why||g.why;
     g.last=d;
     g.ex=(g.ex||[]);
-    g.ex.unshift({my:myText,fix:r.corrected,sit:situation||'',d:d});
+    g.ex.unshift({my:myText,fix:r.corrected,ko:(r.corrected_ko||''),sit:situation||'',d:d});
     if(g.ex.length>5)g.ex.length=5;
     state.gram[key]=g;
   });
@@ -5542,27 +5561,70 @@ function renderGram(){
 }
 // ---- 취약 문법 재작성 드릴 ----
 let drillCur=null;
+function patternHint(code){
+  // 패턴 드릴 카드에서 해당 유형의 규칙을 힌트로 가져온다
+  try{
+    const p=PATTERNS.find(function(x){return x.pattern===code;});
+    if(p)return {rule:p.rule, right:p.right, wrong:p.wrong, title:p.title, id:p.id};
+  }catch(e){}
+  return null;
+}
 function startGramDrill(){
   const list=gramTop(99).filter(function(x){return x.count>x.fixed && x.ex && x.ex.length;});
-  if(!list.length)return;
+  if(!list.length){
+    const stage=document.getElementById('qzStage');
+    stage.innerHTML='<div class="qz-empty">다시 쓸 문장이 없습니다.<br>롤플레잉에서 ✍️ 직접 쓰기로 작문하면 여기에 쌓입니다.</div>';
+    return;
+  }
   const pick=list[Math.floor(Math.random()*Math.min(3,list.length))];
-  const ex=pick.ex[Math.floor(Math.random()*pick.ex.length)];
+  // 한국어 뜻이 있는 예문을 우선 (없으면 아무거나)
+  const withKo=pick.ex.filter(function(e){return e.ko;});
+  const pool=withKo.length?withKo:pick.ex;
+  const ex=pool[Math.floor(Math.random()*pool.length)];
   drillCur={g:pick,ex:ex};
   goTab('p1');
   const stage=document.getElementById('qzStage');
   document.getElementById('qzSelTxt').textContent='취약 문법 다시 쓰기';
   if(setMode){setMode=false;document.getElementById('setToggle').classList.remove('on');setState=null;renderSetBar();}
-  stage.innerHTML='<div class="dr-wrap">'
-    +'<div class="dr-sit">'+esc(ex.sit||'')+'</div>'
-    +'<div class="dr-ko">'+esc(ex.fix?('이 뜻을 중국어로 다시 써보세요'):'다시 써보세요')+'</div>'
-    +'<div class="wx-intent">전에 이렇게 썼습니다 → <b>'+esc(ex.my)+'</b></div>'
-    +'<div class="dr-warn">⚠️ '+esc(pick.label)+' — 이 실수를 '+pick.count+'번 했습니다. 이번엔 피해서 써보세요.</div>'
-    +'<textarea class="wx-write" id="drWrite" placeholder="중국어로 다시 써보세요"></textarea>'
+  const hint=patternHint(pick.pattern);
+  const done=pick.fixed||0, need=pick.count;
+  var h='<div class="dr-wrap">'
+    +'<div class="dr-head"><span class="dr-tag">'+esc(pick.label)+'</span>'
+    +'<span class="dr-cnt">'+need+'회 틀림'+(done?' · 교정 '+done:'')+'</span></div>';
+  // 상황
+  if(ex.sit)h+='<div class="dr-sit">📍 '+esc(ex.sit)+'</div>';
+  // 한국어 지시 — 이게 문제
+  if(ex.ko){
+    h+='<div class="dr-task"><div class="dr-task-l">이렇게 말하세요</div>'
+      +'<div class="dr-task-k">'+esc(ex.ko)+'</div></div>';
+  }else{
+    h+='<div class="dr-task"><div class="dr-task-l">이 상황에서 하려던 말을</div>'
+      +'<div class="dr-task-k">다시 중국어로 써보세요</div></div>';
+  }
+  // 힌트
+  h+='<div class="dr-warn">⚠️ 이 유형을 <b>'+need+'번</b> 틀렸습니다. 이번엔 피해서 써보세요.'
+    +(hint?'<div class="dr-rule">'+esc(hint.rule)+'</div>':'')+'</div>';
+  h+='<textarea class="wx-write" id="drWrite" placeholder="중국어로 써보세요"></textarea>'
     +'<div class="wx-wbar"><button class="wx-send" id="drSend">교정 받기</button>'
     +'<button class="wx-skip" id="drSkip">그만</button></div>'
+    +'<div class="dr-tools">'
+    +'<button class="dr-link" id="drPeek">👀 내가 전에 쓴 문장 보기</button>'
+    +(hint?'<button class="dr-link" id="drCard">📐 패턴 카드 보기</button>':'')
+    +'</div>'
+    +'<div id="drPeekBox"></div>'
     +'<div id="drFb"></div></div>';
+  stage.innerHTML=h;
   document.getElementById('drSend').addEventListener('click',submitDrill);
   document.getElementById('drSkip').addEventListener('click',function(){reviewMode=false;updateQzSel();newQuiz();});
+  document.getElementById('drPeek').addEventListener('click',function(){
+    const box=document.getElementById('drPeekBox');
+    if(box.innerHTML){box.innerHTML='';this.textContent='👀 내가 전에 쓴 문장 보기';return;}
+    box.innerHTML='<div class="dr-peek">전에 이렇게 썼습니다<div class="z zh">'+esc(ex.my)+'</div>'
+      +'<div class="dr-peek-w">이 문장을 그대로 쓰지 말고, 위 규칙을 적용해 다시 써보세요.</div></div>';
+    this.textContent='👀 숨기기';
+  });
+  const cardBtn=document.getElementById('drCard');
+  if(cardBtn&&hint)cardBtn.addEventListener('click',function(){qzMode='pattern';updateQzSel();ptOpen(hint.id);});
   setTimeout(function(){var t=document.getElementById('drWrite');if(t)t.focus();},100);
 }
 async function submitDrill(){
@@ -5589,6 +5651,10 @@ async function submitDrill(){
   var h='<div style="margin-top:12px">'
     +(again?'<div class="dr-warn">😣 같은 실수가 또 나왔습니다 — '+esc(drillCur.g.label)+'</div>'
            :'<div class="fb-good" style="margin-bottom:9px">🎉 이번엔 '+esc(drillCur.g.label)+' 실수를 피했습니다! (교정 '+(state.gram[drillCur.g.pattern]?state.gram[drillCur.g.pattern].fixed:1)+'회)</div>')
+    +'<div class="dr-cmp"><div class="dr-cmp-r"><span class="l">전</span>'
+    +'<span class="z zh old">'+esc(drillCur.ex.my)+'</span></div>'
+    +'<div class="dr-cmp-r"><span class="l">후</span>'
+    +'<span class="z zh new">'+esc(text)+'</span></div></div>'
     +'</div>';
   fb.innerHTML=h+drillFeedbackHtml(r,text)
     +'<div class="lbtns" style="margin-top:12px"><button class="lbtn ghost" id="drMore">한 문제 더</button>'
