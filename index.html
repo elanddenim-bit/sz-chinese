@@ -564,7 +564,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.2</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.2.1</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -4635,12 +4635,14 @@ async function submitWriting(node){
     const res=await fetch(aiUrl()+'/correct',{
       method:'POST',
       headers:{'content-type':'application/json'},
-      body:JSON.stringify({text:text,situation:(rpCur.scen.title+' — '+rpCur.scen.setting),intent:best.k,history:gramHistory()})
+      body:JSON.stringify({text:text,code:(cfg&&cfg.sid)||'',situation:(rpCur.scen.title+' — '+rpCur.scen.setting),intent:best.k,history:gramHistory()})
     });
     r=await res.json();
   }catch(e){ r=null; }
   if(!r||r.error||!r.corrected){
-    ctl.innerHTML='<div class="wx-tip">교정 서버에 연결하지 못했습니다. 잠시 후 다시 시도하거나 답장 고르기로 진행하세요.</div>'
+    ctl.innerHTML='<div class="wx-tip">'+(r&&r.error==='not_allowed'
+      ?'이 초대 코드는 AI 교정을 사용할 수 없습니다. 답장 고르기로 진행하세요.'
+      :'교정 서버에 연결하지 못했습니다. 잠시 후 다시 시도하거나 답장 고르기로 진행하세요.')+'</div>'
       +'<button class="wx-send" id="wxRetry" style="margin-top:8px">답장 고르기로 계속</button>';
     document.getElementById('wxRetry').addEventListener('click',function(){wxWriteMode=false;renderChoices(node);});
     return;
@@ -5233,12 +5235,14 @@ async function runField(){
   let r=null;
   try{
     const resp=await fetch(fieldUrl(),{method:'POST',headers:{'content-type':'application/json'},
-      body:JSON.stringify({mode:fdMode,text:text,situation:(sitEl&&sitEl.value||'')})});
+      body:JSON.stringify({mode:fdMode,text:text,code:(cfg&&cfg.sid)||'',situation:(sitEl&&sitEl.value||'')})});
     r=await resp.json();
   }catch(e){r=null;}
   fdBusy=false; btn.disabled=false;
   if(!r||r.error){
-    res.innerHTML='<div class="wx-tip">서버에 연결하지 못했습니다. 잠시 후 다시 시도하세요.<br>(현장 도구는 field 함수 배포가 필요합니다)</div>';
+    res.innerHTML='<div class="wx-tip">'+(r&&r.error==='not_allowed'
+      ?'이 초대 코드는 AI 기능을 사용할 수 없습니다.<br>단어·퀴즈·쉐도잉 등 다른 기능은 그대로 이용하실 수 있습니다.'
+      :'서버에 연결하지 못했습니다. 잠시 후 다시 시도하세요.')+'</div>';
     return;
   }
   if(fdMode==='send')res.innerHTML=fdSendHtml(r);
@@ -5663,18 +5667,19 @@ function hfStep(){
   document.getElementById('hfCnt').textContent=(hfRun.idx+1)+' / '+hfRun.lines.length;
   const dur=hfEst(l.z);
   clearTimeout(hfRun.timer);
+  const say=Math.round(dur*1.5)+600;   // 따라 말할 시간 (듣기의 1.5배 + 여유)
   if(hfCfg.mode==='interp'){
     // 한국어 뜻 먼저 → 생각할 시간 → 중국어
     hfSet('hfZ','',true);hfSet('hfP','',true);hfSet('hfK',l.k);
     hfSet('hfWait','중국어로 말해보세요…');
-    hfBar(dur+900);
+    hfBar(say+400);
     hfRun.timer=setTimeout(function(){
       if(!hfRun||!hfRun.playing)return;
       hfSet('hfZ',l.z);hfSet('hfP',l.p);hfSet('hfWait','');
       speak(l.z);
-      hfBar(dur+400);
-      hfRun.timer=setTimeout(hfAdvance,dur+400);
-    },dur+900);
+      hfBar(dur+600);
+      hfRun.timer=setTimeout(hfAdvance,dur+600);
+    },say+400);
     return;
   }
   // shadow / listen
@@ -5682,12 +5687,12 @@ function hfStep(){
   hfSet('hfWait','');
   speak(l.z);
   if(hfCfg.mode==='shadow'){
-    hfBar(dur*2+500);
+    hfBar(dur+say+200);
     hfRun.timer=setTimeout(function(){
       if(!hfRun||!hfRun.playing)return;
       hfSet('hfWait','따라 말하세요');
-      hfRun.timer=setTimeout(hfAdvance,dur+400);
-    },dur+100);
+      hfRun.timer=setTimeout(hfAdvance,say);
+    },dur+150);
   }else{
     hfBar(dur+350);
     hfRun.timer=setTimeout(hfAdvance,dur+350);
@@ -5965,11 +5970,13 @@ async function submitDrill(){
   let r=null;
   try{
     const res=await fetch(aiUrl()+'/correct',{method:'POST',headers:{'content-type':'application/json'},
-      body:JSON.stringify({text:text,situation:drillCur.ex.sit||'작문 연습',intent:drillCur.ex.fix,history:gramHistory()})});
+      body:JSON.stringify({text:text,code:(cfg&&cfg.sid)||'',situation:drillCur.ex.sit||'작문 연습',intent:drillCur.ex.fix,history:gramHistory()})});
     r=await res.json();
   }catch(e){r=null;}
   if(!r||r.error||!r.corrected){
-    fb.innerHTML='<div class="wx-tip">교정 서버에 연결하지 못했습니다.</div>';return;
+    fb.innerHTML='<div class="wx-tip">'+(r&&r.error==='not_allowed'
+      ?'이 초대 코드는 AI 교정을 사용할 수 없습니다.'
+      :'교정 서버에 연결하지 못했습니다.')+'</div>';return;
   }
   gramRecord(r,text,drillCur.ex.sit);
   const again=(r.issues||[]).some(function(is){return (is.pattern||'').toLowerCase()===drillCur.g.pattern;});
