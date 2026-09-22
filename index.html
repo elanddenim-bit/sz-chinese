@@ -615,6 +615,9 @@
   .pr-ph{margin-top:11px;font-size:11.5px;color:var(--navy);line-height:1.8;background:var(--bg);border-radius:10px;padding:11px}
   .pr-ph .g{color:var(--grey)}
   .pr-heard{font-size:11.5px;color:var(--grey);margin-top:11px;line-height:1.6}
+  .pr-syl.ins{border-style:dashed;background:#FAFAF8}
+  .pr-syl.ins .z{color:#8A8C94}
+  .pr-syl.omi .z{text-decoration:line-through;color:#8A8C94}
   .sh-line{position:relative}
   .sh-mic{position:absolute;top:9px;right:9px;background:#fff;border:1px solid var(--hair);border-radius:9px;width:34px;height:30px;font-size:14px;cursor:pointer;font-family:inherit;line-height:1}
 </style>
@@ -625,7 +628,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.3</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.3.1</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -6569,6 +6572,22 @@ function prState(){
   return p;
 }
 function prColor(s){return s>=85?'#1E7F4F':(s>=70?'#B8860B':'#C8352E');}
+// 음절 이름이 비어 오는 경우가 있어 음소 이름(예: "zuo 4")을 대신 쓴다
+function prKey(n){return String(n||'').toLowerCase().replace(/\s+/g,'');}
+function prUnits(w){
+  var out=[], i;
+  var sy=w.syllables||[], ph=w.phonemes||[];
+  for(i=0;i<sy.length;i++){
+    var nm=sy[i].syllable||((ph[i]&&ph[i].phoneme)||'');
+    if(nm)out.push({name:nm,score:sy[i].score||0});
+  }
+  if(!out.length){
+    for(i=0;i<ph.length;i++){
+      if(ph[i].phoneme)out.push({name:ph[i].phoneme,score:ph[i].score||0});
+    }
+  }
+  return out;
+}
 
 // ---- 녹음본을 16kHz 모노 WAV(base64)로 변환 (아이패드 사파리 m4a 대응) ----
 function prDecode(ac,buf){
@@ -6760,8 +6779,9 @@ function prRecordResult(it,r){
   if(sc>=PR_PASS){p.combo++;if(p.combo>p.bestCombo)p.bestCombo=p.combo;}
   else p.combo=0;
   (r.words||[]).forEach(function(w){
-    (w.syllables||[]).forEach(function(s){
-      var key=(s.syllable||'').toLowerCase();
+    if(w.errorType==='Insertion')return;
+    prUnits(w).forEach(function(s){
+      var key=prKey(s.name);
       if(!key)return;
       var e=p.syl[key]||{n:0,sum:0,z:''};
       e.n++;e.sum+=(s.score||0);
@@ -6786,10 +6806,12 @@ function prShow(it,r){
     +'</div></div>';
   var chips='';
   (r.words||[]).forEach(function(w,i){
-    var c=prColor(w.score||0);
-    chips+='<button class="pr-syl" data-wi="'+i+'" style="border-color:'+c+'">'
+    var et=w.errorType||'None';
+    var ins=(et==='Insertion'), omi=(et==='Omission');
+    var c=ins?'#8A8C94':prColor(w.score||0);
+    chips+='<button class="pr-syl'+(ins?' ins':'')+(omi?' omi':'')+'" data-wi="'+i+'" style="border-color:'+c+'">'
       +'<span class="z">'+esc(w.word||'')+'</span>'
-      +'<span class="p" style="color:'+c+'">'+(w.score||0)+'</span></button>';
+      +'<span class="p" style="color:'+c+'">'+(ins?'군말':(omi?'빠짐':(w.score||0)))+'</span></button>';
   });
   if(chips)h+='<div class="pr-syls">'+chips+'</div>';
   h+='<div class="pr-ph" id="prPh"><span class="g">글자를 누르면 음절·음소 점수를 볼 수 있습니다.</span></div>';
@@ -6813,16 +6835,14 @@ function prDetail(i){
   var w=prLast.words[i];
   var h='<b>'+esc(w.word||'')+'</b> · '+(w.score||0)+'점';
   if(w.errorType&&w.errorType!=='None')h+=' <span style="color:#C8352E">('+esc(w.errorType)+')</span>';
-  if(w.syllables&&w.syllables.length){
-    h+='<br><span class="g">음절</span> '+w.syllables.map(function(s){
-      return esc(s.syllable||'')+' <b style="color:'+prColor(s.score||0)+'">'+(s.score||0)+'</b>';
+  var u=prUnits(w);
+  if(u.length){
+    h+='<br><span class="g">음절·성조</span> '+u.map(function(s){
+      return esc(s.name)+' <b style="color:'+prColor(s.score||0)+'">'+(s.score||0)+'</b>';
     }).join(' · ');
   }
-  if(w.phonemes&&w.phonemes.length){
-    h+='<br><span class="g">음소</span> '+w.phonemes.map(function(s){
-      return esc(s.phoneme||'')+' <b style="color:'+prColor(s.score||0)+'">'+(s.score||0)+'</b>';
-    }).join(' · ');
-  }
+  if(w.errorType==='Insertion')h+='<br><span class="g">기준 문장에 없는 말입니다. 다시 읽을 때 빼세요.</span>';
+  if(w.errorType==='Omission')h+='<br><span class="g">빠뜨린 부분입니다.</span>';
   el.innerHTML=h;
 }
 function prNext(){
@@ -6886,7 +6906,7 @@ function prWeakHtml(){
     var aa=p.syl[a].sum/p.syl[a].n, bb=p.syl[b].sum/p.syl[b].n;
     return aa-bb;
   });
-  var h='<div class="pr-card"><h3>약한 음절 <small>2회 이상 읽은 것만</small></h3>';
+  var h='<div class="pr-card"><h3>약한 음절 <small>성조 포함 · 2회 이상</small></h3>';
   if(!ks.length){
     h+='<div class="pr-empty">아직 데이터가 없습니다. 연습 탭에서 몇 문장 읽고 나면 어떤 음절이 약한지 여기에 쌓입니다.<br>같은 음절이 2회 이상 나와야 순위에 들어갑니다.</div>';
   }else{
