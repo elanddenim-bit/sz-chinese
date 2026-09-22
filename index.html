@@ -556,6 +556,13 @@
   .modal .mbtn.ghost{background:#fff;border:1px solid var(--hair);color:var(--navy)}
   .modal .mstat{font-size:12px;margin-top:10px;line-height:1.5}
   footer{position:fixed;bottom:0;left:0;right:0;background:var(--navy);color:#8f9ab0;font-size:10px;padding:7px 14px;text-align:center;letter-spacing:0.2px;z-index:30}
+  /* ===== 백업 / 보호 ===== */
+  #guardBanner{display:none;background:#FFF4E5;color:#8A5A00;border-bottom:1px solid #F0D9B0;padding:11px 14px;font-size:12.5px;line-height:1.65}
+  #guardBanner b{color:#C8352E}
+  .gdbtn{background:#fff;border:1px solid #E3D3B5;border-radius:8px;padding:6px 11px;font-size:11.5px;font-weight:700;color:#8A5A00;font-family:inherit;cursor:pointer;margin-top:7px;margin-right:6px}
+  .bkrow{display:flex;gap:8px;margin-top:14px}
+  .bkrow .mbtn{flex:1;font-size:12.5px}
+  .bkhint{font-size:11px;color:var(--grey);line-height:1.6;margin-top:8px}
   /* ===== 사진 → 단어 ===== */
   .vc-bar{display:flex;gap:7px;margin-bottom:11px}
   .vc-btn{flex:1;border:1px solid var(--hair);background:#fff;border-radius:11px;padding:12px 8px;font-size:12.5px;font-weight:700;color:var(--navy);font-family:inherit;cursor:pointer}
@@ -651,13 +658,14 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.5.1</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.6</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
 <div class="redline"></div>
 
 <div class="banner" id="storeBanner">아직 초대 코드가 등록되지 않아 기록이 이 기기에만 저장됩니다.</div>
+<div id="guardBanner"></div>
 <div class="banner" id="ttsWarn">중국어 음성을 찾지 못했습니다. 휴대폰 설정에서 중국어(간체) TTS 음성을 추가해 주세요.</div>
 
 <div class="speedbar">
@@ -820,6 +828,14 @@
       <button class="mbtn navy" id="cfgSave">등록</button>
     </div>
     <div class="mstat" id="cfgStat"></div>
+    <div class="bkrow">
+      <button class="mbtn ghost" id="bkExport">기록 내보내기</button>
+      <button class="mbtn ghost" id="bkImport">파일에서 복원</button>
+    </div>
+    <div class="bkrow"><button class="mbtn ghost" id="bkLocal">기기 자동백업 복원</button></div>
+    <input type="file" id="bkFile" accept="application/json,.json" style="display:none">
+    <div class="bkhint">브라우저 데이터를 지우기 전에는 반드시 «기록 내보내기»로 파일을 저장해 두세요. 자동백업은 이 브라우저 안에만 남습니다.</div>
+    <div class="mstat" id="bkStat"></div>
   </div>
 </div>
 
@@ -4492,27 +4508,89 @@ async function remoteLoad(){
     if(!r.ok)throw new Error(r.status);
     const j=await r.json();
     setDot('#2ecc71');
+    remoteOk=true;
+    remoteScore=(j.length&&j[0].data)?stScore(j[0].data):0;
     return j.length?j[0].data:null;
-  }catch(e){setDot('#e74c3c');return null;}
+  }catch(e){setDot('#e74c3c');remoteOk=false;return null;}
 }
 async function remoteSave(){
   if(!cfgReady()){setDot('#c6cbd6');return false;}
+  if(saveGuard){setDot('#e67e22');return false;}
+  var ls=stScore(state);
+  if(remoteScore>0&&ls<remoteScore*0.5){
+    saveGuard=true;setDot('#e67e22');
+    showGuard('이 기기의 기록이 서버보다 크게 적습니다. 서버 기록을 덮어쓰지 않도록 업로드를 막았습니다.');
+    return false;
+  }
   try{
     const r=await fetch(sbBase(),{method:'POST',
       headers:Object.assign(sbHeaders(),{'Prefer':'resolution=merge-duplicates'}),
       body:JSON.stringify([{id:cfg.sid,data:state,updated_at:new Date().toISOString()}])});
     setDot(r.ok?'#2ecc71':'#e74c3c');
+    if(r.ok)remoteScore=ls;
     return r.ok;
   }catch(e){setDot('#e74c3c');return false;}
 }
-function mergePick(local,remote){
-  const score=s=>{let m=0;Object.values(s.stats.days||{}).forEach(d=>m+=(d.min||0));return (s.stats.total||0)*10+m;};
-  return score(remote)>=score(local)?remote:local;
+function stScore(s){
+  try{
+    if(!s||!s.stats)return 0;
+    let m=0;Object.values(s.stats.days||{}).forEach(d=>m+=(d.min||0));
+    return (s.stats.total||0)*10+m;
+  }catch(e){return 0;}
+}
+function mergePick(local,remote){return stScore(remote)>=stScore(local)?remote:local;}
+// ---- 덮어쓰기 방지 ----
+const BAK_KEY='szcn-trainer-bak';
+let remoteScore=0, remoteOk=false, saveGuard=false;
+function bkSnapshot(){
+  try{
+    var cur=stScore(state);
+    if(cur<=0)return;
+    var old=0;
+    try{var b=JSON.parse(localStorage.getItem(BAK_KEY)||'null');old=b?stScore(b.state):0;}catch(e){}
+    if(cur>=old)localStorage.setItem(BAK_KEY,JSON.stringify({t:Date.now(),state:state}));
+  }catch(e){}
+}
+function showGuard(msg,mode){
+  var el=document.getElementById('guardBanner');
+  if(!el)return;
+  el.style.display='block';
+  el.innerHTML='<b>저장을 멈췄습니다.</b> '+msg
+    +'<br><button class="gdbtn" id="gdRetry">서버에서 다시 불러오기</button>'
+    +'<button class="gdbtn" id="gdBak">기기 자동백업 복원</button>'
+    +'<button class="gdbtn" id="gdNew">비운 채로 계속</button>';
+  document.getElementById('gdRetry').addEventListener('click',async function(){
+    var r=await remoteLoad();
+    if(r&&r.prog){
+      state=mergePick(state,r);saveGuard=false;hideGuard();
+      if(typeof prState==='function')prState();
+      if(typeof registerDeck==='function')registerDeck();
+      refreshStats();renderReview();renderWords();
+      if(typeof renderProgress==='function')renderProgress();
+      if(typeof renderHome==='function')renderHome();
+    }else{
+      alert('서버에서 기록을 찾지 못했습니다. 네트워크와 초대 코드를 확인해 주세요.');
+    }
+  });
+  document.getElementById('gdBak').addEventListener('click',bkRestoreLocal);
+  document.getElementById('gdNew').addEventListener('click',function(){
+    if(confirm('현재의 빈 기록을 서버에 올립니다. 서버에 있던 기록은 사라집니다. 계속할까요?')){
+      saveGuard=false;hideGuard();saveState();
+    }
+  });
+}
+function hideGuard(){
+  var el=document.getElementById('guardBanner');
+  if(el){el.style.display='none';el.innerHTML='';}
 }
 async function loadState(){
   try{const l=localStorage.getItem(SKEY);if(l){const s=JSON.parse(l);if(s&&s.prog)state=s;}}catch(e){}
   const remote=await remoteLoad();
   if(remote&&remote.prog)state=mergePick(state,remote);
+  if(cfgReady()&&!remoteOk&&stScore(state)===0){
+    saveGuard=true;
+    setTimeout(function(){showGuard('서버에서 기록을 불러오지 못했는데 이 기기에도 기록이 없습니다.');},400);
+  }
   if(!state.goals)state.goals={min:220,sent:60,quiz:200,mast:35};
   if(!state.myWords)state.myWords={};
   if(!state.gram)state.gram={};
@@ -4531,6 +4609,7 @@ async function loadState(){
 }
 function saveState(){
   try{localStorage.setItem(SKEY,JSON.stringify(state));}catch(e){}
+  bkSnapshot();
   clearTimeout(remoteTimer);
   remoteTimer=setTimeout(remoteSave,2500);
 }
@@ -6435,6 +6514,12 @@ document.getElementById('btnCfg').addEventListener('click',()=>{
   document.getElementById('cfgStat').textContent='';
   cfgModal.classList.add('show');
 });
+document.getElementById('bkExport').addEventListener('click',bkExportFile);
+document.getElementById('bkImport').addEventListener('click',function(){document.getElementById('bkFile').click();});
+document.getElementById('bkFile').addEventListener('change',function(e){
+  bkImportFile(e.target.files&&e.target.files[0]);e.target.value='';
+});
+document.getElementById('bkLocal').addEventListener('click',bkRestoreLocal);
 document.getElementById('cfgClose').addEventListener('click',()=>cfgModal.classList.remove('show'));
 cfgModal.addEventListener('click',e=>{if(e.target===cfgModal)cfgModal.classList.remove('show');});
 document.getElementById('cfgSave').addEventListener('click',async()=>{
@@ -6655,6 +6740,62 @@ document.querySelectorAll('.fd-mode').forEach(function(b){
     b.classList.add('on'); fdMode=b.dataset.fd; renderField();
   });
 });
+// ================= 백업 / 복원 =================
+function bkStat(msg,ok){
+  var el=document.getElementById('bkStat');
+  if(el)el.innerHTML='<span style="color:'+(ok?'#1E7F4F':'#C8352E')+'">'+msg+'</span>';
+}
+function bkExportFile(){
+  try{
+    var payload={app:'sz-chinese',v:1,t:new Date().toISOString(),sid:(cfg&&cfg.sid)||'',state:state};
+    var blob=new Blob([JSON.stringify(payload)],{type:'application/json'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;a.download='sz-chinese-backup-'+today()+'.json';
+    document.body.appendChild(a);a.click();
+    setTimeout(function(){try{URL.revokeObjectURL(url);a.remove();}catch(e){}},2000);
+    bkStat('✓ 백업 파일을 내려받았습니다. 파일 앱에서 확인하세요.',true);
+  }catch(e){bkStat('내보내기에 실패했습니다.',false);}
+}
+function bkApply(s,label){
+  if(!s||!s.prog){bkStat('백업 파일 형식이 아닙니다.',false);return;}
+  var cur=(state.stats&&state.stats.total)||0;
+  var inc=(s.stats&&s.stats.total)||0;
+  if(!confirm('복원할 기록: 퀴즈 '+inc+'문\n지금 기록: 퀴즈 '+cur+'문\n\n지금 기록을 덮어씁니다. 계속할까요?'))return;
+  state=s;
+  if(!state.goals)state.goals={min:220,sent:60,quiz:200,mast:35};
+  if(!state.myWords)state.myWords={};
+  if(!state.gram)state.gram={};
+  if(!state.ptDone)state.ptDone={};
+  if(!state.rp)state.rp={};
+  if(typeof prState==='function')prState();
+  if(typeof registerDeck==='function')registerDeck();
+  saveGuard=false;hideGuard();
+  saveState();
+  refreshStats();renderReview();renderWords();
+  if(typeof renderProgress==='function')renderProgress();
+  if(typeof renderHome==='function')renderHome();
+  bkStat('✓ '+label+' 복원 완료 — 퀴즈 '+inc+'문',true);
+}
+function bkImportFile(file){
+  if(!file)return;
+  var fr=new FileReader();
+  fr.onerror=function(){bkStat('파일을 읽지 못했습니다.',false);};
+  fr.onload=function(){
+    var d=null;
+    try{d=JSON.parse(fr.result);}catch(e){bkStat('파일을 해석하지 못했습니다.',false);return;}
+    bkApply((d&&d.state)?d.state:d,'파일');
+  };
+  fr.readAsText(file);
+}
+function bkRestoreLocal(){
+  var b=null;
+  try{b=JSON.parse(localStorage.getItem(BAK_KEY)||'null');}catch(e){}
+  if(!b||!b.state){alert('이 브라우저에 저장된 자동백업이 없습니다.');return;}
+  var d=new Date(b.t);
+  bkApply(b.state,(d.getMonth()+1)+'/'+d.getDate()+' 자동백업');
+}
+
 // ================= 사진 → 단어 (Claude Vision) =================
 const MY_IDS=[];
 let vcPend=null, vcBusy=false;
