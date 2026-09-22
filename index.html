@@ -649,7 +649,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.4</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.5</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -2737,6 +2737,62 @@ function unlockAudio(){
 ['touchstart','mousedown','keydown'].forEach(function(ev){
   document.addEventListener(ev,unlockAudio,{once:true,passive:true});
 });
+// ---- mp3 가 없는 문장: Azure TTS (기존 음성과 같은 목소리) ----
+const azCache={};
+function azUrl(){
+  try{var c=JSON.parse(localStorage.getItem(CFG_KEY)||'null');return (c&&c.ai)?c.ai.replace(/\/+$/,'')+'/tts':'';}
+  catch(e){return '';}
+}
+function azSid(){
+  try{var c=JSON.parse(localStorage.getItem(CFG_KEY)||'null');return (c&&c.sid)||'';}catch(e){return '';}
+}
+function azPlay(url,t,rr,seq){
+  if(seq!==undefined&&seq!==speakSeq)return;
+  try{
+    var a=new Audio(url);
+    a.playbackRate=rr;
+    curAudio=a;
+    var p=a.play();
+    if(p&&p.catch)p.catch(function(){ttsSpeak(t,rr);});
+  }catch(e){ttsSpeak(t,rr);}
+}
+function azSpeak(t,rr,seq){
+  var key=fnv(t);
+  var hit=azCache[key];
+  if(hit&&hit!=='404'&&hit!=='wait'){azPlay(hit,t,rr,seq);return;}   // 캐시: 탭과 같은 흐름에서 바로 재생
+  if(hit==='404'||!azUrl()){ttsSpeak(t,rr);return;}
+  azFetch(t).then(function(url){
+    if(url)azPlay(url,t,rr,seq);
+    else ttsSpeak(t,rr);
+  });
+}
+function azFetch(t){
+  var key=fnv(t);
+  if(azCache[key]&&azCache[key]!=='wait'&&azCache[key]!=='404')return Promise.resolve(azCache[key]);
+  if(azCache[key]==='404')return Promise.resolve(null);
+  if(!azUrl())return Promise.resolve(null);
+  azCache[key]='wait';
+  return fetch(azUrl(),{method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({code:azSid(),text:t})})
+    .then(function(res){if(!res.ok)throw new Error('http');return res.blob();})
+    .then(function(b){
+      if(!b||b.size<400)throw new Error('empty');
+      var url=URL.createObjectURL(b);
+      azCache[key]=url;
+      return url;
+    })
+    .catch(function(){azCache[key]='404';return null;});
+}
+// 화면에 뜬 문장을 미리 받아둔다 — 캐시가 있어야 탭 즉시 재생된다 (iOS 자동재생 제한)
+function azPrefetch(list){
+  if(!azUrl())return;
+  var q=(list||[]).filter(function(t){return t&&!azCache[fnv(t)];}).slice(0,24);
+  var i=0;
+  (function step(){
+    if(i>=q.length)return;
+    azFetch(q[i++]).then(function(){setTimeout(step,120);},function(){setTimeout(step,120);});
+  })();
+}
 function speak(t,r){
   if(!t)return;
   const rr=r!==undefined?r:rate;
@@ -2745,7 +2801,7 @@ function speak(t,r){
   const my=++speakSeq;
   stopAll();
   // mp3 대상이 아니거나, 서버에 없다고 확인된 텍스트 → 즉시 TTS
-  if(!AUDIO_SET.has(t)||audioMiss[key]===404){ttsSpeak(t,rr);return;}
+  if(!AUDIO_SET.has(t)||audioMiss[key]===404){azSpeak(t,rr,my);return;}
   try{
     let a=audioCache[key];
     if(!a){a=new Audio(audioUrl(key));a.preload='auto';audioCache[key]=a;}
@@ -2755,7 +2811,7 @@ function speak(t,r){
       settled=true;
       // 파일이 없을 때만 영구 기록, 자동재생 차단 등 일시적 실패는 기록하지 않음
       if(reason==='error'){audioMiss[key]=404;delete audioCache[key];}
-      ttsSpeak(t,rr);
+      azSpeak(t,rr,my);
     };
     a.onerror=function(){fallback('error');};
     a.onplaying=function(){settled=true;};
@@ -4837,6 +4893,11 @@ function renderWords(){
   wrap.querySelectorAll('[data-mydel]').forEach(function(b){
     b.addEventListener('click',function(){vcDelete(b.dataset.mydel);});
   });
+  if(curLv==='my'&&typeof azPrefetch==='function'){
+    var pre=[];
+    ids.forEach(function(id){var it=ITEMS[id];if(!it)return;pre.push(it.z);if(it.ex&&it.ex.z)pre.push(it.ex.z);});
+    azPrefetch(pre);
+  }
 }
 
 // ================= 퀴즈 엔진 =================
@@ -6848,7 +6909,16 @@ function prQueue(){
     return ks.slice(0,10).map(function(z){return {z:z,p:p.sents[z].p||'',k:p.sents[z].k||''};});
   }
   var lines=[];
-  try{lines=hfLines(prSrc)||[];}catch(e){lines=[];}
+  if(prSrc==='mywords'){
+    try{
+      deck().words.forEach(function(w){
+        if(w.ex&&w.ex.z)lines.push({z:w.ex.z,p:w.ex.p||'',k:w.ex.k||''});
+        else if(w.z)lines.push({z:w.z,p:w.p||'',k:w.k||''});
+      });
+    }catch(e){lines=[];}
+  }else{
+    try{lines=hfLines(prSrc)||[];}catch(e){lines=[];}
+  }
   var seen={}, pool=[];
   for(i=0;i<lines.length;i++){
     var l=lines[i];
@@ -6873,6 +6943,7 @@ function prOpen(items,title){
   stopAll();
   if(typeof stopShadow==='function')stopShadow();
   prSession={items:items,idx:0,title:title||'',done:0,sum:0,pass:0};
+  if(typeof azPrefetch==='function')azPrefetch(items.map(function(x){return x.z;}));
   var ov=document.getElementById('prOv');
   if(!ov){ov=document.createElement('div');ov.className='pr-ov';ov.id='prOv';document.body.appendChild(ov);}
   prDraw();
@@ -7087,6 +7158,10 @@ function prClose(){
 // ---- 발음 탭 ----
 function prSrcList(){
   var out=[{id:'weak',label:'📉 내 약점 문장',sub:'점수 낮았던 문장 다시'}];
+  try{
+    var n=(typeof deck==='function')?deck().words.length:0;
+    if(n)out.push({id:'mywords',label:'📷 내 단어 예문',sub:n+'단어 · 사진에서 추가'});
+  }catch(e){}
   try{hfSources().forEach(function(s){out.push(s);});}catch(e){}
   return out;
 }
