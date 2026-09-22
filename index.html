@@ -556,6 +556,67 @@
   .modal .mbtn.ghost{background:#fff;border:1px solid var(--hair);color:var(--navy)}
   .modal .mstat{font-size:12px;margin-top:10px;line-height:1.5}
   footer{position:fixed;bottom:0;left:0;right:0;background:var(--navy);color:#8f9ab0;font-size:10px;padding:7px 14px;text-align:center;letter-spacing:0.2px;z-index:30}
+  /* ===== 발음 평가 ===== */
+  nav button{font-size:clamp(9.5px,2.85vw,12.5px);white-space:nowrap}
+  .pr-top{display:flex;gap:6px;margin-bottom:12px}
+  .pr-stat{flex:1;background:#fff;border:1px solid var(--hair);border-radius:12px;padding:11px 5px;text-align:center}
+  .pr-stat .v{font-size:19px;font-weight:800;color:var(--navy)}
+  .pr-stat .k{font-size:10px;color:var(--grey);margin-top:3px;line-height:1.3}
+  .pr-modes{display:flex;gap:6px;margin-bottom:12px}
+  .pr-mode{flex:1;border:1px solid var(--hair);background:#fff;border-radius:11px;padding:10px 4px;font-size:12px;font-weight:700;color:var(--grey);font-family:inherit;cursor:pointer}
+  .pr-mode.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .pr-card{background:#fff;border:1px solid var(--hair);border-radius:14px;padding:14px;margin-bottom:11px}
+  .pr-card h3{font-size:13px;font-weight:800;color:var(--navy);margin-bottom:9px}
+  .pr-card h3 small{font-weight:600;color:var(--grey);font-size:11px;margin-left:5px}
+  .pr-src{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:12px}
+  .pr-srcb{border:1px solid var(--hair);background:#fff;border-radius:11px;padding:11px 9px;text-align:left;font-family:inherit;cursor:pointer}
+  .pr-srcb.on{border-color:var(--red);background:#F4F6FA;box-shadow:0 2px 8px rgba(46,74,115,.1)}
+  .pr-srcb .t{font-size:12.5px;font-weight:700;color:var(--navy);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pr-srcb .s{font-size:10.5px;color:var(--grey);margin-top:2px;display:block}
+  .pr-go{width:100%;background:var(--red);color:#fff;border:none;border-radius:12px;padding:15px;font-size:14.5px;font-weight:800;font-family:inherit;cursor:pointer}
+  .pr-go:disabled{background:#c6cbd6;cursor:default}
+  .syl-row{display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid var(--hair)}
+  .syl-row:last-child{border-bottom:none}
+  .syl-py{font-size:14px;font-weight:800;color:var(--navy);min-width:66px}
+  .syl-py small{display:block;font-size:10px;color:var(--grey);font-weight:600;margin-top:1px}
+  .syl-bar{flex:1;height:7px;background:var(--hair);border-radius:4px;overflow:hidden}
+  .syl-bar i{display:block;height:100%;border-radius:4px}
+  .syl-sc{font-size:12px;font-weight:700;min-width:62px;text-align:right;color:var(--grey)}
+  .pr-empty{font-size:12px;color:var(--grey);line-height:1.75;padding:4px 0}
+  .pr-lg{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--hair);font-size:12.5px}
+  .pr-lg:last-child{border-bottom:none}
+  .pr-lg .s{width:34px;height:26px;border-radius:7px;color:#fff;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .pr-lg .z{flex:1;color:var(--navy);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pr-lg .d{font-size:10.5px;color:var(--grey);flex-shrink:0}
+  /* 녹음 오버레이 */
+  .pr-ov{position:fixed;inset:0;background:var(--navy);z-index:80;padding:22px 18px calc(30px + env(safe-area-inset-bottom,0px));overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .pr-ov .ptop{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+  .pr-ov .x{background:rgba(255,255,255,.14);border:none;color:#fff;width:32px;height:32px;border-radius:50%;font-size:14px;cursor:pointer;font-family:inherit;flex-shrink:0}
+  .pr-ov .ttl{color:var(--wash);font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pr-ov .cnt{margin-left:auto;color:var(--wash);font-size:12px;font-weight:700;flex-shrink:0}
+  .pr-ov .zh{color:#fff;font-size:25px;font-weight:800;line-height:1.55;letter-spacing:.5px}
+  .pr-ov .py{color:var(--wash);font-size:13.5px;margin-top:8px;line-height:1.6}
+  .pr-ov .ko{color:#b9c2d2;font-size:13px;margin-top:9px;line-height:1.6}
+  .pr-bar{display:flex;gap:9px;margin-top:18px}
+  .pr-b{flex:1;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.08);color:#fff;border-radius:12px;padding:13px 6px;font-size:12.5px;font-weight:700;font-family:inherit;cursor:pointer}
+  .pr-rec{width:100%;margin-top:12px;border:none;border-radius:14px;padding:18px;font-size:15px;font-weight:800;font-family:inherit;cursor:pointer;background:#D51030;color:#fff}
+  .pr-rec.rec{background:#fff;color:#D51030}
+  .pr-rec:disabled{background:#464d5c;color:#98a1b2;cursor:default}
+  .pr-msg{margin-top:12px;background:rgba(255,255,255,.1);border-radius:11px;padding:12px;color:#fff;font-size:12.5px;line-height:1.6}
+  .pr-res{margin-top:16px;background:#fff;border-radius:16px;padding:16px}
+  .pr-score{display:flex;align-items:center;gap:13px}
+  .pr-big{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:23px;font-weight:800;color:#fff;flex-shrink:0}
+  .pr-sub{font-size:11.5px;color:var(--grey);line-height:1.75}
+  .pr-sub b{color:var(--navy)}
+  .pr-syls{display:flex;flex-wrap:wrap;gap:6px;margin-top:13px}
+  .pr-syl{border:1.5px solid var(--hair);border-radius:9px;padding:6px 8px;text-align:center;cursor:pointer;background:#fff;font-family:inherit}
+  .pr-syl .z{font-size:16px;font-weight:700;color:var(--navy);display:block;line-height:1.3}
+  .pr-syl .p{font-size:10px;margin-top:2px;display:block;font-weight:800}
+  .pr-ph{margin-top:11px;font-size:11.5px;color:var(--navy);line-height:1.8;background:var(--bg);border-radius:10px;padding:11px}
+  .pr-ph .g{color:var(--grey)}
+  .pr-heard{font-size:11.5px;color:var(--grey);margin-top:11px;line-height:1.6}
+  .sh-line{position:relative}
+  .sh-mic{position:absolute;top:9px;right:9px;background:#fff;border:1px solid var(--hair);border-radius:9px;width:34px;height:30px;font-size:14px;cursor:pointer;font-family:inherit;line-height:1}
 </style>
 </head>
 <body>
@@ -564,7 +625,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.2.1</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.3</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -589,6 +650,7 @@
   <button class="tab" data-p="p1">퀴즈</button>
   <button class="tab" data-p="p2">HSK 단어</button>
   <button class="tab" data-p="p3">복습<span class="badge" id="rvBadge" style="display:none">0</span></button>
+  <button class="tab" data-p="p6">발음</button>
   <button class="tab" data-p="p5">현장</button>
   <button class="tab" data-p="p4">진척</button>
 </nav>
@@ -666,6 +728,11 @@
     <button class="fd-mode" data-fd="brief"><span class="fi">📋</span><span class="ft">방문 브리핑</span><span class="fs">질문지 생성</span></button>
   </div>
   <div id="fdBody"></div>
+</div>
+
+<!-- 발음 -->
+<div class="pane" id="p6">
+  <div id="prBody"></div>
 </div>
 
 <!-- 진척 -->
@@ -4368,6 +4435,7 @@ async function loadState(){
   if(!state.gram)state.gram={};
   if(!state.ptDone)state.ptDone={};
   if(!state.rp)state.rp={};
+  if(typeof prState==='function')prState();
   if(!cfg||!cfg.sid){
     document.getElementById('welModal').classList.add('show');
   }else if(!cfgReady()){
@@ -5136,10 +5204,18 @@ function drawShadow(){
   list.innerHTML=shCur.items.map(function(l,i){
     return '<div class="sh-line'+(i===shCur.idx?' on':'')+'" data-i="'+i+'">'
       +'<div class="sh-who '+(l.who==='me'?'me':'npc')+'">'+(l.who==='me'?'나':'상대')+(l.ctx?' · '+esc(l.ctx):'')+'</div>'
-      +rubyHtml(l)+'<div class="sh-ko">'+esc(l.k)+'</div></div>';
+      +rubyHtml(l)+'<div class="sh-ko">'+esc(l.k)+'</div>'
+      +'<button class="sh-mic" data-mic="'+i+'" title="발음 채점">🎤</button></div>';
   }).join('');
   list.querySelectorAll('.sh-line').forEach(function(el){
     el.addEventListener('click',function(){shJump(parseInt(el.dataset.i),true);});
+  });
+  list.querySelectorAll('[data-mic]').forEach(function(b){
+    b.addEventListener('click',function(ev){
+      ev.stopPropagation();
+      var l=shCur.items[parseInt(b.dataset.mic)];
+      if(l)prOpen([{z:l.z,p:l.p,k:l.k}],'쉐도잉 발음 채점');
+    });
   });
   const cur=list.querySelector('.sh-line.on');
   if(cur)cur.scrollIntoView({behavior:'smooth',block:'center'});
@@ -6094,6 +6170,7 @@ document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{
   speechSynthesis.cancel();if(typeof stopShadow==='function')stopShadow();
   if(b.dataset.p==='ph')renderHome();
   if(b.dataset.p==='p5')renderField();
+  if(b.dataset.p==='p6')renderPron();
   if(b.dataset.p==='p1'&&!qzCur){reviewMode=false;newQuiz();}
   if(b.dataset.p==='p2')renderWords();
 }));
@@ -6472,6 +6549,426 @@ document.querySelectorAll('.fd-mode').forEach(function(b){
     b.classList.add('on'); fdMode=b.dataset.fd; renderField();
   });
 });
+// ================= 발음 평가 (Azure Speech) =================
+const PR_PASS=80;
+let prSession=null, prRec=null, prChunks=[], prStream=null, prBusy=false, prLast=null, prAutoStop=null;
+let prMode='train', prSrc='s0';
+
+function pronUrl(){var u=aiUrl();return u?u+'/pronounce':'';}
+function prState(){
+  if(!state.pron)state.pron={};
+  var p=state.pron;
+  if(!p.syl)p.syl={};
+  if(!p.sents)p.sents={};
+  if(!p.log)p.log=[];
+  if(typeof p.best!=='number')p.best=0;
+  if(typeof p.combo!=='number')p.combo=0;
+  if(typeof p.bestCombo!=='number')p.bestCombo=0;
+  if(typeof p.n!=='number')p.n=0;
+  if(typeof p.sum!=='number')p.sum=0;
+  return p;
+}
+function prColor(s){return s>=85?'#1E7F4F':(s>=70?'#B8860B':'#C8352E');}
+
+// ---- 녹음본을 16kHz 모노 WAV(base64)로 변환 (아이패드 사파리 m4a 대응) ----
+function prDecode(ac,buf){
+  return new Promise(function(res,rej){
+    var p=null;
+    try{ p=ac.decodeAudioData(buf,function(d){res(d);},function(e){rej(e);}); }catch(e){ rej(e); return; }
+    if(p&&p.then)p.then(res,rej);
+  });
+}
+async function blobToWavB64(blob){
+  var buf=await blob.arrayBuffer();
+  var Ctx=window.AudioContext||window.webkitAudioContext;
+  if(!Ctx)throw new Error('no audiocontext');
+  var ac=new Ctx();
+  var dec=await prDecode(ac,buf);
+  var ch=dec.numberOfChannels, len=dec.length;
+  var mix=new Float32Array(len);
+  for(var c=0;c<ch;c++){
+    var d=dec.getChannelData(c);
+    for(var i=0;i<len;i++)mix[i]+=d[i]/ch;
+  }
+  var ratio=dec.sampleRate/16000;
+  var outLen=Math.max(1,Math.floor(len/ratio));
+  var out=new Int16Array(outLen);
+  for(var j=0;j<outLen;j++){
+    var pos=j*ratio, i0=Math.floor(pos), i1=Math.min(i0+1,len-1), f=pos-i0;
+    var s=mix[i0]*(1-f)+mix[i1]*f;
+    if(s>1)s=1; if(s<-1)s=-1;
+    out[j]=s<0?s*0x8000:s*0x7FFF;
+  }
+  try{ac.close();}catch(e){}
+  return prWavB64(out,16000);
+}
+function prWavB64(pcm,sr){
+  var bytes=new Uint8Array(44+pcm.length*2);
+  var dv=new DataView(bytes.buffer);
+  function ws(o,s){for(var i=0;i<s.length;i++)dv.setUint8(o+i,s.charCodeAt(i));}
+  ws(0,'RIFF');dv.setUint32(4,36+pcm.length*2,true);ws(8,'WAVE');
+  ws(12,'fmt ');dv.setUint32(16,16,true);dv.setUint16(20,1,true);dv.setUint16(22,1,true);
+  dv.setUint32(24,sr,true);dv.setUint32(28,sr*2,true);dv.setUint16(32,2,true);dv.setUint16(34,16,true);
+  ws(36,'data');dv.setUint32(40,pcm.length*2,true);
+  new Int16Array(bytes.buffer,44).set(pcm);
+  var bin='';
+  for(var i=0;i<bytes.length;i+=0x8000)bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+0x8000));
+  return btoa(bin);
+}
+
+// ---- 연습 문장 큐 ----
+function prQueue(){
+  var p=prState(), i;
+  if(prSrc==='weak'){
+    var ks=Object.keys(p.sents).filter(function(z){return (p.sents[z].best||0)<PR_PASS;});
+    ks.sort(function(a,b){return (p.sents[a].best||0)-(p.sents[b].best||0);});
+    return ks.slice(0,10).map(function(z){return {z:z,p:p.sents[z].p||'',k:p.sents[z].k||''};});
+  }
+  var lines=[];
+  try{lines=hfLines(prSrc)||[];}catch(e){lines=[];}
+  var seen={}, pool=[];
+  for(i=0;i<lines.length;i++){
+    var l=lines[i];
+    if(!l||!l.z)continue;
+    var n=l.z.replace(/[，。？！、,.?!\s]/g,'').length;
+    if(n<2||n>24)continue;
+    if(seen[l.z])continue;
+    seen[l.z]=1;pool.push(l);
+  }
+  pool.sort(function(a,b){
+    var sa=p.sents[a.z]?(p.sents[a.z].best||0):-1;
+    var sb=p.sents[b.z]?(p.sents[b.z].best||0):-1;
+    return sa-sb;
+  });
+  return pool.slice(0,10);
+}
+
+// ---- 오버레이 ----
+function prOpen(items,title){
+  if(!items||!items.length){alert('연습할 문장이 없습니다.');return;}
+  if(!pronUrl()){alert('발음 채점은 AI 서버가 필요합니다. 좌측 상단 ⚙︎에서 서버 주소를 등록하세요.');return;}
+  stopAll();
+  if(typeof stopShadow==='function')stopShadow();
+  prSession={items:items,idx:0,title:title||'',done:0,sum:0,pass:0};
+  var ov=document.getElementById('prOv');
+  if(!ov){ov=document.createElement('div');ov.className='pr-ov';ov.id='prOv';document.body.appendChild(ov);}
+  prDraw();
+}
+function prDraw(){
+  var ov=document.getElementById('prOv');if(!ov||!prSession)return;
+  var s=prSession, it=s.items[s.idx];
+  prLast=null;
+  ov.innerHTML='<div class="ptop"><button class="x" id="prX">✕</button>'
+    +'<span class="ttl">'+esc(s.title)+'</span>'
+    +'<span class="cnt">'+(s.idx+1)+' / '+s.items.length+'</span></div>'
+    +'<div class="zh">'+esc(it.z)+'</div>'
+    +'<div class="py">'+esc(it.p||'')+'</div>'
+    +'<div class="ko">'+esc(it.k||'')+'</div>'
+    +'<div class="pr-bar"><button class="pr-b" id="prPlay">▶ 원어민 듣기</button>'
+    +'<button class="pr-b" id="prSkip">건너뛰기 →</button></div>'
+    +'<button class="pr-rec" id="prRecBtn">🎤 녹음 시작</button>'
+    +'<div id="prOut"></div>';
+  document.getElementById('prX').addEventListener('click',prClose);
+  document.getElementById('prPlay').addEventListener('click',function(){speak(it.z);});
+  document.getElementById('prSkip').addEventListener('click',prNext);
+  document.getElementById('prRecBtn').addEventListener('click',prToggleRec);
+  ov.scrollTop=0;
+}
+function prMsg(t){
+  var o=document.getElementById('prOut');
+  if(o)o.innerHTML=t?'<div class="pr-msg">'+esc(t)+'</div>':'';
+}
+function prStopTracks(){
+  try{if(prStream)prStream.getTracks().forEach(function(t){t.stop();});}catch(e){}
+  prStream=null;
+}
+async function prToggleRec(){
+  var btn=document.getElementById('prRecBtn');
+  if(prBusy)return;
+  if(prRec&&prRec.state==='recording'){clearTimeout(prAutoStop);try{prRec.stop();}catch(e){}return;}
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia||!window.MediaRecorder){
+    prMsg('이 브라우저는 녹음을 지원하지 않습니다. 사파리 또는 크롬 최신 버전에서 열어 주세요.');return;
+  }
+  try{
+    prStream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true}});
+  }catch(e){
+    prMsg('마이크 권한이 필요합니다. 홈화면 앱이면 설정 > Safari > 마이크에서 허용해 주세요.');return;
+  }
+  var mt='';
+  ['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/aac'].forEach(function(t){
+    if(!mt&&window.MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(t))mt=t;
+  });
+  try{prRec=mt?new MediaRecorder(prStream,{mimeType:mt}):new MediaRecorder(prStream);}
+  catch(e){try{prRec=new MediaRecorder(prStream);}catch(e2){prStopTracks();prMsg('녹음을 시작하지 못했습니다.');return;}}
+  prChunks=[];
+  prRec.ondataavailable=function(e){if(e.data&&e.data.size)prChunks.push(e.data);};
+  prRec.onstop=function(){
+    prStopTracks();
+    var type=prChunks.length&&prChunks[0].type?prChunks[0].type:(mt||'audio/webm');
+    var blob=new Blob(prChunks,{type:type});
+    prRec=null;
+    prSend(blob);
+  };
+  stopAll();
+  prMsg('');
+  try{prRec.start();}catch(e){prStopTracks();prMsg('녹음을 시작하지 못했습니다.');return;}
+  if(btn){btn.classList.add('rec');btn.textContent='■ 녹음 중 — 누르면 채점';}
+  prAutoStop=setTimeout(function(){if(prRec&&prRec.state==='recording'){try{prRec.stop();}catch(e){}}},15000);
+}
+async function prSend(blob){
+  var btn=document.getElementById('prRecBtn');
+  var it=prSession?prSession.items[prSession.idx]:null;
+  if(!it)return;
+  prBusy=true;
+  if(btn){btn.classList.remove('rec');btn.disabled=true;btn.textContent='채점 중…';}
+  prMsg('채점 중입니다…');
+  function fail(m){
+    prBusy=false;
+    if(btn){btn.disabled=false;btn.textContent='🎤 다시 녹음';}
+    prMsg(m);
+  }
+  if(!blob||blob.size<1200){fail('녹음이 너무 짧습니다. 버튼을 누른 뒤 문장을 끝까지 읽고 다시 눌러 주세요.');return;}
+  var b64='';
+  try{b64=await blobToWavB64(blob);}
+  catch(e){fail('녹음 변환에 실패했습니다. 다시 시도해 주세요.');return;}
+  var r=null;
+  try{
+    var res=await fetch(pronUrl(),{method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({code:(cfg&&cfg.sid)||'',text:it.z,audio:b64})});
+    r=await res.json();
+  }catch(e){r=null;}
+  if(!r){fail('채점 서버에 연결하지 못했습니다. 네트워크를 확인해 주세요.');return;}
+  if(r.error){fail(String(r.error).indexOf('사용할 수 없')>=0?r.error:('채점 실패 — '+r.error));return;}
+  if(r.ok===false){fail(r.message||'음성을 인식하지 못했습니다.');return;}
+  prBusy=false;
+  if(btn){btn.disabled=false;btn.textContent='🎤 다시 녹음';}
+  prLast=r;
+  prRecordResult(it,r);
+  prShow(it,r);
+}
+function prRecordResult(it,r){
+  var p=prState();
+  var sc=(r.scores&&r.scores.pron)||0;
+  var st=p.sents[it.z]||{p:'',k:'',best:0,n:0};
+  if(!st.p)st.p=it.p||'';
+  if(!st.k)st.k=it.k||'';
+  st.n++;st.last=sc;st.t=today();
+  if(sc>(st.best||0))st.best=sc;
+  p.sents[it.z]=st;
+  p.n++;p.sum+=sc;
+  if(sc>p.best)p.best=sc;
+  if(sc>=PR_PASS){p.combo++;if(p.combo>p.bestCombo)p.bestCombo=p.combo;}
+  else p.combo=0;
+  (r.words||[]).forEach(function(w){
+    (w.syllables||[]).forEach(function(s){
+      var key=(s.syllable||'').toLowerCase();
+      if(!key)return;
+      var e=p.syl[key]||{n:0,sum:0,z:''};
+      e.n++;e.sum+=(s.score||0);
+      if(!e.z)e.z=w.word||'';
+      p.syl[key]=e;
+    });
+  });
+  p.log.unshift({t:Date.now(),z:it.z,s:sc});
+  if(p.log.length>200)p.log.length=200;
+  var d=dayRec();d.pr=(d.pr||0)+1;
+  if(prSession){prSession.done++;prSession.sum+=sc;if(sc>=PR_PASS)prSession.pass++;}
+  saveState();
+}
+function prShow(it,r){
+  var out=document.getElementById('prOut');if(!out)return;
+  var p=prState();
+  var sc=(r.scores&&r.scores.pron)||0, col=prColor(sc);
+  var h='<div class="pr-res"><div class="pr-score">'
+    +'<div class="pr-big" style="background:'+col+'">'+sc+'</div>'
+    +'<div class="pr-sub">정확도 <b>'+((r.scores&&r.scores.accuracy)||0)+'</b> · 유창성 <b>'+((r.scores&&r.scores.fluency)||0)+'</b> · 완성도 <b>'+((r.scores&&r.scores.completeness)||0)+'</b><br>'
+    +(sc>=PR_PASS?('통과 ✓ 연속 <b>'+p.combo+'</b>회'):(PR_PASS+'점 이상이면 통과입니다'))
+    +'</div></div>';
+  var chips='';
+  (r.words||[]).forEach(function(w,i){
+    var c=prColor(w.score||0);
+    chips+='<button class="pr-syl" data-wi="'+i+'" style="border-color:'+c+'">'
+      +'<span class="z">'+esc(w.word||'')+'</span>'
+      +'<span class="p" style="color:'+c+'">'+(w.score||0)+'</span></button>';
+  });
+  if(chips)h+='<div class="pr-syls">'+chips+'</div>';
+  h+='<div class="pr-ph" id="prPh"><span class="g">글자를 누르면 음절·음소 점수를 볼 수 있습니다.</span></div>';
+  if(r.recognized)h+='<div class="pr-heard">들린 문장: '+esc(r.recognized)+'</div>';
+  h+='</div>'
+    +'<div class="pr-bar"><button class="pr-b" id="prAgain">🎤 다시 읽기</button>'
+    +'<button class="pr-b" id="prNextB" style="background:#fff;color:#1B1F22;border-color:#fff">'
+    +(prSession.idx+1>=prSession.items.length?'세션 끝내기':'다음 문장 →')+'</button></div>';
+  out.innerHTML=h;
+  out.querySelectorAll('[data-wi]').forEach(function(b){
+    b.addEventListener('click',function(){prDetail(parseInt(b.dataset.wi));});
+  });
+  document.getElementById('prAgain').addEventListener('click',prToggleRec);
+  document.getElementById('prNextB').addEventListener('click',prNext);
+  var ov=document.getElementById('prOv');
+  if(ov)setTimeout(function(){ov.scrollTop=ov.scrollHeight;},60);
+}
+function prDetail(i){
+  var el=document.getElementById('prPh');
+  if(!el||!prLast||!prLast.words||!prLast.words[i])return;
+  var w=prLast.words[i];
+  var h='<b>'+esc(w.word||'')+'</b> · '+(w.score||0)+'점';
+  if(w.errorType&&w.errorType!=='None')h+=' <span style="color:#C8352E">('+esc(w.errorType)+')</span>';
+  if(w.syllables&&w.syllables.length){
+    h+='<br><span class="g">음절</span> '+w.syllables.map(function(s){
+      return esc(s.syllable||'')+' <b style="color:'+prColor(s.score||0)+'">'+(s.score||0)+'</b>';
+    }).join(' · ');
+  }
+  if(w.phonemes&&w.phonemes.length){
+    h+='<br><span class="g">음소</span> '+w.phonemes.map(function(s){
+      return esc(s.phoneme||'')+' <b style="color:'+prColor(s.score||0)+'">'+(s.score||0)+'</b>';
+    }).join(' · ');
+  }
+  el.innerHTML=h;
+}
+function prNext(){
+  if(!prSession)return;
+  prSession.idx++;
+  if(prSession.idx>=prSession.items.length){prFinish();return;}
+  prDraw();
+}
+function prFinish(){
+  var ov=document.getElementById('prOv');if(!ov)return;
+  var s=prSession, p=prState();
+  var avg=s.done?Math.round(s.sum/s.done):0;
+  ov.innerHTML='<div class="ptop"><button class="x" id="prX">✕</button><span class="ttl">세션 완료</span></div>'
+    +'<div class="zh">수고하셨습니다</div>'
+    +'<div class="ko">읽은 문장 '+s.done+'개 · 평균 '+(s.done?avg+'점':'–')+' · 통과 '+s.pass+'개<br>'
+    +'누적 최고 '+p.best+'점 · 최고 연속 '+p.bestCombo+'회</div>'
+    +'<div class="pr-bar"><button class="pr-b" id="prMore">한 세트 더</button>'
+    +'<button class="pr-b" id="prDone" style="background:#fff;color:#1B1F22;border-color:#fff">닫기</button></div>';
+  document.getElementById('prX').addEventListener('click',prClose);
+  document.getElementById('prDone').addEventListener('click',prClose);
+  document.getElementById('prMore').addEventListener('click',function(){
+    var q=prQueue();
+    if(!q.length){prClose();return;}
+    prSession={items:q,idx:0,title:s.title,done:0,sum:0,pass:0};
+    prDraw();
+  });
+}
+function prClose(){
+  clearTimeout(prAutoStop);
+  if(prRec&&prRec.state==='recording'){try{prRec.stop();}catch(e){}}
+  prRec=null;prStopTracks();prSession=null;prBusy=false;
+  var ov=document.getElementById('prOv');
+  if(ov)ov.remove();
+  if(typeof renderPron==='function')renderPron();
+  if(typeof refreshStats==='function')refreshStats();
+}
+
+// ---- 발음 탭 ----
+function prSrcList(){
+  var out=[{id:'weak',label:'📉 내 약점 문장',sub:'점수 낮았던 문장 다시'}];
+  try{hfSources().forEach(function(s){out.push(s);});}catch(e){}
+  return out;
+}
+function prTrainHtml(){
+  var q=prQueue();
+  var h='<div class="pr-card"><h3>어떤 문장으로 <small>10문장 세트</small></h3><div class="pr-src">';
+  prSrcList().forEach(function(s){
+    h+='<button class="pr-srcb'+(prSrc===s.id?' on':'')+'" data-ps="'+s.id+'">'
+      +'<span class="t">'+esc(s.label)+'</span><span class="s">'+esc(s.sub)+'</span></button>';
+  });
+  h+='</div><button class="pr-go" id="prGo"'+(q.length?'':' disabled')+'>'
+    +(q.length?('▶ '+q.length+'문장 읽기 시작'):'읽을 문장이 없습니다')+'</button>'
+    +'<div class="pr-empty" style="margin-top:10px">점수가 낮았던 문장과 아직 안 읽은 문장이 먼저 나옵니다. '
+    +'회화 탭 쉐도잉 화면의 🎤 버튼으로 읽은 것도 같은 기록에 쌓입니다.</div></div>';
+  return h;
+}
+function prWeakHtml(){
+  var p=prState();
+  var ks=Object.keys(p.syl).filter(function(k){return p.syl[k].n>=2;});
+  ks.sort(function(a,b){
+    var aa=p.syl[a].sum/p.syl[a].n, bb=p.syl[b].sum/p.syl[b].n;
+    return aa-bb;
+  });
+  var h='<div class="pr-card"><h3>약한 음절 <small>2회 이상 읽은 것만</small></h3>';
+  if(!ks.length){
+    h+='<div class="pr-empty">아직 데이터가 없습니다. 연습 탭에서 몇 문장 읽고 나면 어떤 음절이 약한지 여기에 쌓입니다.<br>같은 음절이 2회 이상 나와야 순위에 들어갑니다.</div>';
+  }else{
+    ks.slice(0,25).forEach(function(k){
+      var e=p.syl[k], avg=Math.round(e.sum/e.n), c=prColor(avg);
+      h+='<div class="syl-row"><div class="syl-py">'+esc(k)+'<small>'+esc(e.z||'')+'</small></div>'
+        +'<div class="syl-bar"><i style="width:'+Math.max(4,avg)+'%;background:'+c+'"></i></div>'
+        +'<div class="syl-sc" style="color:'+c+'">'+avg+'점 · '+e.n+'회</div></div>';
+    });
+  }
+  h+='</div>';
+  var bad=Object.keys(p.sents).filter(function(z){return (p.sents[z].best||0)<PR_PASS;});
+  bad.sort(function(a,b){return (p.sents[a].best||0)-(p.sents[b].best||0);});
+  h+='<div class="pr-card"><h3>통과 못한 문장 <small>'+bad.length+'개</small></h3>';
+  if(!bad.length)h+='<div class="pr-empty">아직 없습니다.</div>';
+  else bad.slice(0,15).forEach(function(z){
+    var s=p.sents[z];
+    h+='<div class="pr-lg"><div class="s" style="background:'+prColor(s.best||0)+'">'+(s.best||0)+'</div>'
+      +'<div class="z">'+esc(z)+'</div><div class="d">'+(s.n||0)+'회</div></div>';
+  });
+  h+='</div>';
+  return h;
+}
+function prLogHtml(){
+  var p=prState();
+  var h='<div class="pr-card"><h3>최근 기록 <small>최대 30개</small></h3>';
+  if(!p.log.length)h+='<div class="pr-empty">아직 기록이 없습니다.</div>';
+  else p.log.slice(0,30).forEach(function(l){
+    var d=new Date(l.t);
+    var hh=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+    h+='<div class="pr-lg"><div class="s" style="background:'+prColor(l.s)+'">'+l.s+'</div>'
+      +'<div class="z">'+esc(l.z)+'</div><div class="d">'+((d.getMonth()+1)+'/'+d.getDate()+' '+hh)+'</div></div>';
+  });
+  h+='</div>';
+  var days=[], i;
+  for(i=6;i>=0;i--){
+    var dt=new Date();dt.setDate(dt.getDate()-i);
+    var key=dt.toISOString().slice(0,10);
+    days.push({key:key,n:(state.stats.days[key]&&state.stats.days[key].pr)||0,lbl:(dt.getMonth()+1)+'/'+dt.getDate()});
+  }
+  var mx=Math.max(1,Math.max.apply(null,days.map(function(d){return d.n;})));
+  h+='<div class="pr-card"><h3>최근 7일 읽은 문장 수</h3>';
+  days.forEach(function(d){
+    h+='<div class="syl-row"><div class="syl-py" style="font-size:12px">'+d.lbl+'</div>'
+      +'<div class="syl-bar"><i style="width:'+Math.round(d.n/mx*100)+'%;background:var(--red)"></i></div>'
+      +'<div class="syl-sc">'+d.n+'문장</div></div>';
+  });
+  h+='</div>';
+  return h;
+}
+function renderPron(){
+  var el=document.getElementById('prBody');if(!el)return;
+  var p=prState();
+  var avg=p.n?Math.round(p.sum/p.n):0;
+  var d=state.stats.days[today()]||{};
+  var h='<div class="pr-top">'
+    +'<div class="pr-stat"><div class="v">'+(d.pr||0)+'</div><div class="k">오늘 읽은<br>문장</div></div>'
+    +'<div class="pr-stat"><div class="v" style="color:'+(p.n?prColor(avg):'#1B1F22')+'">'+(p.n?avg:'–')+'</div><div class="k">누적<br>평균</div></div>'
+    +'<div class="pr-stat"><div class="v">'+p.best+'</div><div class="k">최고<br>점수</div></div>'
+    +'<div class="pr-stat"><div class="v">'+p.bestCombo+'</div><div class="k">최고<br>연속</div></div></div>'
+    +'<div class="pr-modes">'
+    +[['train','🎯 연습'],['weak','📉 약점'],['log','📊 기록']].map(function(m){
+      return '<button class="pr-mode'+(prMode===m[0]?' on':'')+'" data-pm="'+m[0]+'">'+m[1]+'</button>';
+    }).join('')+'</div>';
+  if(!pronUrl())h+='<div class="pr-card"><div class="pr-empty">발음 채점은 AI 서버가 필요합니다. 좌측 상단 ⚙︎에서 서버 주소를 등록하세요.</div></div>';
+  h+=(prMode==='train'?prTrainHtml():(prMode==='weak'?prWeakHtml():prLogHtml()));
+  el.innerHTML=h;
+  el.querySelectorAll('[data-pm]').forEach(function(b){
+    b.addEventListener('click',function(){prMode=b.dataset.pm;renderPron();});
+  });
+  el.querySelectorAll('[data-ps]').forEach(function(b){
+    b.addEventListener('click',function(){prSrc=b.dataset.ps;renderPron();});
+  });
+  var go=document.getElementById('prGo');
+  if(go)go.addEventListener('click',function(){
+    var q=prQueue();
+    var lbl='발음 연습';
+    prSrcList().forEach(function(s){if(s.id===prSrc)lbl=s.label;});
+    prOpen(q,lbl);
+  });
+}
+
 loadState();
 // 접속 가능한 동안 음성 파일을 기기에 저장해 둔다 (중국 네트워크 대비)
 setTimeout(function(){
