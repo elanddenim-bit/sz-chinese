@@ -624,6 +624,8 @@
   .pr-rec.rec{background:#fff;color:#D51030}
   .pr-rec:disabled{background:#464d5c;color:#98a1b2;cursor:default}
   .pr-msg{margin-top:12px;background:rgba(255,255,255,.1);border-radius:11px;padding:12px;color:#fff;font-size:12.5px;line-height:1.6}
+  .pr-diag{margin-top:9px;font-size:11px;color:#8A8C94;line-height:1.6;font-family:ui-monospace,Menlo,monospace}
+  .pr-res .pr-diag{color:#8A8C94}
   .pr-res{margin-top:16px;background:#fff;border-radius:16px;padding:16px}
   .pr-score{display:flex;align-items:center;gap:13px}
   .pr-big{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:23px;font-weight:800;color:#fff;flex-shrink:0}
@@ -649,7 +651,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.5</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.5.1</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -6820,6 +6822,7 @@ function vcDelete(z){
 // ================= 발음 평가 (Azure Speech) =================
 const PR_PASS=80;
 let prSession=null, prRec=null, prChunks=[], prStream=null, prBusy=false, prLast=null, prAutoStop=null;
+let prDiag=null, prLastBlobUrl='', prShowDiag=true, prRecMime='';
 let prMode='train', prSrc='s0';
 
 function pronUrl(){var u=aiUrl();return u?u+'/pronounce':'';}
@@ -6884,6 +6887,19 @@ async function blobToWavB64(blob){
     out[j]=s<0?s*0x8000:s*0x7FFF;
   }
   try{ac.close();}catch(e){}
+  // 진단용: 최대 진폭과 실제 말소리 길이를 잰다
+  var peak=0, loud=0;
+  for(var q=0;q<outLen;q++){
+    var v=Math.abs(out[q]);
+    if(v>peak)peak=v;
+    if(v>900)loud++;
+  }
+  prDiag={
+    srcRate:dec.sampleRate, srcCh:ch,
+    secs:Math.round(outLen/16000*100)/100,
+    peak:Math.round(peak/327.67)/100,      // 0~1
+    voiced:Math.round(loud/16000*100)/100  // 소리가 난 초
+  };
   return prWavB64(out,16000);
 }
 function prWavB64(pcm,sr){
@@ -6970,7 +6986,24 @@ function prDraw(){
 }
 function prMsg(t){
   var o=document.getElementById('prOut');
-  if(o)o.innerHTML=t?'<div class="pr-msg">'+esc(t)+'</div>':'';
+  if(o)o.innerHTML=t?'<div class="pr-msg">'+t+'</div>':'';
+  prBindDiag();
+}
+function prDiagHtml(){
+  var h='';
+  if(prDiag){
+    h+='<div class="pr-diag">녹음 진단 · 원본 '+prDiag.srcRate+'Hz '+prDiag.srcCh+'채널 · 길이 '+prDiag.secs+'초'
+      +' · 최대음량 '+prDiag.peak+' · 말소리 '+prDiag.voiced+'초'
+      +(prRecMime?(' · 형식 '+esc(prRecMime)):'')+'</div>';
+  }
+  if(prLastBlobUrl)h+='<button class="pr-b" id="prHear" style="margin-top:9px;width:100%">▶ 내 녹음 들어보기</button>';
+  return h;
+}
+function prBindDiag(){
+  var b=document.getElementById('prHear');
+  if(b)b.addEventListener('click',function(){
+    try{stopAll();var a=new Audio(prLastBlobUrl);curAudio=a;a.play();}catch(e){}
+  });
 }
 function prStopTracks(){
   try{if(prStream)prStream.getTracks().forEach(function(t){t.stop();});}catch(e){}
@@ -7001,6 +7034,9 @@ async function prToggleRec(){
     var type=prChunks.length&&prChunks[0].type?prChunks[0].type:(mt||'audio/webm');
     var blob=new Blob(prChunks,{type:type});
     prRec=null;
+    try{if(prLastBlobUrl)URL.revokeObjectURL(prLastBlobUrl);}catch(e){}
+    prLastBlobUrl=URL.createObjectURL(blob);
+    prRecMime=type;
     prSend(blob);
   };
   stopAll();
@@ -7023,8 +7059,17 @@ async function prSend(blob){
   }
   if(!blob||blob.size<1200){fail('녹음이 너무 짧습니다. 버튼을 누른 뒤 문장을 끝까지 읽고 다시 눌러 주세요.');return;}
   var b64='';
+  prDiag=null;
   try{b64=await blobToWavB64(blob);}
-  catch(e){fail('녹음 변환에 실패했습니다. 다시 시도해 주세요.');return;}
+  catch(e){fail('녹음 변환에 실패했습니다. 다시 시도해 주세요.'+prDiagHtml());return;}
+  if(prDiag&&prDiag.peak<0.02){
+    fail('마이크에 소리가 거의 들어오지 않았습니다. 아래 ▶로 녹음을 직접 들어보세요.'+prDiagHtml());
+    return;
+  }
+  if(prDiag&&prDiag.voiced<0.25){
+    fail('말소리가 너무 짧습니다. 버튼을 누르고 한 박자 쉰 뒤 읽어 주세요.'+prDiagHtml());
+    return;
+  }
   var r=null;
   try{
     var res=await fetch(pronUrl(),{method:'POST',headers:{'content-type':'application/json'},
@@ -7091,6 +7136,8 @@ function prShow(it,r){
   if(chips)h+='<div class="pr-syls">'+chips+'</div>';
   h+='<div class="pr-ph" id="prPh"><span class="g">글자를 누르면 음절·음소 점수를 볼 수 있습니다.</span></div>';
   if(r.recognized)h+='<div class="pr-heard">들린 문장: '+esc(r.recognized)+'</div>';
+  else h+='<div class="pr-heard">들린 문장이 없습니다 — 마이크에 소리가 안 담겼을 수 있습니다.</div>';
+  if(prShowDiag)h+=prDiagHtml();
   h+='</div>'
     +'<div class="pr-bar"><button class="pr-b" id="prAgain">🎤 다시 읽기</button>'
     +'<button class="pr-b" id="prNextB" style="background:#fff;color:#1B1F22;border-color:#fff">'
@@ -7100,6 +7147,7 @@ function prShow(it,r){
     b.addEventListener('click',function(){prDetail(parseInt(b.dataset.wi));});
   });
   document.getElementById('prAgain').addEventListener('click',prToggleRec);
+  prBindDiag();
   document.getElementById('prNextB').addEventListener('click',prNext);
   var ov=document.getElementById('prOv');
   if(ov)setTimeout(function(){ov.scrollTop=ov.scrollHeight;},60);
