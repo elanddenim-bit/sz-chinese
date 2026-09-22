@@ -556,6 +556,27 @@
   .modal .mbtn.ghost{background:#fff;border:1px solid var(--hair);color:var(--navy)}
   .modal .mstat{font-size:12px;margin-top:10px;line-height:1.5}
   footer{position:fixed;bottom:0;left:0;right:0;background:var(--navy);color:#8f9ab0;font-size:10px;padding:7px 14px;text-align:center;letter-spacing:0.2px;z-index:30}
+  /* ===== 사진 → 단어 ===== */
+  .vc-bar{display:flex;gap:7px;margin-bottom:11px}
+  .vc-btn{flex:1;border:1px solid var(--hair);background:#fff;border-radius:11px;padding:12px 8px;font-size:12.5px;font-weight:700;color:var(--navy);font-family:inherit;cursor:pointer}
+  .vc-btn.main{background:var(--c5);color:#fff;border-color:var(--c5)}
+  .vc-btn:disabled{opacity:.5;cursor:default}
+  .vc-item{border:1px solid var(--hair);border-radius:12px;padding:11px 12px;margin-bottom:8px;background:#fff;display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+  .vc-item.off{opacity:.45}
+  .vc-ck{width:21px;height:21px;border-radius:6px;border:1.5px solid var(--hair);flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;background:#fff}
+  .vc-item.on .vc-ck{background:var(--c5);border-color:var(--c5)}
+  .vc-z{font-size:16.5px;font-weight:700;color:var(--navy)}
+  .vc-p{font-size:11.5px;color:var(--grey);margin-left:5px}
+  .vc-k{font-size:12.5px;color:var(--navy);margin-top:3px}
+  .vc-ex{font-size:11.5px;color:var(--grey);margin-top:7px;line-height:1.65;border-top:1px dashed var(--hair);padding-top:7px}
+  .vc-ex b{color:var(--navy);font-weight:700;font-size:13px}
+  .vc-day{display:flex;gap:9px;align-items:center;margin-bottom:11px}
+  .vc-day input{flex:1;border:1px solid var(--hair);border-radius:10px;padding:10px 12px;font-size:13px;font-family:inherit;color:var(--navy)}
+  .vc-note{font-size:11.5px;color:var(--grey);line-height:1.65;margin-bottom:11px}
+  .vc-load{text-align:center;padding:28px 10px;font-size:13px;color:var(--grey);line-height:1.8}
+  .myex{font-size:11.5px;color:var(--grey);margin-top:6px;line-height:1.6;border-top:1px dashed var(--hair);padding-top:6px}
+  .myex b{color:var(--navy);font-weight:700}
+  .myday{display:inline-block;background:var(--c5bg);color:var(--c5);font-size:10px;font-weight:800;border-radius:6px;padding:2px 6px;margin-left:6px;vertical-align:2px}
   /* ===== 발음 평가 ===== */
   nav button{font-size:clamp(9.5px,2.85vw,12.5px);white-space:nowrap}
   .pr-top{display:flex;gap:6px;margin-bottom:12px}
@@ -628,7 +649,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.3.1</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.4</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -690,6 +711,7 @@
     <button class="selmain" id="wfSel"><span class="dot"></span><span class="txt" id="wfSelTxt">HSK 4급</span><span class="arw">▼</span></button>
   </div>
   <div class="scenario-note">단어를 누르면 발음이 재생됩니다. 학습 상태: <b style="color:#1E7F4F">초록 = 마스터(연속 2회 정답)</b> · <b style="color:#D51030">빨강 = 오답 대기</b>. 암기는 퀴즈 탭에서 하세요.</div>
+  <div id="vcBar"></div>
   <div id="wordList"></div>
 </div>
 
@@ -4439,6 +4461,7 @@ async function loadState(){
   if(!state.ptDone)state.ptDone={};
   if(!state.rp)state.rp={};
   if(typeof prState==='function')prState();
+  if(typeof registerDeck==='function')registerDeck();
   if(!cfg||!cfg.sid){
     document.getElementById('welModal').classList.add('show');
   }else if(!cfgReady()){
@@ -4786,18 +4809,33 @@ renderScen();
 let curLv=4;
 function renderWords(){
   const wrap=document.getElementById('wordList');wrap.innerHTML='';
-  const ids=curLv===4?W4_IDS:(curLv===5?W5_IDS:(curLv==='biz'?W7_IDS:W301_IDS));
+  if(typeof renderVocabBar==='function')renderVocabBar();
+  const ids=curLv==='my'?(typeof MY_IDS!=='undefined'?MY_IDS:[])
+    :(curLv===4?W4_IDS:(curLv===5?W5_IDS:(curLv==='biz'?W7_IDS:W301_IDS)));
+  if(curLv==='my'&&!ids.length){
+    wrap.innerHTML='<div class="qz-empty" style="padding:18px;line-height:1.8">아직 추가한 단어가 없습니다.<br>위의 📷 버튼으로 학습 자료 사진을 올리면<br>단어와 광저우 현장 예문이 여기에 쌓입니다.</div>';
+    return;
+  }
   ids.forEach(id=>{
     const it=ITEMS[id],p=state.prog[id];
     let mark='';
     if(p&&p.inWrong)mark=' style="border-left:3px solid #D51030"';
     else if(p&&p.mastered)mark=' style="border-left:3px solid #1E7F4F"';
+    const isMy=(it.lv==='my');
+    const dayB=(isMy&&it.day)?'<span class="myday">Day '+it.day+'</span>':'';
+    const exH=(isMy&&it.ex&&it.ex.z)?'<div class="myex"><b class="zh">'+esc(it.ex.z)+'</b> '
+      +'<button class="playbtn sm" data-t="'+esc(it.ex.z)+'" style="vertical-align:middle;margin-left:4px">▶</button>'
+      +'<br>'+esc(it.ex.p||'')+'<br>'+esc(it.ex.k||'')+'</div>':'';
+    const delH=isMy?'<button class="playbtn sm" data-mydel="'+esc(it.z)+'" style="background:#c6cbd6">✕</button>':'';
     const div=document.createElement('div');div.className='rv-item';
     div.innerHTML=`<div class="rv-row"${mark}><div style="flex:1;padding-left:${mark?'8px':'0'}">
-      <span class="rv-zh zh">${esc(it.z)}</span> <span class="apy" style="margin-left:6px">${esc(it.p)}</span>
-      <div class="rv-ko">${esc(it.k)}</div></div>
-      <button class="playbtn sm" data-t="${esc(it.z)}">▶</button></div>`;
+      <span class="rv-zh zh">${esc(it.z)}</span> <span class="apy" style="margin-left:6px">${esc(it.p)}</span>${dayB}
+      <div class="rv-ko">${esc(it.k)}</div>${exH}</div>
+      <button class="playbtn sm" data-t="${esc(it.z)}">▶</button>${delH}</div>`;
     wrap.appendChild(div);
+  });
+  wrap.querySelectorAll('[data-mydel]').forEach(function(b){
+    b.addEventListener('click',function(){vcDelete(b.dataset.mydel);});
   });
 }
 
@@ -4809,6 +4847,7 @@ function lvBadge(item){
   if(item.kind==='sent')return '<span class="lvbadge ls">회화</span>';
   if(item.lv===4)return '<span class="lvbadge l4">HSK4</span>';
   if(item.lv==='biz')return '<span class="lvbadge lb">실무</span>';
+  if(item.lv==='my')return '<span class="lvbadge lb">내 단어</span>';
   if(item.lv===5)return '<span class="lvbadge l5">HSK5</span>';
   return '<span class="lvbadge l3">301</span>';
 }
@@ -4850,8 +4889,9 @@ function poolIds(){
   if(qzSrc==='hsk5')return W5_IDS;
   if(qzSrc==='w301')return W301_IDS;
   if(qzSrc==='biz')return W7_IDS;
+  if(qzSrc==='my')return (typeof MY_IDS!=='undefined'?MY_IDS:[]);
   if(qzSrc==='s301')return S301_IDS;
-  return W4_IDS.concat(W5_IDS,W301_IDS,W7_IDS);
+  return W4_IDS.concat(W5_IDS,W301_IDS,W7_IDS,(typeof MY_IDS!=='undefined'?MY_IDS:[]));
 }
 function pickWeighted(ids){
   // 오답·미학습 가중치: 오답대기 x4, 미학습 x2, 마스터 x0.5
@@ -6113,7 +6153,7 @@ function renderReview(){
   const rest=ids.filter(id=>(state.prog[id].streak||0)<1);
   function row(id){
     const it=ITEMS[id],p=state.prog[id];
-    const src=it.kind==='sent'?SCEN_NAMES[it.si]+' · '+it.ctx:(it.lv==='301s'?'기초 문장 301':(it.lv===301?'회화 301구':(it.lv==='biz'?'실무 어휘':'HSK '+it.lv+'급')));
+    const src=it.kind==='sent'?SCEN_NAMES[it.si]+' · '+it.ctx:(it.lv==='301s'?'기초 문장 301':(it.lv===301?'회화 301구':(it.lv==='biz'?'실무 어휘':(it.lv==='my'?('내 단어'+(it.day?' Day '+it.day:'')):'HSK '+it.lv+'급'))));
     const isNear=(p.streak||0)>=1;
     const div=document.createElement('div');div.className='rv-item'+(isNear?' near':'');
     div.innerHTML=`<div class="rv-row"><div style="flex:1">
@@ -6461,8 +6501,8 @@ function renderHome(){
 
 // ================= 선택 시트 =================
 const SCEN_ICONS=['🏭','💰','⚠️','💬','🏙'];
-const SRC_LABEL={sent:'회화 문장',hsk4:'HSK 4급',hsk5:'HSK 5급',w301:'301구 단어',biz:'실무 어휘',s301:'기초 문장',word:'단어 전체'};
-const SRC_SUB={sent:'공장·생활 회화',hsk4:'509단어',hsk5:'1,316단어',w301:'810단어',biz:'소싱·무역 46',s301:'301문장',word:'전체 2,681'};
+const SRC_LABEL={sent:'회화 문장',hsk4:'HSK 4급',hsk5:'HSK 5급',w301:'301구 단어',biz:'실무 어휘',my:'내 단어',s301:'기초 문장',word:'단어 전체'};
+const SRC_SUB={sent:'공장·생활 회화',hsk4:'509단어',hsk5:'1,316단어',w301:'810단어',biz:'소싱·무역 46',my:'사진에서 추가',s301:'301문장',word:'전체 2,681+'};
 const MODE_LABEL={pick:'뜻 고르기',build:'문장 조립',fill:'빈칸 채우기',pattern:'패턴 드릴',number:'숫자 드릴'};
 const MODE_ICON={pick:'🎯',build:'🧩',fill:'✏️',pattern:'📐',number:'🔢'};
 function openSheet(html){
@@ -6489,9 +6529,9 @@ function updateQzSel(){
   document.getElementById('qzSel').style.setProperty('--sel-color',cssv('red'));
 }
 function updateWfSel(){
-  const t=curLv===4?'HSK 4급':(curLv===5?'HSK 5급':(curLv==='biz'?'실무 어휘':'회화 301구'));
+  const t=curLv==='my'?'내 단어':(curLv===4?'HSK 4급':(curLv===5?'HSK 5급':(curLv==='biz'?'실무 어휘':'회화 301구')));
   document.getElementById('wfSelTxt').textContent=t;
-  document.getElementById('wfSel').style.setProperty('--sel-color',cssv(curLv===4?'lv4':(curLv===5?'lv5':(curLv==='biz'?'c5':'c3'))));
+  document.getElementById('wfSel').style.setProperty('--sel-color',cssv(curLv==='my'?'c1':(curLv===4?'lv4':(curLv===5?'lv5':(curLv==='biz'?'c5':'c3')))));
 }
 // ---- 회화 시트 ----
 document.getElementById('scSel').addEventListener('click',function(){
@@ -6517,7 +6557,7 @@ document.getElementById('scSel').addEventListener('click',function(){
 // ---- 퀴즈 시트 ----
 document.getElementById('qzSel').addEventListener('click',function(){
   var h='<h4>출제 범위</h4><div class="optgrid">';
-  ['sent','hsk4','hsk5','w301','biz','s301','word'].forEach(function(s){
+  ['sent','hsk4','hsk5','w301','biz','my','s301','word'].forEach(function(s){
     h+='<button class="obtn'+(qzSrc===s?' on':'')+'" data-src="'+s+'"><span class="ot">'+SRC_LABEL[s]+'<span class="osub">'+SRC_SUB[s]+'</span></span></button>';
   });
   h+='</div><h4>문제 유형</h4><div class="optgrid c1">';
@@ -6536,12 +6576,12 @@ document.getElementById('qzSel').addEventListener('click',function(){
 // ---- 단어장 시트 ----
 document.getElementById('wfSel').addEventListener('click',function(){
   var h='<h4>단어장</h4><div class="optgrid c1">'
-    +[[4,'HSK 4급','509단어',cssv('lv4')],[5,'HSK 5급','1,316단어',cssv('lv5')],[301,'회화 301구','810단어',cssv('c3')],['biz','실무 어휘','소싱·무역 46',cssv('c5')]]
+    +[[4,'HSK 4급','509단어',cssv('lv4')],[5,'HSK 5급','1,316단어',cssv('lv5')],[301,'회화 301구','810단어',cssv('c3')],['biz','실무 어휘','소싱·무역 46',cssv('c5')],['my','내 단어',(typeof MY_IDS!=='undefined'?MY_IDS.length:0)+'단어 · 사진에서 추가',cssv('c1')]]
       .map(function(o){return '<button class="obtn'+(curLv===o[0]?' on':'')+'" data-lv="'+o[0]+'" style="--o-color:'+o[3]+';--o-bg:#fff"><span class="ot">'+o[1]+'<span class="osub">'+o[2]+'</span></span></button>';}).join('')
     +'</div>';
   openSheet(h);
   document.querySelectorAll('#sheetBody [data-lv]').forEach(function(b){
-    b.addEventListener('click',function(){var v=b.dataset.lv;curLv=(v==='biz'?'biz':parseInt(v));renderWords();updateWfSel();closeSheet();});
+    b.addEventListener('click',function(){var v=b.dataset.lv;curLv=((v==='biz'||v==='my')?v:parseInt(v));renderWords();updateWfSel();closeSheet();});
   });
 });
 
@@ -6552,6 +6592,170 @@ document.querySelectorAll('.fd-mode').forEach(function(b){
     b.classList.add('on'); fdMode=b.dataset.fd; renderField();
   });
 });
+// ================= 사진 → 단어 (Claude Vision) =================
+const MY_IDS=[];
+let vcPend=null, vcBusy=false;
+
+function vocabUrl(){var u=aiUrl();return u?u+'/vocab':'';}
+function deck(){
+  if(!state.deck)state.deck={words:[]};
+  if(!Array.isArray(state.deck.words))state.deck.words=[];
+  return state.deck;
+}
+function registerDeck(){
+  var d=deck();
+  MY_IDS.length=0;
+  d.words.forEach(function(w){
+    if(!w||!w.z)return;
+    var id='my-'+fnv(w.z);
+    ITEMS[id]={id:id,kind:'word',lv:'my',z:w.z,p:w.p||'',k:w.k||'',day:w.day||null,ex:w.ex||null};
+    if(MY_IDS.indexOf(id)<0)MY_IDS.push(id);
+  });
+}
+function renderVocabBar(){
+  var el=document.getElementById('vcBar');
+  if(!el)return;
+  if(!vocabUrl()){
+    el.innerHTML=(curLv==='my')
+      ?'<div class="vc-note">사진 단어 추가는 AI 서버가 필요합니다. 좌측 상단 ⚙︎에서 서버 주소를 등록하세요.</div>':'';
+    return;
+  }
+  el.innerHTML='<div class="vc-bar">'
+    +'<button class="vc-btn main" id="vcPick"'+(vcBusy?' disabled':'')+'>📷 사진에서 단어 추가</button>'
+    +'<button class="vc-btn" id="vcMine">내 단어 '+MY_IDS.length+'</button></div>'
+    +'<input type="file" id="vcFile" accept="image/*" multiple style="display:none">';
+  document.getElementById('vcPick').addEventListener('click',function(){
+    document.getElementById('vcFile').click();
+  });
+  document.getElementById('vcMine').addEventListener('click',function(){
+    curLv='my';renderWords();updateWfSel();
+  });
+  document.getElementById('vcFile').addEventListener('change',vcUpload);
+}
+// 사진 축소 (긴 변 1600px, JPEG) — 업로드 용량과 전송 시간을 줄인다
+function vcShrink(file,maxPx){
+  return new Promise(function(res,rej){
+    var fr=new FileReader();
+    fr.onerror=function(){rej(new Error('read'));};
+    fr.onload=function(){
+      var img=new Image();
+      img.onerror=function(){rej(new Error('img'));};
+      img.onload=function(){
+        try{
+          var r=Math.min(1,maxPx/Math.max(img.width,img.height));
+          var cw=Math.max(1,Math.round(img.width*r)), chh=Math.max(1,Math.round(img.height*r));
+          var cv=document.createElement('canvas');cv.width=cw;cv.height=chh;
+          var cx=cv.getContext('2d');
+          cx.fillStyle='#fff';cx.fillRect(0,0,cw,chh);
+          cx.drawImage(img,0,0,cw,chh);
+          var url=cv.toDataURL('image/jpeg',0.82);
+          res({media_type:'image/jpeg',data:url.split(',')[1]});
+        }catch(e){rej(e);}
+      };
+      img.src=fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+async function vcUpload(e){
+  var files=Array.prototype.slice.call((e.target&&e.target.files)||[]).slice(0,4);
+  if(e.target)e.target.value='';
+  if(!files.length)return;
+  vcBusy=true;
+  openSheet('<h4>사진에서 단어 읽는 중</h4><div class="vc-load">사진 '+files.length+'장을 읽고 있습니다.<br>20초쯤 걸립니다.</div>');
+  var imgs=[];
+  try{
+    for(var i=0;i<files.length;i++)imgs.push(await vcShrink(files[i],1600));
+  }catch(err){
+    vcBusy=false;
+    openSheet('<h4>사진 오류</h4><div class="vc-load">사진을 읽지 못했습니다.<br>다른 사진으로 다시 시도해 주세요.</div>');
+    return;
+  }
+  var r=null;
+  try{
+    var res=await fetch(vocabUrl(),{method:'POST',headers:{'content-type':'application/json'},
+      body:JSON.stringify({code:(cfg&&cfg.sid)||'',images:imgs})});
+    r=await res.json();
+  }catch(err){r=null;}
+  vcBusy=false;
+  if(!r||r.error){
+    openSheet('<h4>추출 실패</h4><div class="vc-load">'+esc((r&&r.error)||'서버에 연결하지 못했습니다.')+'</div>');
+    return;
+  }
+  if(r.ok===false){
+    openSheet('<h4>단어를 찾지 못했습니다</h4><div class="vc-load">'+esc(r.message||'')+'</div>');
+    return;
+  }
+  var have={};
+  deck().words.forEach(function(w){have[w.z]=1;});
+  vcPend={day:r.day||null,words:(r.words||[]).map(function(w){
+    return {w:w,on:!have[w.z],dup:!!have[w.z]};
+  })};
+  vcReview();
+}
+function vcReview(){
+  if(!vcPend)return;
+  var n=vcPend.words.filter(function(it){return it.on;}).length;
+  var h='<h4>추가할 단어 고르기</h4>'
+    +'<div class="vc-day"><span style="font-size:12.5px;font-weight:700;color:var(--navy)">Day</span>'
+    +'<input type="number" id="vcDay" inputmode="numeric" placeholder="번호 (선택)" value="'+(vcPend.day||'')+'"></div>'
+    +'<div class="vc-note">예문은 사진을 옮긴 것이 아니라 광저우 현장 상황으로 새로 만든 문장입니다. '
+    +'어색하거나 필요 없는 항목은 눌러서 체크를 해제하세요.</div>';
+  vcPend.words.forEach(function(it,i){
+    var w=it.w;
+    h+='<div class="vc-item'+(it.on?' on':'')+(it.dup?' off':'')+'" data-vi="'+i+'">'
+      +'<div class="vc-ck">'+(it.on?'✓':'')+'</div><div style="flex:1">'
+      +'<span class="vc-z zh">'+esc(w.z)+'</span><span class="vc-p">'+esc(w.p||'')+'</span>'
+      +'<div class="vc-k">'+esc(w.k||'')+(it.dup?' · 이미 있는 단어':'')+'</div>'
+      +(w.ex&&w.ex.z?('<div class="vc-ex"><b class="zh">'+esc(w.ex.z)+'</b><br>'+esc(w.ex.p||'')+'<br>'+esc(w.ex.k||'')+'</div>'):'')
+      +'</div></div>';
+  });
+  h+='<button class="vc-btn main" id="vcSave" style="width:100%;margin-top:6px;padding:15px;font-size:14px"'
+    +(n?'':' disabled')+'>'+(n?('선택한 '+n+'개 추가'):'선택된 단어가 없습니다')+'</button>';
+  openSheet(h);
+  document.querySelectorAll('#sheetBody [data-vi]').forEach(function(el){
+    el.addEventListener('click',function(){
+      var i=parseInt(el.dataset.vi);
+      var day=document.getElementById('vcDay');
+      if(day)vcPend.day=parseInt(day.value||'')||null;
+      vcPend.words[i].on=!vcPend.words[i].on;
+      vcReview();
+    });
+  });
+  var sv=document.getElementById('vcSave');
+  if(sv)sv.addEventListener('click',vcSave);
+}
+function vcSave(){
+  if(!vcPend)return;
+  var dayEl=document.getElementById('vcDay');
+  var day=dayEl?(parseInt(dayEl.value||'')||null):null;
+  var d=deck(), have={}, n=0;
+  d.words.forEach(function(w){have[w.z]=1;});
+  vcPend.words.forEach(function(it){
+    if(!it.on||have[it.w.z])return;
+    d.words.push({z:it.w.z,p:it.w.p||'',k:it.w.k||'',ex:it.w.ex||null,day:day,t:today()});
+    have[it.w.z]=1;n++;
+  });
+  vcPend=null;
+  saveState();registerDeck();
+  closeSheet();
+  curLv='my';renderWords();updateWfSel();
+  var wrap=document.getElementById('wordList');
+  if(wrap&&n)wrap.insertAdjacentHTML('afterbegin',
+    '<div class="vc-note" style="background:var(--c5bg);color:var(--c5);border-radius:10px;padding:10px 12px;font-weight:700">'
+    +n+'개 추가했습니다. 퀴즈 탭에서 출처를 «내 단어»로 고르면 바로 출제됩니다.</div>');
+}
+function vcDelete(z){
+  var d=deck();
+  var i=d.words.findIndex(function(w){return w.z===z;});
+  if(i<0)return;
+  d.words.splice(i,1);
+  var id='my-'+fnv(z);
+  delete ITEMS[id];
+  if(state.prog[id])delete state.prog[id];
+  saveState();registerDeck();renderWords();updateWfSel();
+}
+
 // ================= 발음 평가 (Azure Speech) =================
 const PR_PASS=80;
 let prSession=null, prRec=null, prChunks=[], prStream=null, prBusy=false, prLast=null, prAutoStop=null;
