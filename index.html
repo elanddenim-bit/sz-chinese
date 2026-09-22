@@ -658,7 +658,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.6</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.6.1</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -7146,6 +7146,21 @@ function prBindDiag(){
     try{stopAll();var a=new Audio(prLastBlobUrl);curAudio=a;a.play();}catch(e){}
   });
 }
+// iOS 는 재생과 녹음이 같은 오디오 세션을 쓴다.
+// 재생 중이거나 직후에 마이크를 열면 무음이 들어오므로, 먼저 세션을 놓아준다.
+function prReleaseAudio(){
+  try{stopAll();}catch(e){}
+  try{
+    if(curAudio){
+      try{curAudio.pause();}catch(e){}
+      try{curAudio.currentTime=0;}catch(e){}
+      try{curAudio.removeAttribute('src');curAudio.load();}catch(e){}
+      curAudio=null;
+    }
+  }catch(e){}
+  try{if('speechSynthesis' in window)speechSynthesis.cancel();}catch(e){}
+}
+function prWait(ms){return new Promise(function(r){setTimeout(r,ms);});}
 function prStopTracks(){
   try{if(prStream)prStream.getTracks().forEach(function(t){t.stop();});}catch(e){}
   prStream=null;
@@ -7157,9 +7172,15 @@ async function prToggleRec(){
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia||!window.MediaRecorder){
     prMsg('이 브라우저는 녹음을 지원하지 않습니다. 사파리 또는 크롬 최신 버전에서 열어 주세요.');return;
   }
+  // 재생 중인 소리를 먼저 끊고 세션이 풀릴 시간을 준다
+  prReleaseAudio();
+  if(btn){btn.disabled=true;btn.textContent='준비 중…';}
+  await prWait(300);
+  if(btn){btn.disabled=false;}
   try{
     prStream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true}});
   }catch(e){
+    if(btn)btn.textContent='🎤 녹음 시작';
     prMsg('마이크 권한이 필요합니다. 홈화면 앱이면 설정 > Safari > 마이크에서 허용해 주세요.');return;
   }
   var mt='';
@@ -7180,7 +7201,6 @@ async function prToggleRec(){
     prRecMime=type;
     prSend(blob);
   };
-  stopAll();
   prMsg('');
   try{prRec.start();}catch(e){prStopTracks();prMsg('녹음을 시작하지 못했습니다.');return;}
   if(btn){btn.classList.add('rec');btn.textContent='■ 녹음 중 — 누르면 채점';}
@@ -7204,7 +7224,7 @@ async function prSend(blob){
   try{b64=await blobToWavB64(blob);}
   catch(e){fail('녹음 변환에 실패했습니다. 다시 시도해 주세요.'+prDiagHtml());return;}
   if(prDiag&&prDiag.peak<0.02){
-    fail('마이크에 소리가 거의 들어오지 않았습니다. 아래 ▶로 녹음을 직접 들어보세요.'+prDiagHtml());
+    fail('마이크에 소리가 들어오지 않았습니다. 원어민 듣기를 재생한 직후라면 2초쯤 기다렸다 다시 눌러 보세요.'+prDiagHtml());
     return;
   }
   if(prDiag&&prDiag.voiced<0.25){
