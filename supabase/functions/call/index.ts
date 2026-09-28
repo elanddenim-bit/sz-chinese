@@ -5,7 +5,9 @@
 // 앱은 {ai}/call/<동작> 으로 부른다. Supabase 가 /functions/v1/call/* 를 전부 이 함수로 넘긴다.
 //  POST /call/ping   {code}                         → {ok, usage}
 //  POST /call/say    {code, text, sc}               → {audio}            첫 대사 음성(STT 사용 없음)
-//  POST /call/turn   {code, audio, sc, history, n}  → {heard, reply:{z,p,k}, end, audio, sec, usage}
+//  POST /call/turn   {code, audio, sc, history, n}  → {heard, reply:{z,p,k}, hints[], end, audio, sec, usage}
+//                    {code, stuck:true, sc, history} → 녹음 없이 상대가 더 쉽게 다시 묻기(STT 사용 없음)
+//  sc.level 1 연습(협조·쉬운 말·힌트) / 2 보통 / 3 실전(원래 성격 그대로),  sc.kind life|work,  sc.me 사용자 신분
 //  POST /call/review {code, sc, turns}              → {score, verdict, outcome, strategy[], lines[], phrases[]}
 //  audio = 16kHz mono WAV base64 (pronounce 와 같은 형식)
 //
@@ -46,7 +48,7 @@ Deno.serve(async (req) => {
   if (!allowed(body?.code)) return json({ error: "not_allowed" }, 403);
   try {
     if (action === "ping") return json({ ok: true, usage: await usage() });
-    if (action === "say") return json({ audio: await tts(String(body.text || "").slice(0, 120), cleanSc(body.sc).voice) });
+    if (action === "say") { const sc = cleanSc(body.sc); return json({ audio: await tts(String(body.text || "").slice(0, 120), sc.voice, sc.level) }); }
     if (action === "turn") return json(await turn(body));
     if (action === "review") return json(await review(body));
     return json({ error: "not_found" }, 404);
@@ -111,6 +113,14 @@ async function addUsage(add: number) {
 // ---------------- 통화 한 턴: STT → Claude → TTS ----------------
 async function turn(b: any) {
   const sc = cleanSc(b.sc);
+  const history = (Array.isArray(b.history) ? b.history : []).slice(-16)
+    .map((t: any) => ({ r: t?.r === "me" ? "me" : "npc", z: String(t?.z || "").slice(0, 200) }));
+  if (b.stuck === true) { // 막힘 도움: 오디오 없음 → Azure STT 사용량 0
+    const reply = await npcReply(sc, history, "", history.filter((t: any) => t.r === "me").length, true);
+    let audio = "";
+    try { audio = await tts(reply.z, sc.voice, sc.level); } catch { audio = ""; }
+    return { heard: "", reply: { z: reply.z, p: reply.p, k: reply.k }, hints: reply.hints, end: false, audio, sec: 0 };
+  }
   const u0 = await usage();
   if (u0.tracked && u0.sec >= u0.cap) throw err("quota", "이번 달 통화용 음성 인식 한도를 다 썼습니다", 429);
 
@@ -122,14 +132,12 @@ async function turn(b: any) {
   const heard = await stt(wav);
   await addUsage(Math.ceil(sec)); // Azure 는 초 단위 올림 과금
 
-  const history = (Array.isArray(b.history) ? b.history : []).slice(-16)
-    .map((t: any) => ({ r: t?.r === "me" ? "me" : "npc", z: String(t?.z || "").slice(0, 200) }));
   const n = parseInt(b.n) || history.filter((t: any) => t.r === "me").length + 1;
-  const reply = await npcReply(sc, history, heard, n);
+  const reply = await npcReply(sc, history, heard, n, false);
 
   let audio = "";
-  try { audio = await tts(reply.z, sc.voice); } catch { audio = ""; } // 음성 실패 시 앱이 /tts 로 재시도
-  return { heard, reply: { z: reply.z, p: reply.p, k: reply.k }, end: !!reply.end, audio, sec, usage: await usage() };
+  try { audio = await tts(reply.z, sc.voice, sc.level); } catch { audio = ""; } // 음성 실패 시 앱이 /tts 로 재시도
+  return { heard, reply: { z: reply.z, p: reply.p, k: reply.k }, hints: reply.hints, end: !!reply.end, audio, sec, usage: await usage() };
 }
 
 function cleanSc(sc: any) {
@@ -139,6 +147,9 @@ function cleanSc(sc: any) {
     title: s(sc.title, 60), setting: s(sc.setting, 400), npc: s(sc.npc, 200), persona: s(sc.persona, 600),
     goal: s(sc.goal, 300), keys: (Array.isArray(sc.keys) ? sc.keys : []).slice(0, 6).map((k: unknown) => s(k, 80)),
     voice: VOICES.includes(sc.voice) ? sc.voice : DEFAULT_VOICE,
+    level: [1, 2, 3].includes(Number(sc.level)) ? Number(sc.level) : 1,
+    kind: sc.kind === "life" ? "life" : "work",
+    me: s(sc.me, 120) || "朴总（韩国服装公司广州分公司负责人，韩国人，中文HSK4~5水平）",
   };
 }
 
@@ -162,10 +173,11 @@ async function stt(wav: Uint8Array) {
   return String(best.Display || d.DisplayText || "").trim();
 }
 
-async function tts(text: string, voice: string) {
+async function tts(text: string, voice: string, level = 3) {
+  const rate = level === 1 ? "-20%" : level === 2 ? "-10%" : "-5%"; // 연습일수록 천천히
   const region = env("AZURE_SPEECH_REGION") || "eastasia";
   const esc = String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const ssml = `<speak version="1.0" xml:lang="zh-CN"><voice name="${voice}"><prosody rate="-5%">${esc}</prosody></voice></speak>`;
+  const ssml = `<speak version="1.0" xml:lang="zh-CN"><voice name="${voice}"><prosody rate="${rate}">${esc}</prosody></voice></speak>`;
   const r = await fetch(`https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`, {
     method: "POST",
     headers: {
@@ -180,29 +192,53 @@ async function tts(text: string, voice: string) {
   return bytesToB64(new Uint8Array(await r.arrayBuffer()));
 }
 
-async function npcReply(sc: ReturnType<typeof cleanSc>, history: { r: string; z: string }[], heard: string, n: number) {
-  const system = `你在一个中文口语训练App里扮演电话另一头的人。对方是韩国服装公司广州分公司的负责人"朴总"（韩国人，中文HSK4~5水平），这是一通真实感很强的电话。
+const LEVEL_RULES: Record<number, string> = {
+  1: `【难度：练习】对方中文不太好，说话慢，常常找不到词。
+- 你要非常配合、友好、有耐心。你的性格设定里的刁难点先不要用，最多提一个很小、很好解决的问题。
+- 每次只说一句，不超过20个字，只用最常用的词（HSK3水平），不用成语和方言。
+- 多用选择问句（"A还是B？"）或是非问句，让对方容易回答。
+- 对方说错了但能猜懂，就按猜到的意思继续，并用正确的说法自然地重复一遍关键词（比如"哦，放丰巢柜是吧？"）。`,
+  2: `【难度：普通】对方中文中等。
+- 你基本配合，但会按性格设定提出一两个现实的问题（时间冲突、规定不允许、要加钱等），需要对方想办法解决。
+- 每次1~2句，合计不超过30个字，用日常口语。`,
+  3: `【难度：实战】按真实情况说话。
+- 完全按性格设定：会找理由、拖时间、反提条件；对方说得有理有据、施压得当时才逐步让步，不要一下子全部答应。
+- 每次只说1~2句，合计不超过40个字——这是电话，不是写信。`,
+};
+
+async function npcReply(sc: ReturnType<typeof cleanSc>, history: { r: string; z: string }[], heard: string, n: number, stuck: boolean) {
+  const wantHints = sc.level < 3;
+  const system = `你在一个中文口语训练App里扮演电话另一头的人，和对方打一通真实感很强的电话。
 
 【场景】${sc.title}：${sc.setting}
 【你的身份】${sc.npc}
 【你的性格与立场】${sc.persona}
-【朴总的目标（你不要主动帮他达成）】${sc.goal}
+【对方】${sc.me}
+【对方想达成的目标（你不要主动替他完成）】${sc.goal}
 
-规则：
-- 只用口语化普通话，像广州/东莞工厂、市场里真实的人说话。每次只说1~2句，合计不超过40个字——这是电话，不是写信。
-- 保持你的立场：会找理由、拖时间、反提条件；朴总说得有理有据、施压得当时才逐步让步。不要一下子全部答应。
-- 朴总说得不清楚、中文有错误但能猜懂时，按你理解的意思自然回应，不要纠正他的中文。完全听不懂或内容为空时，像打电话那样说"喂？刚才没听清，您再说一遍？"之类。
+${LEVEL_RULES[sc.level]}
+
+通用规则：
+- 只用口语化普通话，像广州本地的真实的人说话。
+- 对方中文有错误但能猜懂时，按你理解的意思自然回应，不要纠正他的中文、不要教他。完全听不懂或内容为空时，像打电话那样说"喂？刚才没听清，您再说一遍？"之类。
 - 他说韩语或英语时，用中文表示听不懂。
-- 通话进行到第12轮左右，或者对方明显要结束（好的/就这样/拜拜），或者事情谈妥/谈崩时，用一句自然的话收尾并把 end 设为 true。
+- 通话进行到第12轮左右，或者对方明显要结束（好的/就这样/拜拜），或者事情办完/谈崩时，用一句自然的话收尾并把 end 设为 true。
 - 绝对不要跳出角色，不要解释你是AI。
+${wantHints ? `- hints：写出对方下一句最可能、最自然的2~3种回答（考虑他的目标），每句不超过18个字，用HSK3~4的简单词，彼此意思不同（例如：答应/提出另一个方案/问一个问题）。` : ""}
 
-只输出JSON，不要其他文字：{"z":"你说的中文","p":"带声调符号的拼音","k":"자연스러운 한국어 번역(존댓말)","end":false}`;
+只输出JSON，不要其他文字：{"z":"你说的中文","p":"带声调符号的拼音","k":"자연스러운 한국어 번역(존댓말)","end":false${wantHints ? ',"hints":[{"z":"对方可以说的话","p":"拼音","k":"한국어 뜻"}]' : ""}}`;
 
-  const lines = history.map((t) => (t.r === "me" ? "朴总：" : "你：") + t.z).join("\n");
-  const user = `【到目前为止的通话】\n${lines || "（你刚接通/拨通电话，已经说了开场白）"}\n\n【朴总刚才说（语音识别结果，可能有识别错误）】\n${heard || "（没有听清/空白）"}\n\n这是朴总的第${n}句。请回应。`;
-  const j = parseJSON(await anthropic(TURN_MODEL, system, user, 300));
+  const lines = history.map((t) => (t.r === "me" ? "对方：" : "你：") + t.z).join("\n");
+  const last = stuck
+    ? `【对方沉默了好几秒，好像不知道怎么说】\n请用更简单、更短的话重新问一次，最好给他两个选项让他选（例如"放门口还是放快递柜？"）。`
+    : `【对方刚才说（语音识别结果，可能有识别错误）】\n${heard || "（没有听清/空白）"}\n\n这是对方的第${n}句。请回应。`;
+  const user = `【到目前为止的通话】\n${lines || "（刚接通电话，你已经说了开场白）"}\n\n${last}`;
+  const j = parseJSON(await anthropic(TURN_MODEL, system, user, wantHints ? 600 : 300));
   if (!j || !j.z) throw err("npc", "캐릭터 답변 생성 실패", 502);
-  return { z: String(j.z), p: String(j.p || ""), k: String(j.k || ""), end: !!j.end };
+  const hints = wantHints && Array.isArray(j.hints)
+    ? j.hints.slice(0, 3).filter((h: any) => h && h.z).map((h: any) => ({ z: String(h.z), p: String(h.p || ""), k: String(h.k || "") }))
+    : [];
+  return { z: String(j.z), p: String(j.p || ""), k: String(j.k || ""), end: !!j.end && !stuck, hints };
 }
 
 // ---------------- 통화 리뷰 ----------------
@@ -212,19 +248,23 @@ async function review(b: any) {
     .map((t: any) => ({ r: t?.r === "me" ? "me" : "npc", z: String(t?.z || "").slice(0, 300) }));
   if (!turns.some((t: any) => t.r === "me" && t.z)) throw err("empty", "교정할 발화가 없습니다", 400);
 
-  const system = `당신은 광저우에서 의류 OEM 공장을 상대하는 한국인 지사장의 중국어·협상 코치입니다. 방금 끝난 롤플레이 전화 통화(음성 인식 전사본)를 리뷰합니다.
+  const life = sc.kind === "life";
+  const lvName = ["", "연습(힌트 보고 말하기 허용)", "보통", "실전"][sc.level];
+  const system = `당신은 광저우에 사는 한국인 지사장(중국어 HSK4~5, 말하기가 약함)의 중국어 말하기 코치입니다. 방금 끝난 롤플레이 전화 통화(음성 인식 전사본, 난이도 ${lvName})를 리뷰합니다.
+${life ? "이 통화는 생활 상황입니다. 협상보다 '짧고 분명하게 필요한 걸 전달했는지'(위치·시간·요청을 정확히 말하기, 되묻기, 확인하기)를 봅니다." : "이 통화는 공장 업무 상황입니다. 협상 전략까지 봅니다."}
+말하기가 약한 학습자이므로, 틀린 것만 나열하지 말고 "이 정도면 통한다"는 것은 ok:true 로 인정하고, 더 자연스러운 한 마디를 짧게 제시합니다.
 
 교정 원칙:
-- 문법·어휘·어순 오류를 고치고, 공장 실무에서 실제로 쓰는 자연스러운 구어로 바꿉니다.
+- 문법·어휘·어순 오류를 고치고, ${life ? "광저우 일상에서" : "공장 실무에서"} 실제로 쓰는 자연스러운 구어로 바꿉니다.
 - 음성 인식 오류로 보이는 글자(동음이의어 등)는 문법 오류로 잡지 말고, 의도한 말로 해석해 교정합니다.
-- 협상 전략까지 봅니다: 앵커링 시점, 모호한 답("可能/尽量")을 확정 날짜·숫자로 바꾸게 했는지, 서면(위챗) 확인 요구, 본사 압박 프레이밍(上面压得比较紧/我要跟韩国汇报), 대안 제시, 감정 조절.
+- ${life ? "전달 전략까지 봅니다: 위치를 랜드마크로 설명, 시간을 숫자로 확정, 못 알아들으면 되묻기(您说什么？/能再说一遍吗？), 마지막에 확인하기(那就……，对吧？)." : "협상 전략까지 봅니다: 앵커링 시점, 모호한 답(\"可能/尽量\")을 확정 날짜·숫자로 바꾸게 했는지, 서면(위챗) 확인 요구, 본사 압박 프레이밍(上面压得比较紧/我要跟韩国汇报), 대안 제시, 감정 조절."}
 - 자주 틀리는 패턴(把 구문, 不够+형용사, 了 위치, 양사, 可能 vs 단정)은 pattern 키로 묶습니다. pattern 은 영문 소문자 짧은 키(예: ba-construction, le-position, measure-word, vague-commitment).
 - 설명은 한국어 존댓말로 짧게. 병음은 성조 기호.
 
 JSON 만 출력:
 {"score":0~100,"verdict":"한 줄 총평","outcome":"목표 달성 여부와 이유 한두 문장",
-"strategy":[{"point":"전략 포인트 제목","why":"무엇이 좋았고/아쉬웠는지","z":"그 순간에 쓸 더 나은 한 마디","p":"병음","k":"뜻"}],
-"lines":[{"i":발화번호(1부터),"my":"원래 발화","ok":true/false,"z":"교정문","p":"병음","k":"뜻","issues":[{"wrong":"틀린 부분","right":"고친 부분","why":"이유","pattern":"키","label":"한국어 이름"}],"tactic":"이 발화의 협상 관점 코멘트(없으면 빈 문자열)"}],
+"strategy":[{"point":"${life ? "소통" : "협상"} 포인트 제목","why":"무엇이 좋았고/아쉬웠는지","z":"그 순간에 쓸 더 나은 한 마디","p":"병음","k":"뜻"}],
+"lines":[{"i":발화번호(1부터),"my":"원래 발화","ok":true/false,"z":"교정문","p":"병음","k":"뜻","issues":[{"wrong":"틀린 부분","right":"고친 부분","why":"이유","pattern":"키","label":"한국어 이름"}],"tactic":"이 발화의 ${life ? "소통" : "협상"} 관점 코멘트(없으면 빈 문자열)"}],
 "phrases":[{"z":"다음 통화에서 바로 쓸 핵심 표현","p":"병음","k":"뜻"}]}
 lines 는 나의 발화 전부를 순서대로 포함. strategy 2~4개, phrases 3~5개.`;
 

@@ -651,13 +651,29 @@
   .sh-line{position:relative}
   .sh-mic{position:absolute;top:9px;right:9px;background:#fff;border:1px solid var(--hair);border-radius:9px;width:34px;height:30px;font-size:14px;cursor:pointer;font-family:inherit;line-height:1}
   /* 통화 모드 */
+  .cl-gt{font-size:11.5px;font-weight:800;color:var(--grey);margin:10px 0 6px}
+  .cl-lv{display:flex;gap:6px;margin:14px 0 6px}
+  .cl-lv button{flex:1;background:rgba(255,255,255,.1);border:1px solid transparent;color:#fff;border-radius:10px;padding:11px 4px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit}
+  .cl-lv button.on{background:#fff;color:var(--navy)}
+  .cl-lvd{color:#D6DDE8;font-size:12.5px;line-height:1.6;margin:0 2px 4px;min-height:20px}
+  .cl-hints{margin:0 0 12px}
+  .cl-hl{color:var(--wash);font-size:11.5px;font-weight:700;margin-bottom:6px}
+  .cl-hi2{background:rgba(143,166,196,.16);border-radius:10px;padding:8px 11px;margin-bottom:6px}
+  .cl-hi2 .z{color:#fff;font-size:16px;line-height:1.5}
+  .cl-hi2 .p{color:var(--wash);font-size:12px;margin-top:2px}
+  .cl-hi2 .k{color:#C9D1DD;font-size:12px;margin-top:2px}
+  .cl-hbtn{width:100%;background:rgba(143,166,196,.16);border:1px dashed var(--wash);color:#fff;border-radius:10px;padding:12px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit}
   .rp-call{border:1px solid var(--red);background:#fff;color:var(--red);border-radius:8px;padding:9px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;margin-left:6px}
   .rp-call.ghost{border-color:var(--hair);color:var(--grey)}
   .cl-home{border-color:var(--wash);background:linear-gradient(180deg,#fff,#F3F2EE)}
   .cl-home .cl-hrow{display:flex;flex-wrap:wrap;gap:7px}
+  .cl-home .s b{color:var(--red)}
   .cl-home .rp-call{margin-left:0}
   .cl-ov{padding-bottom:calc(40px + env(safe-area-inset-bottom,0px))}
   .pr-ov.cl-ov .zh{font-size:inherit;color:inherit;font-weight:inherit;letter-spacing:0;line-height:inherit}
+  .pr-ov.cl-ov .cl-ln .z,.pr-ov.cl-ov .cl-hi2 .z{color:#fff}
+  .pr-ov.cl-ov .cl-ln .z{font-size:15px}
+  .pr-ov.cl-ov .cl-hi2 .z{font-size:16px}
   .cl-intro{background:rgba(255,255,255,.06);border-radius:14px;padding:18px 16px;color:#fff}
   .cl-intro .cl-ic{font-size:34px}
   .cl-intro .cl-t{font-size:19px;font-weight:800;margin:6px 0 8px}
@@ -673,8 +689,8 @@
   .cl-call{display:flex;flex-direction:column;min-height:calc(100vh - 60px);min-height:calc(100dvh - 60px)}
   .cl-top{display:flex;justify-content:space-between;align-items:center;color:#fff;font-size:15px;font-weight:700}
   .cl-top .cl-time{color:var(--wash);font-variant-numeric:tabular-nums}
-  .cl-stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent;min-height:260px;user-select:none;-webkit-user-select:none}
-  .cl-orb{width:150px;height:150px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:52px;background:rgba(255,255,255,.08);transition:transform .08s linear,background .2s}
+  .cl-stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;-webkit-tap-highlight-color:transparent;min-height:190px;user-select:none;-webkit-user-select:none}
+  .cl-orb{width:124px;height:124px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:52px;background:rgba(255,255,255,.08);transition:transform .08s linear,background .2s}
   .cl-orb.listen{background:#1E7F4F;box-shadow:0 0 0 10px rgba(30,127,79,.25)}
   .cl-orb.npc{background:var(--red);animation:clPulse 1.2s ease-in-out infinite}
   .cl-orb.think{background:#5a6478;animation:clPulse 1.6s ease-in-out infinite}
@@ -721,7 +737,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.7.0</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.8.0</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -7551,38 +7567,80 @@ function renderPron(){
 }
 
 // ================= 통화 모드 (음성 롤플레이) =================
-// 흐름: 상대 첫 대사 → 띵 → 내 발화 녹음(무음 1.5초 자동 종료) → /call/turn(STT→Claude→TTS) → 상대 음성 → 반복
-// 종료 후 /call/review 로 내 발화 전체 교정(문법+협상 전략). 서버 코드: server/call.js
+// 흐름: 상대 첫 대사 → 띵 → 내 발화 녹음(무음 N초 자동 종료) → /call/turn(STT→Claude→TTS) → 상대 음성 → 반복
+// 난이도 1 연습(힌트 표시·쉬운 말·3초) / 2 보통(힌트 탭·2초) / 3 실전(힌트 없음·1.5초)
+// 종료 후 /call/review 로 내 발화 전체 교정. 서버 코드: supabase/functions/call/index.ts
 const CALL_VOICE_DEF='zh-CN-YunyangNeural';
+const CALL_ME_WORK='朴总（韩国服装公司广州分公司负责人，韩国人，中文HSK4~5水平）';
+const CALL_ME_LIFE='住在广州白云区的韩国人（中文HSK4水平，说话慢，有时找不到词）';
 const CALL_SC={
-  delay:{npc:'东莞针织厂 王总（老板，四十多岁，做了二十年，讲人情但很会拖）',
+  // ---- 생활 통화 ----
+  kuaidi:{kind:'life',icon:'📦',title:'택배 기사 전화',
+    setting:'퇴근 전 사무실. 순펑 택배 기사에게서 전화가 왔다. 집에 아무도 없다. 택배를 어디에 맡길지 정하는 것이 목표.',
+    npc:'顺丰快递员 小李（二十多岁，赶时间，说话快）',voice:'zh-CN-YunjianNeural',
+    persona:'你车上还有很多件，想快点送完。对方不在家时，你会建议放门口、放丰巢快递柜或者放门卫/物业；如果放丰巢，会说取件码发短信。对方说不清时反问。',
+    goal:'집에 없다고 말하기 → 보관 장소 정하기(택배함·경비실) → 찾는 방법 확인',
+    open:{z:'喂，你好，顺丰快递。你有个件到了，现在家里有人吗？',p:'Wéi, nǐ hǎo, Shùnfēng kuàidì. Nǐ yǒu ge jiàn dào le, xiànzài jiā li yǒu rén ma?',k:'여보세요, 순펑 택배입니다. 택배가 도착했는데 지금 집에 계세요?'},
+    hints:[{z:'我现在不在家，晚上七点以后才回来。',p:'Wǒ xiànzài bú zài jiā, wǎnshang qī diǎn yǐhòu cái huílai.',k:'지금 집에 없어요, 저녁 7시 이후에나 돌아와요.'},
+      {z:'能帮我放丰巢柜吗？',p:'Néng bāng wǒ fàng Fēngcháo guì ma?',k:'펑차오 택배함에 넣어 주실 수 있어요?'},
+      {z:'放门卫那里就行，谢谢。',p:'Fàng ménwèi nàli jiù xíng, xièxie.',k:'경비실에 맡겨 주시면 돼요, 감사합니다.'}]},
+  waimai:{kind:'life',icon:'🛵',title:'배달 기사 전화',
+    setting:'저녁에 메이퇀으로 음식을 시켰다. 배달 기사가 아파트 정문에서 전화를 했다. 경비가 오토바이를 못 들어가게 한다. 음식을 받는 것이 목표.',
+    npc:'美团外卖骑手（男，着急，下一单快超时了）',voice:'zh-CN-YunjianNeural',
+    persona:'你在小区门口，保安不让电动车进。你希望对方下楼来拿，或者告诉你具体几栋几单元几楼，你走上去。时间很紧，会催。对方要求放门卫也可以，但要对方确认。',
+    goal:'내려가겠다고 하거나 동·라인·층 설명 → 받을 장소 합의',
+    open:{z:'喂，你好，美团外卖。我到你们小区门口了，保安不让进，你下来拿一下行吗？',p:'Wéi, nǐ hǎo, Měituán wàimài. Wǒ dào nǐmen xiǎoqū ménkǒu le, bǎo\'ān bú ràng jìn, nǐ xiàlai ná yíxià xíng ma?',k:'여보세요, 메이퇀 배달입니다. 아파트 정문에 왔는데 경비가 못 들어가게 해요. 내려와서 받아 주실 수 있어요?'},
+    hints:[{z:'好的，我马上下来，你等我两分钟。',p:'Hǎo de, wǒ mǎshàng xiàlai, nǐ děng wǒ liǎng fēnzhōng.',k:'네, 바로 내려갈게요. 2분만 기다려 주세요.'},
+      {z:'你放在门卫那里吧，我等一下去拿。',p:'Nǐ fàng zài ménwèi nàli ba, wǒ děng yíxià qù ná.',k:'경비실에 두세요. 좀 있다 가지러 갈게요.'},
+      {z:'我在八栋二单元，你跟保安说一下可以进来。',p:'Wǒ zài bā dòng èr dānyuán, nǐ gēn bǎo\'ān shuō yíxià kěyǐ jìnlai.',k:'8동 2라인이에요. 경비한테 말하면 들어올 수 있어요.'}]},
+  didi:{kind:'life',npc:'滴滴司机 刘师傅（广州本地人，急性子）',voice:'zh-CN-YunjianNeural',
+    persona:'你在南门等，看不到乘客。有点着急，怕超时。乘客说不清位置时会追问地标；路线你熟，堵车时会建议走高架。',
+    goal:'내 위치를 정확히 설명 → 차 번호 확인 → 9시 전 도착 경로 합의',
+    hints:[{z:'我在南门对面，便利店门口，穿蓝色衣服。',p:'Wǒ zài nánmén duìmiàn, biànlìdiàn ménkǒu, chuān lánsè yīfu.',k:'남문 맞은편 편의점 앞이에요. 파란 옷 입었어요.'},
+      {z:'你车牌尾号多少？',p:'Nǐ chēpái wěihào duōshao?',k:'차 번호판 끝자리가 몇 번이에요?'},
+      {z:'你等我一下，我马上过去。',p:'Nǐ děng wǒ yíxià, wǒ mǎshàng guòqu.',k:'잠깐만 기다려 주세요. 바로 갈게요.'}]},
+  booking:{kind:'life',icon:'🍽',title:'식당 룸 예약 전화',
+    setting:'토요일 저녁, 공장 사장님들과 식사가 있다. 바이윈구 광둥요리 식당에 내가 예약 전화를 건다. 8명 룸을 잡는 것이 목표.',
+    npc:'白云区粤菜酒楼 前台（女，客气，但周六包间很紧张）',voice:'zh-CN-XiaoxiaoNeural',
+    persona:'周六晚上包间基本订满了，只剩大厅，或者晚上八点以后的包间。你会问几位、几点、贵姓、电话。包间最低消费两千。',
+    goal:'토요일 6시 반 8명 룸 요청 → 안 되면 대안(시간·홀) 결정 → 이름·연락처 전달',
+    open:{z:'喂，您好，粤香酒楼，请问有什么可以帮您？',p:'Wéi, nín hǎo, Yuèxiāng jiǔlóu, qǐngwèn yǒu shénme kěyǐ bāng nín?',k:'여보세요, 웨샹 주루입니다. 무엇을 도와드릴까요?'},
+    hints:[{z:'你好，我想订这个星期六晚上的包间。',p:'Nǐ hǎo, wǒ xiǎng dìng zhège xīngqīliù wǎnshang de bāojiān.',k:'안녕하세요, 이번 토요일 저녁 룸을 예약하고 싶어요.'},
+      {z:'八个人，六点半左右到。',p:'Bā ge rén, liù diǎn bàn zuǒyòu dào.',k:'8명이고 6시 반쯤 도착해요.'},
+      {z:'包间有最低消费吗？',p:'Bāojiān yǒu zuìdī xiāofèi ma?',k:'룸에 최소 금액이 있나요?'}]},
+  aircon:{kind:'life',icon:'🔧',title:'에어컨 수리 기사 전화',
+    setting:'집 에어컨이 시원하지 않아서 AS를 신청했다. 수리 기사에게서 방문 시간을 잡는 전화가 왔다.',
+    npc:'格力空调售后 维修师傅（男，四十多岁，有点广东口音）',voice:'zh-CN-YunyangNeural',
+    persona:'你今天下午排得很满，只能给两个时间段：两点到四点，或者五点以后。你会问空调什么问题（不制冷、漏水、有异响）、几匹的、装了几年。上门检查费五十块，换零件另算。',
+    goal:'증상 설명(안 시원함·물 샘) → 방문 시간 정하기 → 출장비·수리비 확인',
+    open:{z:'喂，你好，是你报修空调吗？我今天下午过去，你几点在家？',p:'Wéi, nǐ hǎo, shì nǐ bàoxiū kōngtiáo ma? Wǒ jīntiān xiàwǔ guòqu, nǐ jǐ diǎn zài jiā?',k:'여보세요, 에어컨 수리 신청하셨죠? 오늘 오후에 갈 건데 몇 시에 집에 계세요?'},
+    hints:[{z:'对，空调不制冷，还有点漏水。',p:'Duì, kōngtiáo bú zhìlěng, hái yǒudiǎn lòushuǐ.',k:'네, 에어컨이 안 시원하고 물도 좀 새요.'},
+      {z:'我五点以后在家，你五点半过来可以吗？',p:'Wǒ wǔ diǎn yǐhòu zài jiā, nǐ wǔ diǎn bàn guòlai kěyǐ ma?',k:'5시 이후에 집에 있어요. 5시 반에 오실 수 있어요?'},
+      {z:'上门检查要收费吗？',p:'Shàngmén jiǎnchá yào shōufèi ma?',k:'방문 점검은 비용이 있나요?'}]},
+  // ---- 업무 통화 ----
+  delay:{kind:'work',npc:'东莞针织厂 王总（老板，四十多岁，做了二十年，讲人情但很会拖）',
     persona:'布厂交布晚是真的，但你们自己排产也有问题，不想承认。先说“可能拖四五天”，被追问才给具体日期；不愿意写书面承诺；可以提出分批出货。朴总提到韩国总部压力和以后的订单时才松口。',
     goal:'오늘 중 확정 출고일 받기 → 위챗으로 서면 확인 → 필요하면 분할 출고 협상'},
-  pricefight:{npc:'番禺梭织厂 李总（老板，精明，爱算成本账）',
+  pricefight:{kind:'work',npc:'番禺梭织厂 李总（老板，精明，爱算成本账）',
     persona:'报价八十五块二，坚持是实际成本。面料损耗、加工费都有理由；朴总要明细时先推脱再勉强答应；能让的最多两三块，而且要换条件（加量、放宽交期、预付款）。',
     goal:'원가 명세(원단·공임·로스) 분리 요구 → 목표가 제시 → 조건 교환으로 인하 확보'},
-  didi:{npc:'滴滴司机 刘师傅（广州本地人，急性子）',voice:'zh-CN-YunjianNeural',
-    persona:'你在南门等，看不到乘客。有点着急，怕超时。乘客说不清位置时会追问地标；路线你熟，堵车时会建议走高架。',
-    goal:'내 위치를 정확히 설명 → 차 번호 확인 → 9시 전 도착 경로 합의'},
-  fabric:{npc:'中大布匹市场档口 陈姐（老板娘，说话快，爱推现货）',voice:'zh-CN-XiaoxiaoNeural',
-    persona:'你有类似的260克磨毛布，但想推贵一点的款；剪样可以，但要先加微信；大货价看数量，不轻易报底价；起订量说“一匹起”。',
-    goal:'260g 기모 원단 확인 → 스와치 확보 → 가격·MOQ·대량 납기 확인 → 위챗 교환'},
-  wholesale:{npc:'十三行档口 老板（男，三十多岁，只想做批发）',voice:'zh-CN-YunjianNeural',
-    persona:'你只做批发，一个款最少拿三件，不喜欢零买；看对方是做生意的会稍微放宽；价格按拿货价，但零买要加钱。',
-    goal:'낱장 사입 허락 받기 → 가격 확인 → 재사입(补货) 관계 트기'},
-  restaurant:{npc:'广州本地小饭馆 服务员（阿姨，热情，说话带点粤语口音）',voice:'zh-CN-XiaoyiNeural',
-    persona:'推荐招牌菜（白切鸡、烧鹅、干炒牛河），会问辣不辣、几个人、要不要饮料；忙的时候说话快。',
-    goal:'인원 안내 → 추천 요리 주문 → 향채 빼기 등 요청 → 위챗 결제'},
-  claim:{icon:'⚠️',title:'품질 클레임 전화',callOnly:true,
+  claim:{kind:'work',icon:'⚠️',title:'품질 클레임 전화',
     setting:'한국 입고 검품에서 니트 풀오버 3,000장 중 약 8%에서 봉제 불량(어깨 퍼커링·실밥)이 나왔다. 내가 공장 厂长에게 전화한다. 원인 인정·재검품·보상 방안을 받아내는 것이 목표.',
     open:{z:'喂，朴总，您好！有什么事吗？',p:'Wéi, Piáo zǒng, nín hǎo! Yǒu shénme shì ma?',k:'여보세요, 박총님 안녕하세요! 무슨 일이세요?'},
-    keys:['韩国那边验货，次品率有百分之八。','你们先派人全检，今天给我一个处理方案。','这批损失怎么算，你们要给个说法。'],
+    hints:[{z:'韩国那边验货，次品率有百分之八。',p:'Hánguó nàbiān yànhuò, cìpǐnlǜ yǒu bǎi fēn zhī bā.',k:'한국 쪽 검품에서 불량률이 8%예요.'},
+      {z:'你们先派人全检，今天给我一个处理方案。',p:'Nǐmen xiān pài rén quánjiǎn, jīntiān gěi wǒ yí ge chǔlǐ fāng\'àn.',k:'먼저 사람 보내서 전수 검사하고, 오늘 처리 방안을 주세요.'},
+      {z:'这批损失怎么算，你们要给个说法。',p:'Zhè pī sǔnshī zěnme suàn, nǐmen yào gěi ge shuōfǎ.',k:'이번 손실을 어떻게 할지 설명을 주셔야 해요.'}],
     npc:'惠州毛衫厂 张厂长（厂长，护短，先推给面料和运输）',
     persona:'先怀疑是运输压的、或者韩国那边标准太严；要求看照片；承认一部分问题后，愿意派人返工，但对赔偿很抗拒，最多同意下单抵扣一部分。',
     goal:'불량 사실 인정 → 사진·수량 근거 제시 → 재검품/수선 일정 확정 → 보상(다음 오더 차감 등) 합의'}
 };
-const CALL_ORDER=['delay','pricefight','claim','didi','fabric','wholesale','restaurant'];
-const CALL_MAX_TURNS=14, CALL_SIL_MS=1500, CALL_MAX_MS=20000, CALL_NOSPEECH_MS=10000;
+const CALL_GROUPS=[['생활 통화',['kuaidi','waimai','didi','booking','aircon']],['업무 통화',['delay','pricefight','claim']]];
+const CALL_LV={
+  1:{name:'연습',desc:'상대가 쉽고 천천히, 답변 힌트 표시, 3초 멈추면 전송, 막히면 상대가 도와줌',sil:3000,stuck:7000},
+  2:{name:'보통',desc:'상대가 조금 버팀, 힌트는 탭해서 보기, 2초 멈추면 전송',sil:2000,stuck:8000},
+  3:{name:'실전',desc:'실제 속도·버티기, 힌트 없음, 1.5초 멈추면 전송',sil:1500,stuck:0}
+};
+const CALL_MAX_TURNS=14, CALL_MAX_MS=25000, CALL_NOSPEECH_MS=12000;
 let callS=null;
 function callLive(){return !!(callS&&!callS.over&&callS.phase!=='end');}
 
@@ -7592,8 +7650,10 @@ function callState(){
   if(!Array.isArray(c.log))c.log=[];
   if(!c.usage||typeof c.usage!=='object')c.usage={};
   if(typeof c.subs!=='boolean')c.subs=false;
+  if(!CALL_LV[c.level])c.level=1;
   return c;
 }
+function callLv(){return CALL_LV[(callS&&callS.level)||callState().level]||CALL_LV[1];}
 function callMonth(){return new Date(Date.now()+8*3600e3).toISOString().slice(0,7);}
 function callUsageAdd(kind,sec){
   if(!sec)return;
@@ -7611,12 +7671,14 @@ function callSc(key){
   RP.forEach(function(s){if(s.id===key)rp=s;});
   var open=d.open;
   if(!open&&rp){var n=rp.nodes[rp.start];open={z:n.npc.z,p:n.npc.p,k:n.npc.k};}
-  return {key:key,icon:d.icon||(rp&&rp.icon)||'📞',title:d.title||(rp&&rp.title)||key,
+  var hints=d.hints||(rp?rp.keys.map(function(k){return {z:k.z,p:k.p,k:k.k};}):[]);
+  return {key:key,kind:d.kind||'work',icon:d.icon||(rp&&rp.icon)||'📞',title:d.title||(rp&&rp.title)||key,
     setting:d.setting||(rp&&rp.setting)||'',npc:d.npc||'',persona:d.persona||'',goal:d.goal||'',
-    keys:d.keys||(rp?rp.keys.map(function(k){return k.z;}):[]),open:open,voice:d.voice||CALL_VOICE_DEF};
+    hints:hints,keys:hints.map(function(h){return h.z;}),open:open,voice:d.voice||CALL_VOICE_DEF};
 }
 function callScPayload(sc){
-  return {title:sc.title,setting:sc.setting,npc:sc.npc,persona:sc.persona,goal:sc.goal,keys:sc.keys,voice:sc.voice};
+  return {title:sc.title,setting:sc.setting,npc:sc.npc,persona:sc.persona,goal:sc.goal,keys:sc.keys,voice:sc.voice,
+    kind:sc.kind,me:sc.kind==='life'?CALL_ME_LIFE:CALL_ME_WORK,level:(callS&&callS.level)||callState().level};
 }
 async function callPost(path,body,ms){
   var ctl=('AbortController' in window)?new AbortController():null;
@@ -7668,7 +7730,7 @@ function callOpen(key){
   stopAll();
   if(typeof stopShadow==='function')stopShadow();
   var sc=callSc(key);
-  callS={key:key,sc:sc,turns:[],phase:'intro'};
+  callS={key:key,sc:sc,turns:[],phase:'intro',level:callState().level};
   var ov=callOv();
   ov.innerHTML='<div class="ptop"><button class="x" id="clX">✕</button><span class="ttl">📞 음성 통화 롤플레이</span></div>'
     +'<div class="cl-intro"><div class="cl-ic">'+sc.icon+'</div>'
@@ -7678,13 +7740,23 @@ function callOpen(key){
     +'<div class="cl-row"><b>목표</b><span>'+esc(sc.goal)+'</span></div>'
     +(sc.keys.length?'<div class="cl-row"><b>써볼 말</b><span class="zh">'+sc.keys.map(esc).join('<br>')+'</span></div>':'')
     +'</div>'
-    +'<div class="cl-how">이어폰 권장 · <b>띵</b> 소리 뒤에 말하고, <b>1.5초</b> 멈추면 자동 전송 · 화면 아무 곳이나 탭하면 바로 전송 · 한 턴에 3~5초 걸립니다</div>'
+    +'<div class="cl-lv" id="clLv">'+[1,2,3].map(function(n){return '<button data-lv="'+n+'">'+n+'. '+CALL_LV[n].name+'</button>';}).join('')+'</div>'
+    +'<div class="cl-lvd" id="clLvd"></div>'
+    +'<div class="cl-how">이어폰 권장 · <b>띵</b> 소리 뒤에 말하고, 멈추면 자동 전송 · 화면 가운데를 탭하면 바로 전송 · 한 턴에 3~5초 걸립니다</div>'
     +'<button class="cl-dial" id="clDial">📞 전화 걸기</button>'
     +'<div class="cl-msg" id="clMsg"></div>'
     +'<div class="cl-use" id="clUse">'+callUsageLine(null)+'</div>'
     +(callState().log.some(function(e){return e.key===key;})?'<button class="pr-b cl-hist" id="clHist">이 상황 통화 기록</button>':'');
   document.getElementById('clX').addEventListener('click',callClose);
   document.getElementById('clDial').addEventListener('click',callDial);
+  function lvDraw(){
+    ov.querySelectorAll('[data-lv]').forEach(function(b){b.classList.toggle('on',+b.dataset.lv===callS.level);});
+    document.getElementById('clLvd').textContent=CALL_LV[callS.level].desc;
+  }
+  ov.querySelectorAll('[data-lv]').forEach(function(b){b.addEventListener('click',function(){
+    callS.level=+b.dataset.lv;callState().level=callS.level;saveState();lvDraw();
+  });});
+  lvDraw();
   var hb=document.getElementById('clHist');
   if(hb)hb.addEventListener('click',function(){callHistory(key);});
   ov.scrollTop=0;
@@ -7785,6 +7857,8 @@ async function callDial(){
   callS.id='c'+Date.now().toString(36);
   callS.t0=Date.now();
   callS.n=0;
+  callS.subs=callS.level<3?true:callState().subs;
+  callS.hints=callS.sc.hints.slice();callS.hintOpen=false;callS.stuckUsed=false;
   callDrawCall();
   callPhase('ring');
   callBeep(440,380,0.18,0);callBeep(480,380,0.18,0);
@@ -7804,14 +7878,16 @@ function callDrawCall(){
     +'<div class="cl-stage" id="clStage"><div class="cl-orb" id="clOrb"><span id="clOrbIc">📞</span></div>'
     +'<div class="cl-ph" id="clPh">연결 중…</div><div class="cl-sub" id="clSub"></div></div>'
     +'<div class="cl-subs" id="clSubs"></div>'
+    +'<div class="cl-hints" id="clHints"></div>'
     +'<div class="cl-ctl">'
-    +'<button class="cl-b" id="clSubT">'+(callState().subs?'자막 끄기':'자막 보기')+'</button>'
+    +'<button class="cl-b" id="clSubT">'+(callS.subs?'자막 끄기':'자막 보기')+'</button>'
     +'<button class="cl-b" id="clAgain">↺ 다시 듣기</button>'
     +'<button class="cl-hang" id="clHang">📵 끊기</button></div></div>';
   document.getElementById('clStage').addEventListener('click',callTap);
   document.getElementById('clHang').addEventListener('click',function(){callHang(false);});
   document.getElementById('clSubT').addEventListener('click',function(){
-    var c=callState();c.subs=!c.subs;this.textContent=c.subs?'자막 끄기':'자막 보기';callRenderSubs();
+    callS.subs=!callS.subs;if(callS.level===3)callState().subs=callS.subs;
+    this.textContent=callS.subs?'자막 끄기':'자막 보기';callRenderSubs();
   });
   document.getElementById('clAgain').addEventListener('click',function(){
     if(!callS||!callS.lastNpc||callS.phase==='think')return;
@@ -7839,14 +7915,30 @@ function callPhase(ph,sub){
 }
 function callRenderSubs(){
   var el=document.getElementById('clSubs');if(!el||!callS)return;
-  if(!callState().subs){el.innerHTML='';el.style.display='none';return;}
+  callRenderHints();
+  if(!callS.subs){el.innerHTML='';el.style.display='none';return;}
   el.style.display='block';
-  var t=callS.turns.slice(-4);
+  var t=callS.turns.slice(callS.level<3?-2:-4);
   el.innerHTML=t.map(function(x){
     return '<div class="cl-ln '+x.r+'"><div class="z zh">'+esc(x.z||'(못 알아들음)')+'</div>'
       +(x.r==='npc'&&x.p?'<div class="p">'+esc(x.p)+'</div><div class="k">'+esc(x.k||'')+'</div>':'')+'</div>';
   }).join('');
   el.scrollTop=el.scrollHeight;
+}
+// 내 차례 답변 힌트: 연습=항상 표시, 보통=탭해서 보기, 실전=없음
+function callRenderHints(){
+  var el=document.getElementById('clHints');if(!el||!callS)return;
+  var h=(callS.hints||[]).filter(function(x){return x&&x.z;});
+  if(callS.level===3||!h.length){el.innerHTML='';el.style.display='none';return;}
+  el.style.display='block';
+  if(callS.level===2&&!callS.hintOpen){
+    el.innerHTML='<button class="cl-hbtn" id="clHintBtn">💡 이렇게 말해 보세요 (힌트 보기)</button>';
+    document.getElementById('clHintBtn').addEventListener('click',function(){callS.hintOpen=true;callRenderHints();});
+    return;
+  }
+  el.innerHTML='<div class="cl-hl">💡 이렇게 말해 보세요</div>'+h.slice(0,3).map(function(x){
+    return '<div class="cl-hi2"><div class="z zh">'+esc(x.z)+'</div>'+(x.p?'<div class="p">'+esc(x.p)+'</div>':'')+(x.k?'<div class="k">'+esc(x.k)+'</div>':'')+'</div>';
+  }).join('');
 }
 function callTap(){
   if(!callS)return;
@@ -7887,6 +7979,7 @@ async function callListen(){
     callStopTracks();
     if(!callS||why==='abort')return;
     if(why==='nospeech'){callBeep(330,160,0.15);callPhase('idle','말소리가 없어 대기 중');return;}
+    if(why==='stuck'){callStuck();return;}
     var type=chunks.length&&chunks[0].type?chunks[0].type:(mt||'audio/webm');
     callSend(new Blob(chunks,{type:type}));
   };
@@ -7900,7 +7993,7 @@ async function callListen(){
       an=ctx.createAnalyser();an.fftSize=1024;callS.src.connect(an);buf=new Float32Array(an.fftSize);}
   }catch(e){an=null;}
   // 소음 기준: 처음 0.3초의 최솟값(바로 말을 시작해도 기준이 튀지 않게), 문턱은 0.012~0.045 사이
-  var t0=Date.now(), floor=1, voiced=0, sil=0, speaking=false;
+  var t0=Date.now(), floor=1, voiced=0, sil=0, speaking=false, lv=callLv();
   var vadId=setInterval(function(){
     if(!callS||!callS.rec||callS.rec.state!=='recording'){clearInterval(vadId);return;}
     var el=Date.now()-t0;
@@ -7915,7 +8008,9 @@ async function callListen(){
     if(orb)orb.style.transform='scale('+(1+Math.min(0.35,rms*6))+')';
     if(rms>thr){voiced+=50;sil=0;if(voiced>=200)speaking=true;}
     else if(rms<thr*0.8||!speaking)sil+=50;
-    if(speaking&&sil>=CALL_SIL_MS){callStopListen(false);return;}
+    if(speaking&&sil>=lv.sil){callStopListen(false);return;}
+    // 연습·보통: 말을 못 꺼내고 있으면 상대가 쉬운 말로 다시 물어 준다(턴당 1회)
+    if(!speaking&&lv.stuck&&el>lv.stuck&&!callS.stuckUsed){clearInterval(vadId);callS.reason='stuck';try{callS.rec.stop();}catch(e){}return;}
     if(!speaking&&el>CALL_NOSPEECH_MS){clearInterval(vadId);callS.reason='nospeech';try{callS.rec.stop();}catch(e){}}
   },50);
   callS.vad=vadId;
@@ -7938,6 +8033,26 @@ function callStopListen(abort){
   }else callStopTracks();
 }
 
+// ---------- 막혔을 때: 녹음 없이 상대가 더 쉽게 다시 묻는다 (STT 사용 없음) ----------
+async function callStuck(){
+  if(!callLive())return;
+  callS.stuckUsed=true;
+  callPhase('think','상대가 다시 물어봅니다…');
+  var r=await callPost('/call/turn',{stuck:true,sc:callScPayload(callS.sc),
+    history:callS.turns.map(function(t){return {r:t.r,z:t.z};}),n:callS.n},25000);
+  if(!callLive())return;
+  if(r.error){callPhase('idle',callErrText(r.error)+' — 탭해서 말하기');return;}
+  callApplyReply(r);
+  if(r.reply&&r.reply.z)await callSay(r.reply,r.audio||'');
+  if(callLive())callListen();
+}
+function callApplyReply(r){
+  var rp=r.reply||{};
+  if(rp.z)callS.turns.push({r:'npc',z:rp.z,p:rp.p||'',k:rp.k||''});
+  callS.hints=Array.isArray(r.hints)?r.hints:[];
+  callS.hintOpen=false;
+  callRenderSubs();
+}
 // ---------- 한 턴 전송 ----------
 async function callSend(blob){
   if(!callLive())return;
@@ -7960,9 +8075,9 @@ async function callSend(blob){
   var sec=r.sec||(prDiag&&prDiag.secs)||0;
   callUsageAdd('c',Math.ceil(sec));
   if(r.heard)callS.turns.push({r:'me',z:r.heard,sec:sec});
+  callS.stuckUsed=false;
   var rp=r.reply||{};
-  if(rp.z)callS.turns.push({r:'npc',z:rp.z,p:rp.p||'',k:rp.k||''});
-  callRenderSubs();
+  callApplyReply(r);
   if(rp.z)await callSay({z:rp.z,p:rp.p,k:rp.k},r.audio||'');
   if(!callLive())return;
   if(r.end||callS.n>=CALL_MAX_TURNS){callHang(true);return;}
@@ -7991,7 +8106,7 @@ function callHang(auto){
   var mine=s.turns.filter(function(t){return t.r==='me'&&t.z;});
   if(!mine.length){setTimeout(callClose,auto?650:0);return;}
   var c=callState();
-  var e={id:s.id,key:s.key,d:today(),dur:Math.round((Date.now()-s.t0)/1000),turns:s.turns.slice(),review:null};
+  var e={id:s.id,key:s.key,lv:s.level||1,d:today(),dur:Math.round((Date.now()-s.t0)/1000),turns:s.turns.slice(),review:null};
   c.log.unshift(e);
   if(c.log.length>20)c.log.length=20;
   saveState();
@@ -8001,7 +8116,7 @@ function callFind(id){var f=null;callState().log.forEach(function(e){if(e.id===i
 async function callReview(id){
   var e=callFind(id);if(!e)return;
   var sc=callSc(e.key);
-  if(!callS)callS={key:e.key,sc:sc,turns:e.turns,phase:'review'};
+  if(!callS)callS={key:e.key,sc:sc,turns:e.turns,phase:'review',level:e.lv||1};
   callS.phase='review';
   var ov=callOv();
   if(e.review){callRenderReview(e);return;}
@@ -8087,7 +8202,7 @@ function callHistory(key){
     +(list.length?list.map(function(e){
       var sc=callSc(e.key), n=e.turns.filter(function(t){return t.r==='me';}).length;
       return '<button class="cl-hi" data-id="'+e.id+'"><span class="ic">'+sc.icon+'</span><span class="t">'+esc(sc.title)
-        +'<small>'+e.d+' · '+Math.floor(e.dur/60)+'분 '+(e.dur%60)+'초 · 내 발화 '+n+'개</small></span>'
+        +'<small>'+e.d+' · '+(CALL_LV[e.lv||1].name)+' · '+Math.floor(e.dur/60)+'분 '+(e.dur%60)+'초 · 내 발화 '+n+'개</small></span>'
         +'<span class="s">'+(e.review?(parseInt(e.review.score)||0)+'점':'리뷰 전')+'</span></button>';
     }).join(''):'<div class="cl-msg">아직 통화 기록이 없습니다.</div>');
   document.getElementById('clX').addEventListener('click',callClose);
@@ -8097,10 +8212,13 @@ function callHistory(key){
 function callHomeCard(){
   var c=callState(), n=c.log.length;
   var h='<div class="rp-card cl-home"><div class="t">📞 음성 통화 롤플레이</div>'
-    +'<div class="s">AI 상대와 실제 전화처럼 말로 주고받습니다. 화면을 안 봐도 되고, 끊으면 내가 한 말 전체를 문법·협상 전략으로 교정해 줍니다. 각 상황의 📞 버튼으로 시작하세요.</div>'
-    +'<div class="cl-hrow">';
-  CALL_ORDER.forEach(function(k){if(CALL_SC[k]&&CALL_SC[k].callOnly){var sc=callSc(k);h+='<button class="rp-call" data-call="'+k+'">'+sc.icon+' '+esc(sc.title)+'</button>';}});
-  h+=(n?'<button class="rp-call ghost" id="clHomeHist">통화 기록 '+n+'</button>':'')+'</div></div>';
+    +'<div class="s">AI 상대와 실제 전화처럼 말로 주고받습니다. 끊으면 내가 한 말 전체를 교정해 줍니다. 난이도: <b>'+CALL_LV[c.level].name+'</b>(통화 시작 화면에서 변경)</div>';
+  CALL_GROUPS.forEach(function(g){
+    h+='<div class="cl-gt">'+g[0]+'</div><div class="cl-hrow">';
+    g[1].forEach(function(k){var sc=callSc(k);h+='<button class="rp-call" data-call="'+k+'">'+sc.icon+' '+esc(sc.title)+'</button>';});
+    h+='</div>';
+  });
+  h+=(n?'<div class="cl-hrow" style="margin-top:8px"><button class="rp-call ghost" id="clHomeHist">통화 기록 '+n+'</button></div>':'')+'</div>';
   return h;
 }
 

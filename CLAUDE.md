@@ -15,7 +15,7 @@
 - 탭: 홈(ph) · 회화(p0) · 퀴즈(p1) · HSK 단어(p2) · 복습(p3) · 발음(p6) · 현장(p5) · 진척(p4).
 - 퀴즈 모드: pick 뜻 고르기 / build 문장 조립 / fill 빈칸 / pattern 패턴 드릴 / number 숫자 듣기.
 - 롤플레이(RP): 위챗 분기 대화(노드·선택지·점수), AI 직접 작문 교정 옵션.
-- 통화 모드(BETA 3.7~): RP 카드의 📞 버튼 → AI 캐릭터와 음성 통화(무음 1.5초 자동 전송) → 종료 후 발화 전체 교정. 상황 정의 `CALL_SC`, 코드 `// 통화 모드` 블록(`call*` 함수).
+- 통화 모드(BETA 3.7~): 롤플레이 화면 상단 📞 카드 → AI 캐릭터와 음성 통화 → 종료 후 발화 전체 교정. 상황 `CALL_SC`(kind life: 택배·배달·디디·식당예약·에어컨수리 / work: 납기·단가·클레임, 그룹 `CALL_GROUPS`), 난이도 `CALL_LV` 1 연습(쉬운 말·힌트 표시·무음 3초·7초 막히면 상대가 선택형으로 다시 물음) / 2 보통(힌트 탭·2초) / 3 실전(힌트 없음·1.5초). 코드 `// 통화 모드` 블록(`call*` 함수).
 
 ## 배포
 - 방식: 정적 파일(빌드 없음). GitHub Pages — `elanddenim-bit/sz-chinese` main 푸시 시 자동 배포(github-pages 환경). Cloudflare Pages 아님.
@@ -46,13 +46,13 @@
   - `{ai}/vocab` {code, images[]} — 이미지로 단어 추출
   - `{ai}/pronounce` {code, text, audio(base64)} — 발음 평가(합격선 `PR_PASS=80`)
   - `{ai}/tts` {code, text} → 오디오 blob(400B 미만이면 실패 처리)
-  - 통화 모드(서버 기준 `cfg.call` 없으면 `cfg.ai`): `/call/ping` {code}, `/call/say` {code,text,sc}, `/call/turn` {code,audio(16kHz WAV b64),sc,history,n} → {heard,reply:{z,p,k},end,audio,sec,usage}, `/call/review` {code,sc,turns}. 서버 소스는 `supabase/functions/call/index.ts`(대시보드 Via Editor 로 배포, ALLOWED 채워 넣기). 미배포면 앱은 "통화 서버 미배포" 안내. 사용량은 선택 테이블 `call_usage`(SQL은 파일 주석).
+  - 통화 모드(서버 기준 `cfg.call` 없으면 `cfg.ai`): `/call/ping` {code}, `/call/say` {code,text,sc}, `/call/turn` {code,audio(16kHz WAV b64),sc{…,level,kind,me},history,n} → {heard,reply:{z,p,k},hints[],end,audio,sec,usage} (`stuck:true` 면 오디오 없이 다시 묻기), `/call/review` {code,sc,turns}. 서버 소스는 `supabase/functions/call/index.ts`(대시보드 Via Editor 로 배포, ALLOWED 채워 넣기). 미배포면 앱은 "통화 서버 미배포" 안내. 사용량은 선택 테이블 `call_usage`(SQL은 파일 주석).
   - 초대 코드에 AI 권한이 없으면 서버가 거부 → UI 문구 "이 초대 코드는 AI … 사용할 수 없습니다".
 - Supabase REST: `GET {SB_URL}/rest/v1/trainer?id=eq.<sid>&select=data`, `POST …/trainer` (Prefer: resolution=merge-duplicates) body `[{id:sid,data:state,updated_at}]`.
 
 ## 데이터
 - localStorage:
-  - `szcn-trainer-v1` — state `{prog:{}, stats:{total,correct,days:{YYYY-MM-DD:{n,c,min,sq,m,am,mv,pm}}}, mastered, myWords:{}, rp:{}, gram:{}, ptDone:{}, goals:{min:220,sent:60,quiz:200,mast:35}, pron:{…}, call:{log:[{id,key,d,dur,turns:[{r:'me'|'npc',z,p,k,sec}],review}] (최근 20건, 오디오 미저장), usage:{'YYYY-MM':{c:통화초,p:발음초}}, subs}}` — `call` 은 `callState()` 가 지연 초기화
+  - `szcn-trainer-v1` — state `{prog:{}, stats:{total,correct,days:{YYYY-MM-DD:{n,c,min,sq,m,am,mv,pm}}}, mastered, myWords:{}, rp:{}, gram:{}, ptDone:{}, goals:{min:220,sent:60,quiz:200,mast:35}, pron:{…}, call:{level:1|2|3, log:[{id,key,lv,d,dur,turns:[{r:'me'|'npc',z,p,k,sec}],review}] (최근 20건, 오디오 미저장), usage:{'YYYY-MM':{c:통화초,p:발음초}}, subs}}` — `call` 은 `callState()` 가 지연 초기화
   - `szcn-trainer-cfg` — `{sid, ai, call?}`
   - `szcn-trainer-bak` — `{t, state}` 자동백업(점수가 더 클 때만 갱신)
 - Supabase 테이블 `trainer(id text PK = 초대코드, data jsonb, updated_at)`.
