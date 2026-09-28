@@ -1,0 +1,88 @@
+# sz-chinese — 실전 중국어 · 광저우 지사장 (공장 실무 중국어 학습 PWA)
+
+## 작업 규칙 (Claude)
+- 소유자에게 질문하지 말고 가장 합리적인 해석으로 바로 수정 → main에 커밋·푸시 → 변경 요약만 짧게 보고.
+- 예외(먼저 확인): KV/D1/R2 데이터 삭제·스키마 파괴적 변경, 도메인·Worker 이름 변경, 시크릿 추가 필요, 비용 발생. 이 앱에서는 Supabase `trainer` 테이블 구조 변경, `state` 스키마 파괴적 변경(기존 사용자 진도 손실)도 먼저 확인.
+- 푸시 = 자동 배포. 문법 오류는 곧 서비스 장애이므로 푸시 전 반드시 검증(아래 "검증").
+- 단일 파일 구조 유지. 프레임워크·빌드 도구·npm 의존성 추가 금지.
+- 커밋 메시지는 한국어 한 줄.
+- index.html 이 600KB·7,500줄. 전체를 다시 쓰지 말고 필요한 부분만 Edit.
+- `audio/*.mp3` 는 건드리지 않는다(추가·삭제·이름변경 금지). 새 음성이 필요하면 mp3 없이 Azure TTS 폴백으로 동작하게 둔다.
+- index.html·manifest·아이콘을 바꾸면 `sw.js` 의 `C='szcn-beta-N'` 숫자를 올린다(구캐시 제거). `AUDIO_CACHE='szcn-audio'` 이름은 바꾸지 않는다(오프라인 음성 캐시 날아감).
+
+## 개요
+- 광저우·선전 지사장이 공장 현장(실사·단가협상·클레임·위챗·생활·오더진행)에서 쓰는 문장으로 만든 중국어 학습앱. 초대 코드 배포형 BETA(타인도 사용).
+- 탭: 홈(ph) · 회화(p0) · 퀴즈(p1) · HSK 단어(p2) · 복습(p3) · 발음(p6) · 현장(p5) · 진척(p4).
+- 퀴즈 모드: pick 뜻 고르기 / build 문장 조립 / fill 빈칸 / pattern 패턴 드릴 / number 숫자 듣기.
+- 롤플레이(RP): 위챗 분기 대화(노드·선택지·점수), AI 직접 작문 교정 옵션.
+
+## 배포
+- 방식: 정적 파일(빌드 없음). wrangler 설정 없음 → Cloudflare Pages(GitHub `elanddenim-bit/sz-chinese` main 연결) 정적 배포로 추정. 미확인.
+- URL/도메인: 미확인 (코드 내 하드코딩 없음, 전부 상대경로).
+- 바인딩: 없음(정적).
+- 외부 서비스:
+  | 용도 | 값 |
+  |---|---|
+  | Supabase 동기화 | `SB_URL=https://qmxcfsozzrcdakkiozts.supabase.co`, `SB_KEY=sb_publishable_…`(공개키, index.html 상수) |
+  | AI 서버 | 사용자가 설정 모달에 입력하는 URL(`cfg.ai`). 서버 코드는 이 저장소에 없음(미확인, 별도 Worker로 추정) |
+- 시크릿: 저장소 내 없음. Azure/Claude 키는 AI 서버 쪽(미확인).
+- GitHub 저장소는 public.
+
+## 파일 구조
+- `index.html` — 전체 앱(CSS 14–653행, HTML, 단일 `<script>` 875행~).
+- `sw.js` — 서비스워커. 앱셸 네트워크 우선·캐시 폴백, `/audio/*.mp3` 는 캐시 우선(`szcn-audio`).
+- `manifest.json` — PWA(이름 "실전 중국어 - 광저우 지사장", 테마 #1B1F22).
+- `audio/<8자리 hex>.mp3` — 원어민 음성 약 3,700개. 파일명 = `fnv(문장 텍스트)` (FNV-1a 32bit, UTF-8, 소문자 hex 8자리 패딩).
+- `icon-192.png`, `icon-512.png`, `apple-touch-icon.png`, `.DS_Store`(불필요, 커밋되어 있음).
+
+## 아키텍처 / API
+- 음성 재생 `speak(t)`: 텍스트가 `AUDIO_SET`(=`collectSentences()` + `ITEMS` 중 kind:'word' 의 z)에 있으면 `audio/`+fnv(t)+`.mp3` → 실패 시 Azure TTS(`cfg.ai`+`/tts`) → 실패 시 브라우저 speechSynthesis(zh-CN).
+- `prefetchAudio()` 로 mp3 를 `szcn-audio` 캐시에 선다운로드. iOS 자동재생 제한 때문에 `unlockAudio()`·`azPrefetch()` 가 존재 — 탭 직후 동기 재생 흐름을 깨지 말 것.
+- AI 서버 호출(모두 POST JSON, `code`=초대코드 `cfg.sid` 동봉):
+  - `{ai}/correct` {text, code, situation, intent, history} — 작문 교정(롤플레이·드릴)
+  - `{ai}/field` {mode, text, code, situation} — 현장 탭
+  - `{ai}/vocab` {code, images[]} — 이미지로 단어 추출
+  - `{ai}/pronounce` {code, text, audio(base64)} — 발음 평가(합격선 `PR_PASS=80`)
+  - `{ai}/tts` {code, text} → 오디오 blob(400B 미만이면 실패 처리)
+  - 초대 코드에 AI 권한이 없으면 서버가 거부 → UI 문구 "이 초대 코드는 AI … 사용할 수 없습니다".
+- Supabase REST: `GET {SB_URL}/rest/v1/trainer?id=eq.<sid>&select=data`, `POST …/trainer` (Prefer: resolution=merge-duplicates) body `[{id:sid,data:state,updated_at}]`.
+
+## 데이터
+- localStorage:
+  - `szcn-trainer-v1` — state `{prog:{}, stats:{total,correct,days:{YYYY-MM-DD:{n,c,min,sq,m,am,mv,pm}}}, mastered, myWords:{}, rp:{}, gram:{}, ptDone:{}, goals:{min:220,sent:60,quiz:200,mast:35}}`
+  - `szcn-trainer-cfg` — `{sid, ai}`
+  - `szcn-trainer-bak` — `{t, state}` 자동백업(점수가 더 클 때만 갱신)
+- Supabase 테이블 `trainer(id text PK = 초대코드, data jsonb, updated_at)`.
+- 덮어쓰기 방지: `stScore = total*10 + Σminutes`. 로컬 점수가 서버의 50% 미만이면 업로드 차단(saveGuard, 주황 점). 병합은 점수 큰 쪽 채택(`mergePick`).
+- 콘텐츠 상수(index.html 내): `DATA`(시나리오 6개 × {i,q,p,k,a:[{t:std|real|coll,z,p,k}]}), `SCEN_NAMES/SCEN_NOTES`, `TOKS/TOKPY`(문장 조립 토큰), `FILLS`, `PATTERNS`, `NUMDRILL/NUMDRILL2`, `RP`(롤플레이 {id,title,setting,start,maxPts,keys,nodes}), 단어 `W4/W4B/W4C`(HSK4), `W5/W5B/W5C`(HSK5), `W301/S301`(301구), `W7`(실무 어휘 biz). 단어 행 형식 `[중문, 병음, 한국어뜻]`.
+- `ITEMS[id]={id,kind,lv,z,p,k}` — id 접두어로 출처 구분(w7-0 등). 진도 `state.prog` 가 이 id 를 키로 쓴다 → 기존 배열 중간 삽입·삭제 시 id 가 밀려 사용자 진도가 꼬임. 항목 추가는 배열 끝에.
+
+## 도메인 규칙
+- 대상: 의류 OEM 공장 실무(우븐/니트, 단가, 납기, 클레임, 위챗). 공장 측 "시간끌기·역제안" 패턴을 듣기 훈련하는 것이 핵심 가치.
+- 답변 태그: std 표준 / real 실전형(조건·회피·역제안) / coll 구어체.
+- 병음은 성조 기호 표기. 한국어 뜻은 존댓말 자연어.
+- 문장 텍스트를 1글자라도 바꾸면 fnv 해시가 바뀌어 해당 mp3 매칭이 끊긴다(→ Azure TTS/브라우저 TTS로 재생). 오탈자 수정 외에는 기존 문장 변경 자제.
+
+## UI 규칙
+- 한국어 UI, 중국어는 `.zh` 클래스(Noto Sans SC/PingFang SC).
+- 색상 토큰(`:root`): `--navy:#1B1F22`(헤더), `--red:#2E4A73`(이름과 달리 블루 계열 강조색), `--danger:#C8352E`, `--ok:#1E7F4F`, `--bg:#F3F2EE`, `--wash:#8FA6C4`. 시나리오 색 `--c0..c5`(실사 인디고/협상 앰버/클레임 레드/위챗 그린/생활 퍼플/오더 딥그린) + `--cNbg`.
+- 모바일(아이폰·아이패드) 우선, 하단 탭바, 바텀시트(`#sheet`), 모달(`#cfgModal`, `#welModal`).
+- E·LAND CI 레드(#D51030)를 쓰지 않는 개인 브랜드형 디자인 — 유지.
+
+## 주의사항 / 알려진 이슈
+- Supabase 접근 정책(RLS) 미확인. 인증·권한 관련 변경은 소유자 확인 후 진행.
+- AI 서버 소스가 저장소에 없음. 엔드포인트 스펙 변경 시 서버 측 수정은 이 저장소에서 불가.
+- `.DS_Store` 커밋되어 있음(삭제 무해).
+- `sw.js` 는 index.html 등 앱셸을 네트워크 우선으로 받으므로 배포 즉시 반영되나, 캐시 이름을 올려야 구버전 캐시 정리.
+- 중국 본토에서 `*.supabase.co`·AI 서버 접속 가능 여부 미확인. 실패 시 로컬 저장으로 동작(설계상 허용).
+
+## 검증
+```bash
+# 저장소 루트에서 실행
+# 인라인 스크립트 문법 검사
+node -e "const h=require('fs').readFileSync('index.html','utf8');let i=0;for(const m of h.matchAll(/<script(?![^>]*src=)[^>]*>([\s\S]*?)<\/script>/g)){i++;new (require('vm').Script)(m[1])}console.log('script OK',i)"
+node --check sw.js
+node -e "JSON.parse(require('fs').readFileSync('manifest.json','utf8'));console.log('manifest OK')"
+# 특정 문장의 mp3 존재 확인 (fnv 해시)
+node -e "let h=0x811c9dc5;for(const c of new TextEncoder().encode(process.argv[1])){h^=c;h=Math.imul(h,0x01000193)>>>0}const f='audio/'+h.toString(16).padStart(8,'0')+'.mp3';console.log(f,require('fs').existsSync(f))" "我们主要做针织，T恤、卫衣、卫裤这些都可以。"
+```
