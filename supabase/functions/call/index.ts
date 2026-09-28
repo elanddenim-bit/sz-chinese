@@ -64,13 +64,24 @@ function allowed(code: unknown) {
 
 // ---------------- Azure 사용량 (월별, call_usage 테이블) ----------------
 function monthKey() { return new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 7); } // 중국 시간 기준
-function sbHeaders() {
-  const k = env("SUPABASE_SERVICE_ROLE_KEY");
-  return { apikey: k, Authorization: "Bearer " + k, "Content-Type": "application/json" };
+// 새 비밀 키(SUPABASE_SECRET_KEYS, sb_secret_…) 우선, 없으면 레거시 service role 키
+function sbKey(): { key: string; legacy: boolean } {
+  try {
+    const d = JSON.parse(env("SUPABASE_SECRET_KEYS") || "{}");
+    const k = d.default || Object.values(d)[0];
+    if (k) return { key: String(k), legacy: false };
+  } catch { /* 무시 */ }
+  return { key: env("SUPABASE_SERVICE_ROLE_KEY"), legacy: true };
+}
+function sbHeaders(): Record<string, string> {
+  const { key, legacy } = sbKey();
+  const h: Record<string, string> = { apikey: key, "Content-Type": "application/json" };
+  if (legacy) h.Authorization = "Bearer " + key; // sb_secret_ 키는 JWT 가 아니므로 apikey 만 보낸다
+  return h;
 }
 async function readSec(month: string): Promise<number | null> {
   const base = env("SUPABASE_URL");
-  if (!base || !env("SUPABASE_SERVICE_ROLE_KEY")) return null;
+  if (!base || !sbKey().key) return null;
   try {
     const r = await fetch(`${base}/rest/v1/call_usage?month=eq.${month}&select=sec`, { headers: sbHeaders() });
     if (!r.ok) return null; // 테이블 없음 → 추적 안 함
