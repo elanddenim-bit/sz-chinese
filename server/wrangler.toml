@@ -1,0 +1,24 @@
+# 통화 모드 서버를 단독 Worker 로 배포할 때만 사용 (기존 AI 서버에 합치면 불필요)
+# 배포: cd server && npx wrangler deploy
+# 시크릿: npx wrangler secret put AZURE_SPEECH_KEY / ANTHROPIC_API_KEY / ALLOWED_CODES
+name = "sz-call"
+main = "call.js"
+compatibility_date = "2026-01-01"
+
+[vars]
+AZURE_SPEECH_REGION = "eastasia"   # 기존 발음 평가 리소스와 같은 지역으로 맞출 것
+CALL_CAP_MIN = "240"                # 통화 STT 월 상한(분). F0 300분 중 60분은 발음 평가 몫
+
+# 월별 사용량 누적 (npx wrangler kv namespace create USAGE 후 id 기입)
+# [[kv_namespaces]]
+# binding = "USAGE"
+# id = ""
+
+# Anthropic 홍콩 403 우회 (zh-note 와 같은 방식)
+[[durable_objects.bindings]]
+name = "RELAY"
+class_name = "Relay"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Relay"]
