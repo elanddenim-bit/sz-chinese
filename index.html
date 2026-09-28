@@ -7626,15 +7626,19 @@ async function callPost(path,body,ms){
     var res=await fetch(callBase()+path,{method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify(body),signal:ctl?ctl.signal:undefined});
     var j=null; try{j=await res.json();}catch(e){}
-    if(!j)j={error:res.status===404?'no_server':'http_'+res.status};
-    if(res.status===404&&j.error==='not_found')j.error='no_server';
+    if(!j||typeof j!=='object')j={};
+    // 함수 미배포 시 Supabase 는 404 + 자체 형식, JWT 검증이 켜져 있으면 401
+    if(res.status===404&&(!j.error||j.error==='not_found'))j={error:'no_server'};
+    else if(res.status===401&&!j.error)j={error:'jwt'};
+    else if(!res.ok&&!j.error)j={error:'http_'+res.status};
     return j;
   }catch(e){return {error:(e&&e.name==='AbortError')?'timeout':'network'};}
   finally{if(to)clearTimeout(to);}
 }
 function callErrText(e){
   return ({no_ai:'AI 서버 주소가 없습니다. 좌측 상단 ⚙︎에서 등록하세요.',not_allowed:'이 초대 코드는 AI 통화를 사용할 수 없습니다.',
-    no_server:'통화 서버가 아직 배포되지 않았습니다(/call 엔드포인트 없음).',
+    no_server:'통화 서버가 아직 배포되지 않았습니다(Supabase 함수 call 없음).',
+    jwt:'통화 서버가 인증을 요구합니다. Supabase 함수 call 의 Verify JWT 를 꺼 주세요.',
     quota:'이번 달 통화용 음성 인식 한도를 다 썼습니다. 발음 평가 몫을 남기기 위해 통화를 막았습니다.',
     timeout:'서버 응답이 너무 늦습니다. 네트워크를 확인해 주세요.',
     network:'서버에 연결하지 못했습니다. 네트워크(VPN)를 확인해 주세요.',

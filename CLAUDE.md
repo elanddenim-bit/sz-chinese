@@ -25,13 +25,13 @@
   | 용도 | 값 |
   |---|---|
   | Supabase 동기화 | `SB_URL=https://qmxcfsozzrcdakkiozts.supabase.co`, `SB_KEY=sb_publishable_…`(공개키, index.html 상수) |
-  | AI 서버 | 사용자가 설정 모달에 입력하는 URL(`cfg.ai`). 서버 코드는 이 저장소에 없음(미확인, 별도 Worker로 추정) |
-- 시크릿: 저장소 내 없음. Azure/Claude 키는 AI 서버 쪽(미확인).
+  | AI 서버 | Supabase Edge Functions — 같은 프로젝트 cn-trainer(ap-southeast-1), `cfg.ai`=`https://qmxcfsozzrcdakkiozts.supabase.co/functions/v1`. 함수: correct·field·pronounce·tts·vocab(대시보드 편집, 저장소에 소스 없음) + call(`supabase/functions/call/index.ts`) |
+- 시크릿: 저장소 내 없음. Supabase Edge Function 시크릿 `AZURE_SPEECH_KEY`·`AZURE_SPEECH_REGION`(pronounce 확인), Claude 키는 `ANTHROPIC_API_KEY`로 가정. 초대 코드 허용 목록은 각 함수 코드의 `ALLOWED` 배열(public 저장소에 커밋 금지). 함수는 Verify JWT 꺼져 있음(앱이 Authorization 헤더를 안 보냄).
 - GitHub 저장소는 public.
 
 ## 파일 구조
 - `index.html` — 전체 앱(CSS 14–653행, HTML, 단일 `<script>` 875행~).
-- `server/` — 통화 모드 Worker 소스(`call.js`, `wrangler.toml`). 정적 앱과 무관, Pages 로 공개되지만 시크릿 없음.
+- `supabase/functions/call/index.ts` — 통화 모드 Edge Function 소스. 정적 앱과 무관, Pages 로 공개되므로 초대 코드·키를 넣지 말 것.
 - `sw.js` — 서비스워커. 앱셸 네트워크 우선·캐시 폴백, `/audio/*.mp3` 는 캐시 우선(`szcn-audio`).
 - `manifest.json` — PWA(이름 "실전 중국어 - 광저우 지사장", 테마 #1B1F22).
 - `audio/<8자리 hex>.mp3` — 원어민 음성 약 3,700개. 파일명 = `fnv(문장 텍스트)` (FNV-1a 32bit, UTF-8, 소문자 hex 8자리 패딩).
@@ -46,7 +46,7 @@
   - `{ai}/vocab` {code, images[]} — 이미지로 단어 추출
   - `{ai}/pronounce` {code, text, audio(base64)} — 발음 평가(합격선 `PR_PASS=80`)
   - `{ai}/tts` {code, text} → 오디오 blob(400B 미만이면 실패 처리)
-  - 통화 모드(서버 기준 `cfg.call` 없으면 `cfg.ai`): `/call/ping` {code}, `/call/say` {code,text,sc}, `/call/turn` {code,audio(16kHz WAV b64),sc,history,n} → {heard,reply:{z,p,k},end,audio,sec,usage}, `/call/review` {code,sc,turns}. 서버 소스는 `server/call.js`(기존 AI 서버에 합치거나 단독 Worker `sz-call` 로 배포). 배포 여부 미확인이면 앱은 "통화 서버 미배포" 안내.
+  - 통화 모드(서버 기준 `cfg.call` 없으면 `cfg.ai`): `/call/ping` {code}, `/call/say` {code,text,sc}, `/call/turn` {code,audio(16kHz WAV b64),sc,history,n} → {heard,reply:{z,p,k},end,audio,sec,usage}, `/call/review` {code,sc,turns}. 서버 소스는 `supabase/functions/call/index.ts`(대시보드 Via Editor 로 배포, ALLOWED 채워 넣기). 미배포면 앱은 "통화 서버 미배포" 안내. 사용량은 선택 테이블 `call_usage`(SQL은 파일 주석).
   - 초대 코드에 AI 권한이 없으면 서버가 거부 → UI 문구 "이 초대 코드는 AI … 사용할 수 없습니다".
 - Supabase REST: `GET {SB_URL}/rest/v1/trainer?id=eq.<sid>&select=data`, `POST …/trainer` (Prefer: resolution=merge-duplicates) body `[{id:sid,data:state,updated_at}]`.
 
@@ -77,7 +77,7 @@
 
 ## 주의사항 / 알려진 이슈
 - Supabase 접근 정책(RLS) 미확인. 인증·권한 관련 변경은 소유자 확인 후 진행.
-- AI 서버 소스가 저장소에 없음. 엔드포인트 스펙 변경 시 서버 측 수정은 이 저장소에서 불가.
+- correct·field·pronounce·tts·vocab 소스는 저장소에 없음(Supabase 대시보드에만 있음). 스펙 변경 시 대시보드 코드를 받아서 수정.
 - `.DS_Store` 커밋되어 있음(삭제 무해).
 - `sw.js` 는 index.html 등 앱셸을 네트워크 우선으로 받으므로 배포 즉시 반영되나, 캐시 이름을 올려야 구버전 캐시 정리.
 - 중국 본토에서 `*.supabase.co`·AI 서버 접속 가능 여부 미확인. 실패 시 로컬 저장으로 동작(설계상 허용).
