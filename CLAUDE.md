@@ -17,7 +17,7 @@
 - 롤플레이(RP): 위챗 분기 대화(노드·선택지·점수), AI 직접 작문 교정 옵션.
 
 ## 배포
-- 방식: 정적 파일(빌드 없음). wrangler 설정 없음 → Cloudflare Pages(GitHub `elanddenim-bit/sz-chinese` main 연결) 정적 배포로 추정. 미확인.
+- 방식: 정적 파일(빌드 없음). GitHub Pages — `elanddenim-bit/sz-chinese` main 푸시 시 자동 배포(github-pages 환경). Cloudflare Pages 아님.
 - URL/도메인: 미확인 (코드 내 하드코딩 없음, 전부 상대경로).
 - 바인딩: 없음(정적).
 - 외부 서비스:
@@ -64,7 +64,10 @@
 - 문장 텍스트를 1글자라도 바꾸면 fnv 해시가 바뀌어 해당 mp3 매칭이 끊긴다(→ Azure TTS/브라우저 TTS로 재생). 오탈자 수정 외에는 기존 문장 변경 자제.
 
 ## UI 규칙
-- 한국어 UI, 중국어는 `.zh` 클래스(Noto Sans SC/PingFang SC).
+- 한국어 UI, 중국어는 `.zh` 클래스. 폰트는 시스템 폰트만 사용(실제 렌더링: 중문 PingFang SC, 한글 Apple SD Gothic Neo). Noto는 CSS에 이름만 있고 로드하지 않음.
+- 외부 폰트·CDN 추가 금지 — 중국 본토에서 VPN 없이 열려야 함(Google Fonts 요청 하나로 페이지가 멈춤).
+- 수정은 필요한 부분만 Edit → main 푸시. 전체 HTML 재출력 하지 않음.
+- 데이터: 기기별 localStorage + 초대 코드 기준 Supabase 동기화(아이패드·아이폰 통합). `state` 호환 유지, 스키마 변경 시 마이그레이션 포함.
 - 색상 토큰(`:root`): `--navy:#1B1F22`(헤더), `--red:#2E4A73`(이름과 달리 블루 계열 강조색), `--danger:#C8352E`, `--ok:#1E7F4F`, `--bg:#F3F2EE`, `--wash:#8FA6C4`. 시나리오 색 `--c0..c5`(실사 인디고/협상 앰버/클레임 레드/위챗 그린/생활 퍼플/오더 딥그린) + `--cNbg`.
 - 모바일(아이폰·아이패드) 우선, 하단 탭바, 바텀시트(`#sheet`), 모달(`#cfgModal`, `#welModal`).
 - E·LAND CI 레드(#D51030)를 쓰지 않는 개인 브랜드형 디자인 — 유지.
