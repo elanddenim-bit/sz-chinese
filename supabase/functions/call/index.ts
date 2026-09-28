@@ -13,12 +13,13 @@
 //
 // 시크릿: AZURE_SPEECH_KEY, AZURE_SPEECH_REGION(pronounce 와 공유), ANTHROPIC_API_KEY
 // 선택: CALL_CAP_MIN(통화 STT 월 상한 분, 기본 240 → F0 300분 중 60분은 발음 평가 몫)
-// 선택: 테이블 call_usage(아래 SQL). 없으면 사용량 추적·상한 검사를 건너뛴다.
+// 선택: CALL_DAY_TURNS(코드당 하루 턴 수, 기본 150), CALL_DAY_REVIEWS(코드당 하루 리뷰 수, 기본 20) — 코드 유출 시 Claude 비용 방어
+// 테이블 call_usage(아래 SQL) — 월 STT 초·하루 호출 수를 기록. 없으면 추적·상한 검사를 모두 건너뛴다(권장: 반드시 생성).
 //   create table if not exists call_usage (month text primary key, sec numeric not null default 0, updated_at timestamptz default now());
 //   alter table call_usage enable row level security;   -- 정책 없음 = service role 만 접근
 
-// 초대 코드: 저장소가 public 이므로 여기엔 넣지 않는다.
-// 대시보드에 붙여넣을 때 pronounce 의 ALLOWED 와 같은 코드를 넣거나, 시크릿 ALLOWED_CODES(쉼표 구분)로 지정.
+// 초대 코드: 저장소가 public 이므로 여기엔 넣지 않는다 → 시크릿 ALLOWED_CODES(쉼표 구분)에 등록.
+// 이 파일은 수정 없이 그대로 대시보드에 붙여넣는다.
 const ALLOWED: string[] = [
   // "초대코드",
 ];
@@ -81,33 +82,53 @@ function sbHeaders(): Record<string, string> {
   if (legacy) h.Authorization = "Bearer " + key; // sb_secret_ 키는 JWT 가 아니므로 apikey 만 보낸다
   return h;
 }
-async function readSec(month: string): Promise<number | null> {
+// call_usage 테이블을 범용 카운터로 쓴다: month 컬럼 = 키, sec 컬럼 = 값
+//   "2026-09"                 → 그 달 통화 STT 초
+//   "day:2026-09-28:t:<hash>" → 코드별 그날 턴 수,  "…:r:<hash>" → 리뷰 수
+async function readCount(key: string): Promise<number | null> {
   const base = env("SUPABASE_URL");
   if (!base || !sbKey().key) return null;
   try {
-    const r = await fetch(`${base}/rest/v1/call_usage?month=eq.${month}&select=sec`, { headers: sbHeaders() });
+    const r = await fetch(`${base}/rest/v1/call_usage?month=eq.${encodeURIComponent(key)}&select=sec`, { headers: sbHeaders() });
     if (!r.ok) return null; // 테이블 없음 → 추적 안 함
     const rows = await r.json();
     return rows.length ? Number(rows[0].sec) || 0 : 0;
   } catch { return null; }
 }
-async function usage() {
-  const month = monthKey();
-  const cap = (parseInt(env("CALL_CAP_MIN")) || 240) * 60;
-  const sec = await readSec(month);
-  return { month, sec: Math.round(sec ?? 0), cap, tracked: sec !== null };
-}
-async function addUsage(add: number) {
-  const month = monthKey();
-  const cur = await readSec(month);
-  if (cur === null || !add) return;
+async function addCount(key: string, add: number, cur?: number | null) {
+  if (!add) return;
+  if (cur === undefined) cur = await readCount(key);
+  if (cur === null) return;
   try {
     await fetch(`${env("SUPABASE_URL")}/rest/v1/call_usage`, {
       method: "POST",
       headers: { ...sbHeaders(), Prefer: "resolution=merge-duplicates" },
-      body: JSON.stringify([{ month, sec: cur + add, updated_at: new Date().toISOString() }]),
+      body: JSON.stringify([{ month: key, sec: cur + add, updated_at: new Date().toISOString() }]),
     });
-  } catch { /* 사용량 기록 실패는 통화를 막지 않는다 */ }
+  } catch { /* 기록 실패는 통화를 막지 않는다 */ }
+}
+async function usage() {
+  const month = monthKey();
+  const cap = (parseInt(env("CALL_CAP_MIN")) || 240) * 60;
+  const sec = await readCount(month);
+  return { month, sec: Math.round(sec ?? 0), cap, tracked: sec !== null };
+}
+async function addUsage(add: number) { await addCount(monthKey(), add); }
+
+// 코드별 하루 호출 상한 (중국 시간 기준 날짜)
+async function codeHash(code: string) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(code));
+  return Array.from(new Uint8Array(d)).slice(0, 6).map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+async function dailyGate(code: string, kind: "t" | "r") {
+  const day = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+  const key = `day:${day}:${kind}:${await codeHash(String(code || ""))}`;
+  const cap = kind === "t" ? (parseInt(env("CALL_DAY_TURNS")) || 150) : (parseInt(env("CALL_DAY_REVIEWS")) || 20);
+  const cur = await readCount(key);
+  if (cur !== null && cur >= cap) {
+    throw err("daily", kind === "t" ? `오늘 통화 턴 한도(${cap}회)를 다 썼습니다` : `오늘 리뷰 한도(${cap}회)를 다 썼습니다`, 429);
+  }
+  await addCount(key, 1, cur);
 }
 
 // ---------------- 통화 한 턴: STT → Claude → TTS ----------------
@@ -115,6 +136,7 @@ async function turn(b: any) {
   const sc = cleanSc(b.sc);
   const history = (Array.isArray(b.history) ? b.history : []).slice(-16)
     .map((t: any) => ({ r: t?.r === "me" ? "me" : "npc", z: String(t?.z || "").slice(0, 200) }));
+  await dailyGate(b.code, "t");
   if (b.stuck === true) { // 막힘 도움: 오디오 없음 → Azure STT 사용량 0
     const reply = await npcReply(sc, history, "", history.filter((t: any) => t.r === "me").length, true);
     let audio = "";
@@ -247,6 +269,7 @@ async function review(b: any) {
   const turns = (Array.isArray(b.turns) ? b.turns : []).slice(0, 60)
     .map((t: any) => ({ r: t?.r === "me" ? "me" : "npc", z: String(t?.z || "").slice(0, 300) }));
   if (!turns.some((t: any) => t.r === "me" && t.z)) throw err("empty", "교정할 발화가 없습니다", 400);
+  await dailyGate(b.code, "r");
 
   const life = sc.kind === "life";
   const lvName = ["", "연습(힌트 보고 말하기 허용)", "보통", "실전"][sc.level];
@@ -266,12 +289,12 @@ JSON 만 출력:
 "strategy":[{"point":"${life ? "소통" : "협상"} 포인트 제목","why":"무엇이 좋았고/아쉬웠는지","z":"그 순간에 쓸 더 나은 한 마디","p":"병음","k":"뜻"}],
 "lines":[{"i":발화번호(1부터),"my":"원래 발화","ok":true/false,"z":"교정문","p":"병음","k":"뜻","issues":[{"wrong":"틀린 부분","right":"고친 부분","why":"이유","pattern":"키","label":"한국어 이름"}],"tactic":"이 발화의 ${life ? "소통" : "협상"} 관점 코멘트(없으면 빈 문자열)"}],
 "phrases":[{"z":"다음 통화에서 바로 쓸 핵심 표현","p":"병음","k":"뜻"}]}
-lines 는 나의 발화 전부를 순서대로 포함. strategy 2~4개, phrases 3~5개.`;
+lines 는 나의 발화 전부를 순서대로 포함. 통하는 발화(ok:true)는 issues 를 빈 배열로, z 는 더 자연스러운 표현이 있을 때만 쓰고 없으면 빈 문자열로 둡니다(출력 길이 절약). strategy 2~4개, phrases 3~5개.`;
 
   let i = 0;
   const script = turns.map((t: any) => (t.r === "me" ? `[나 #${++i}] ` : "[상대] ") + t.z).join("\n");
   const user = `상황: ${sc.title} — ${sc.setting}\n상대: ${sc.npc}\n나의 목표: ${sc.goal}\n참고 핵심 표현: ${sc.keys.join(" / ")}\n\n통화 전사본:\n${script}`;
-  const j = parseJSON(await anthropic(REVIEW_MODEL, system, user, 4000));
+  const j = parseJSON(await anthropic(REVIEW_MODEL, system, user, 10000));
   if (!j || !Array.isArray(j.lines)) throw err("review", "리뷰 생성 실패", 502);
   return j;
 }
