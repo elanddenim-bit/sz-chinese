@@ -46,7 +46,7 @@
   - `{ai}/vocab` {code, images[]} — 이미지로 단어 추출
   - `{ai}/pronounce` {code, text, audio(base64)} — 발음 평가(합격선 `PR_PASS=80`)
   - `{ai}/tts` {code, text} → 오디오 blob(400B 미만이면 실패 처리)
-  - 통화 모드(서버 기준 `cfg.call` 없으면 `cfg.ai`): `/call/ping` {code}, `/call/say` {code,text,sc}, `/call/turn` {code,audio(16kHz WAV b64),sc{…,level,kind,me},history,n} → {heard,reply:{z,p,k},hints[],end,audio,sec,usage} (`stuck:true` 면 오디오 없이 다시 묻기), `/call/review` {code,sc,turns}. 서버 소스는 `supabase/functions/call/index.ts`(대시보드 Via Editor 로 배포, ALLOWED 채워 넣기). 미배포면 앱은 "통화 서버 미배포" 안내. 테이블 `call_usage`(SQL은 파일 주석)를 범용 카운터로 사용: 월 STT 초(상한 `CALL_CAP_MIN` 240분) + 코드별 하루 턴·리뷰 수(`CALL_DAY_TURNS` 150, `CALL_DAY_REVIEWS` 20, 초과 시 429 daily). 테이블 없으면 상한 전부 미적용. 앱은 전송 전 앞뒤 무음을 잘라(`callTrimWav`) STT 사용 초를 줄이고, 리뷰 전문은 최근 10건만 state 에 보관(`callPrune`).
+  - 통화 모드(서버 기준 `cfg.call` 없으면 `cfg.ai`): `/call/ping` {code}, `/call/say` {code,text,sc}, `/call/turn` {code,audio(16kHz WAV b64),sc{…,level,kind,me},history,n} → {heard,reply:{z,p,k},hints[],end,audio,sec,usage} (`stuck:true` 면 오디오 없이 다시 묻기), `/call/review` {code,sc,turns}. 서버 소스는 `supabase/functions/call/index.ts`(대시보드 Code 탭에 그대로 붙여넣어 배포, 초대 코드는 시크릿 ALLOWED_CODES). 미배포면 앱은 "통화 서버 미배포" 안내. 테이블 `call_usage`(SQL은 파일 주석)를 범용 카운터로 사용: 월 STT 초(상한 `CALL_CAP_MIN` 240분) + 코드별 하루 턴·리뷰 수(`CALL_DAY_TURNS` 150, `CALL_DAY_REVIEWS` 20, 초과 시 429 daily). 테이블 없으면 상한 전부 미적용. 앱은 전송 전 앞뒤 무음을 잘라(`callTrimWav`) STT 사용 초를 줄이고, 리뷰 전문은 최근 10건만 state 에 보관(`callPrune`).
   - 초대 코드에 AI 권한이 없으면 서버가 거부 → UI 문구 "이 초대 코드는 AI … 사용할 수 없습니다".
 - Supabase REST: `GET {SB_URL}/rest/v1/trainer?id=eq.<sid>&select=data`, `POST …/trainer` (Prefer: resolution=merge-duplicates) body `[{id:sid,data:state,updated_at}]`.
 
