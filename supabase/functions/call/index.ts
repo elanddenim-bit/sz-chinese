@@ -5,7 +5,8 @@
 // 앱은 {ai}/call/<동작> 으로 부른다. Supabase 가 /functions/v1/call/* 를 전부 이 함수로 넘긴다.
 //  POST /call/ping   {code}                         → {ok, usage}
 //  POST /call/say    {code, text, sc}               → {audio}            첫 대사 음성(STT 사용 없음)
-//  POST /call/turn   {code, audio, sc, history, n}  → {heard, reply:{z,p,k}, hints[], end, audio, sec, usage}
+//  POST /call/turn   {code, audio, sc, history, n}  → {heard, reply:{z,p,k}, end, audio, sec, usage, timing{stt,llm,tts}}
+//  POST /call/hints  {code, sc, history}            → {hints:[{z,p,k}]}   다음 내 답변 후보(앱이 상대 음성 재생 중에 따로 요청)
 //                    {code, stuck:true, sc, history} → 녹음 없이 상대가 더 쉽게 다시 묻기(STT 사용 없음)
 //  sc.level 1 연습(협조·쉬운 말·힌트) / 2 보통 / 3 실전(원래 성격 그대로),  sc.kind life|work,  sc.me 사용자 신분
 //  POST /call/review {code, sc, turns}              → {score, verdict, outcome, strategy[], lines[], phrases[]}
@@ -13,7 +14,7 @@
 //
 // 시크릿: AZURE_SPEECH_KEY, AZURE_SPEECH_REGION(pronounce 와 공유), ANTHROPIC_API_KEY
 // 선택: CALL_CAP_MIN(통화 STT 월 상한 분, 기본 240 → F0 300분 중 60분은 발음 평가 몫)
-// 선택: CALL_DAY_TURNS(코드당 하루 턴 수, 기본 150), CALL_DAY_REVIEWS(코드당 하루 리뷰 수, 기본 20) — 코드 유출 시 Claude 비용 방어
+// 선택: CALL_DAY_TURNS(코드당 하루 Claude 호출 수 — 턴+힌트, 기본 300), CALL_DAY_REVIEWS(코드당 하루 리뷰 수, 기본 20) — 코드 유출 시 Claude 비용 방어
 // 테이블 call_usage(아래 SQL) — 월 STT 초·하루 호출 수를 기록. 없으면 추적·상한 검사를 모두 건너뛴다(권장: 반드시 생성).
 //   create table if not exists call_usage (month text primary key, sec numeric not null default 0, updated_at timestamptz default now());
 //   alter table call_usage enable row level security;   -- 정책 없음 = service role 만 접근
@@ -51,6 +52,7 @@ Deno.serve(async (req) => {
     if (action === "ping") return json({ ok: true, usage: await usage() });
     if (action === "say") { const sc = cleanSc(body.sc); return json({ audio: await tts(String(body.text || "").slice(0, 120), sc.voice, sc.level) }); }
     if (action === "turn") return json(await turn(body));
+    if (action === "hints") return json(await hints(body));
     if (action === "review") return json(await review(body));
     return json({ error: "not_found" }, 404);
   } catch (e: any) {
@@ -123,7 +125,7 @@ async function codeHash(code: string) {
 async function dailyGate(code: string, kind: "t" | "r") {
   const day = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
   const key = `day:${day}:${kind}:${await codeHash(String(code || ""))}`;
-  const cap = kind === "t" ? (parseInt(env("CALL_DAY_TURNS")) || 150) : (parseInt(env("CALL_DAY_REVIEWS")) || 20);
+  const cap = kind === "t" ? (parseInt(env("CALL_DAY_TURNS")) || 300) : (parseInt(env("CALL_DAY_REVIEWS")) || 20);
   const cur = await readCount(key);
   if (cur !== null && cur >= cap) {
     throw err("daily", kind === "t" ? `오늘 통화 턴 한도(${cap}회)를 다 썼습니다` : `오늘 리뷰 한도(${cap}회)를 다 썼습니다`, 429);
@@ -133,33 +135,59 @@ async function dailyGate(code: string, kind: "t" | "r") {
 
 // ---------------- 통화 한 턴: STT → Claude → TTS ----------------
 async function turn(b: any) {
+  const T0 = Date.now();
   const sc = cleanSc(b.sc);
-  const history = (Array.isArray(b.history) ? b.history : []).slice(-16)
-    .map((t: any) => ({ r: t?.r === "me" ? "me" : "npc", z: String(t?.z || "").slice(0, 200) }));
-  await dailyGate(b.code, "t");
+  const history = cleanHistory(b.history);
   if (b.stuck === true) { // 막힘 도움: 오디오 없음 → Azure STT 사용량 0
-    const reply = await npcReply(sc, history, "", history.filter((t: any) => t.r === "me").length, true);
+    await dailyGate(b.code, "t");
+    const reply = await npcReply(sc, history, "", history.filter((t) => t.r === "me").length, true);
     let audio = "";
     try { audio = await tts(reply.z, sc.voice, sc.level); } catch { audio = ""; }
-    return { heard: "", reply: { z: reply.z, p: reply.p, k: reply.k }, hints: reply.hints, end: false, audio, sec: 0 };
+    return { heard: "", reply: { z: reply.z, p: reply.p, k: reply.k }, end: false, audio, sec: 0 };
   }
-  const u0 = await usage();
-  if (u0.tracked && u0.sec >= u0.cap) throw err("quota", "이번 달 통화용 음성 인식 한도를 다 썼습니다", 429);
-
   const wav = b64ToBytes(String(b.audio || ""));
   if (wav.length < 44 + 3200) throw err("short_audio", "녹음이 너무 짧습니다", 400);
   const sec = Math.round(((wav.length - 44) / 32000) * 100) / 100; // 16kHz 16bit mono
   if (sec > 30) throw err("long_audio", "한 번에 30초까지만 말할 수 있습니다", 400);
 
-  const heard = await stt(wav);
-  await addUsage(Math.ceil(sec)); // Azure 는 초 단위 올림 과금
+  // 지연 단축: 한도 확인(DB 조회)과 음성 인식을 동시에 돌린다
+  const [, u0, heard] = await Promise.all([dailyGate(b.code, "t"), usage(), stt(wav)]);
+  if (u0.tracked && u0.sec >= u0.cap) throw err("quota", "이번 달 통화용 음성 인식 한도를 다 썼습니다", 429);
+  const T1 = Date.now();
 
-  const n = parseInt(b.n) || history.filter((t: any) => t.r === "me").length + 1;
-  const reply = await npcReply(sc, history, heard, n, false);
+  const n = parseInt(b.n) || history.filter((t) => t.r === "me").length + 1;
+  const [reply] = await Promise.all([npcReply(sc, history, heard, n, false), addUsage(Math.ceil(sec))]); // Azure 는 초 단위 올림 과금
+  const T2 = Date.now();
 
   let audio = "";
   try { audio = await tts(reply.z, sc.voice, sc.level); } catch { audio = ""; } // 음성 실패 시 앱이 /tts 로 재시도
-  return { heard, reply: { z: reply.z, p: reply.p, k: reply.k }, hints: reply.hints, end: !!reply.end, audio, sec, usage: await usage() };
+  const T3 = Date.now();
+  const used = u0.tracked ? { ...u0, sec: u0.sec + Math.ceil(sec) } : u0;
+  return { heard, reply: { z: reply.z, p: reply.p, k: reply.k }, end: !!reply.end, audio, sec, usage: used,
+    timing: { stt: T1 - T0, llm: T2 - T1, tts: T3 - T2 } };
+}
+
+function cleanHistory(h: unknown) {
+  return (Array.isArray(h) ? h : []).slice(-16)
+    .map((t: any) => ({ r: t?.r === "me" ? "me" : "npc", z: String(t?.z || "").slice(0, 200) }));
+}
+
+// 다음 내 답변 후보 — 턴 응답과 분리해서 턴 지연을 줄인다
+async function hints(b: any) {
+  const sc = cleanSc(b.sc);
+  if (sc.level >= 3) return { hints: [] };
+  await dailyGate(b.code, "t");
+  const history = cleanHistory(b.history);
+  const system = `你是中文口语训练App的提示助手。一个${sc.me}正在打电话。
+【场景】${sc.title}：${sc.setting}
+【电话另一头】${sc.npc}
+【他的目标】${sc.goal}
+根据到目前为止的通话，写出他下一句最可能、最自然的2~3种说法：每句不超过18个字，用HSK3~4的简单常用词，彼此意思不同（例如：答应 / 提出另一个方案 / 问一个问题），要推动他的目标。
+只输出JSON：{"hints":[{"z":"中文","p":"带声调符号的拼音","k":"자연스러운 한국어 뜻(존댓말)"}]}`;
+  const lines = history.map((t) => (t.r === "me" ? "他：" : "对方：") + t.z).join("\n");
+  const j = parseJSON(await anthropic(TURN_MODEL, system, `【通话】\n${lines}\n\n他下一句可以说什么？`, 400));
+  const list = j && Array.isArray(j.hints) ? j.hints : [];
+  return { hints: list.slice(0, 3).filter((h: any) => h && h.z).map((h: any) => ({ z: String(h.z), p: String(h.p || ""), k: String(h.k || "") })) };
 }
 
 function cleanSc(sc: any) {
@@ -229,7 +257,6 @@ const LEVEL_RULES: Record<number, string> = {
 };
 
 async function npcReply(sc: ReturnType<typeof cleanSc>, history: { r: string; z: string }[], heard: string, n: number, stuck: boolean) {
-  const wantHints = sc.level < 3;
   const system = `你在一个中文口语训练App里扮演电话另一头的人，和对方打一通真实感很强的电话。
 
 【场景】${sc.title}：${sc.setting}
@@ -246,21 +273,17 @@ ${LEVEL_RULES[sc.level]}
 - 他说韩语或英语时，用中文表示听不懂。
 - 通话进行到第12轮左右，或者对方明显要结束（好的/就这样/拜拜），或者事情办完/谈崩时，用一句自然的话收尾并把 end 设为 true。
 - 绝对不要跳出角色，不要解释你是AI。
-${wantHints ? `- hints：写出对方下一句最可能、最自然的2~3种回答（考虑他的目标），每句不超过18个字，用HSK3~4的简单词，彼此意思不同（例如：答应/提出另一个方案/问一个问题）。` : ""}
 
-只输出JSON，不要其他文字：{"z":"你说的中文","p":"带声调符号的拼音","k":"자연스러운 한국어 번역(존댓말)","end":false${wantHints ? ',"hints":[{"z":"对方可以说的话","p":"拼音","k":"한국어 뜻"}]' : ""}}`;
+只输出JSON，不要其他文字：{"z":"你说的中文","p":"带声调符号的拼音","k":"자연스러운 한국어 번역(존댓말)","end":false}`;
 
   const lines = history.map((t) => (t.r === "me" ? "对方：" : "你：") + t.z).join("\n");
   const last = stuck
     ? `【对方沉默了好几秒，好像不知道怎么说】\n请用更简单、更短的话重新问一次，最好给他两个选项让他选（例如"放门口还是放快递柜？"）。`
     : `【对方刚才说（语音识别结果，可能有识别错误）】\n${heard || "（没有听清/空白）"}\n\n这是对方的第${n}句。请回应。`;
   const user = `【到目前为止的通话】\n${lines || "（刚接通电话，你已经说了开场白）"}\n\n${last}`;
-  const j = parseJSON(await anthropic(TURN_MODEL, system, user, wantHints ? 600 : 300));
+  const j = parseJSON(await anthropic(TURN_MODEL, system, user, 250));
   if (!j || !j.z) throw err("npc", "캐릭터 답변 생성 실패", 502);
-  const hints = wantHints && Array.isArray(j.hints)
-    ? j.hints.slice(0, 3).filter((h: any) => h && h.z).map((h: any) => ({ z: String(h.z), p: String(h.p || ""), k: String(h.k || "") }))
-    : [];
-  return { z: String(j.z), p: String(j.p || ""), k: String(j.k || ""), end: !!j.end && !stuck, hints };
+  return { z: String(j.z), p: String(j.p || ""), k: String(j.k || ""), end: !!j.end && !stuck };
 }
 
 // ---------------- 통화 리뷰 ----------------

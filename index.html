@@ -651,6 +651,9 @@
   .sh-line{position:relative}
   .sh-mic{position:absolute;top:9px;right:9px;background:#fff;border:1px solid var(--hair);border-radius:9px;width:34px;height:30px;font-size:14px;cursor:pointer;font-family:inherit;line-height:1}
   /* 통화 모드 */
+  .cl-lat{color:var(--wash);font-size:11px;text-align:right;margin-top:4px;min-height:14px;font-variant-numeric:tabular-nums}
+  .cl-hi2.ko{cursor:pointer;border:1px dashed rgba(143,166,196,.5)}
+  .cl-hi2 .kbig{color:#fff;font-size:15.5px;line-height:1.5}
   .cl-gt{font-size:11.5px;font-weight:800;color:var(--grey);margin:10px 0 6px}
   .cl-lv{display:flex;gap:6px;margin:14px 0 6px}
   .cl-lv button{flex:1;background:rgba(255,255,255,.1);border:1px solid transparent;color:#fff;border-radius:10px;padding:11px 4px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit}
@@ -739,7 +742,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.8.1</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.9.0</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -7638,9 +7641,9 @@ const CALL_SC={
 };
 const CALL_GROUPS=[['생활 통화',['kuaidi','waimai','didi','booking','aircon']],['업무 통화',['delay','pricefight','claim']]];
 const CALL_LV={
-  1:{name:'연습',desc:'상대가 쉽고 천천히, 답변 힌트 표시, 3초 멈추면 전송, 막히면 상대가 도와줌',sil:3000,stuck:7000},
-  2:{name:'보통',desc:'상대가 조금 버팀, 힌트는 탭해서 보기, 2초 멈추면 전송',sil:2000,stuck:8000},
-  3:{name:'실전',desc:'실제 속도·버티기, 힌트 없음, 1.5초 멈추면 전송',sil:1500,stuck:0}
+  1:{name:'연습',desc:'상대가 쉽고 천천히, 답변 힌트 표시, 2.2초 멈추면 전송, 막히면 상대가 도와줌',sil:2200,stuck:7000},
+  2:{name:'보통',desc:'상대가 조금 버팀, 힌트는 탭해서 보기, 1.6초 멈추면 전송',sil:1600,stuck:8000},
+  3:{name:'실전',desc:'실제 속도·버티기, 힌트 없음, 1.2초 멈추면 전송',sil:1200,stuck:0}
 };
 const CALL_MAX_TURNS=14, CALL_MAX_MS=25000, CALL_NOSPEECH_MS=12000;
 let callS=null;
@@ -7655,6 +7658,9 @@ function callState(){
   if(!CALL_LV[c.level])c.level=1;
   return c;
 }
+const CALL_KO_SCORE=80; // 이 상황의 최근 리뷰 점수가 이 이상이면 힌트에서 중국어를 숨기고 한국어 뜻만 보여 준다
+function callLastScore(key){var m=callState().score||{};return typeof m[key]==='number'?m[key]:null;}
+function callHintKo(key){var s=callLastScore(key);return s!==null&&s>=CALL_KO_SCORE;}
 function callLv(){return CALL_LV[(callS&&callS.level)||callState().level]||CALL_LV[1];}
 function callMonth(){return new Date(Date.now()+8*3600e3).toISOString().slice(0,7);}
 function callUsageAdd(kind,sec){
@@ -7754,7 +7760,9 @@ function callOpen(key){
   document.getElementById('clDial').addEventListener('click',callDial);
   function lvDraw(){
     ov.querySelectorAll('[data-lv]').forEach(function(b){b.classList.toggle('on',+b.dataset.lv===callS.level);});
-    document.getElementById('clLvd').textContent=CALL_LV[callS.level].desc;
+    var ls=callLastScore(key), note='';
+    if(callS.level<3&&ls!==null)note=ls>=CALL_KO_SCORE?' · 지난 점수 '+ls+'점 → 힌트는 한국어 뜻만':' · 지난 점수 '+ls+'점 ('+CALL_KO_SCORE+'점 넘으면 힌트가 한국어만 나옴)';
+    document.getElementById('clLvd').textContent=CALL_LV[callS.level].desc+note;
   }
   ov.querySelectorAll('[data-lv]').forEach(function(b){b.addEventListener('click',function(){
     callS.level=+b.dataset.lv;callState().level=callS.level;saveState();lvDraw();
@@ -7862,6 +7870,7 @@ async function callDial(){
   callS.n=0;
   callS.subs=callS.level<3?true:callState().subs;
   callS.hints=callS.sc.hints.slice();callS.hintOpen=false;callS.stuckUsed=false;
+  callS.hintKo=callHintKo(callS.key);callS.peek={};callS.hintSeq=0;callS.lat=[];
   callDrawCall();
   callPhase('ring');
   callBeep(440,380,0.18,0);callBeep(480,380,0.18,0);
@@ -7878,6 +7887,7 @@ function callDrawCall(){
   var ov=callOv(), sc=callS.sc;
   ov.innerHTML='<div class="cl-call" id="clCall">'
     +'<div class="cl-top"><span class="cl-name">'+sc.icon+' '+esc(sc.npc.split('（')[0])+'</span><span class="cl-time" id="clTime">00:00</span></div>'
+    +'<div class="cl-lat" id="clLat"></div>'
     +'<div class="cl-stage" id="clStage"><div class="cl-orb" id="clOrb"><span id="clOrbIc">📞</span></div>'
     +'<div class="cl-ph" id="clPh">연결 중…</div><div class="cl-sub" id="clSub"></div></div>'
     +'<div class="cl-subs" id="clSubs"></div>'
@@ -7929,19 +7939,42 @@ function callRenderSubs(){
   el.scrollTop=el.scrollHeight;
 }
 // 내 차례 답변 힌트: 연습=항상 표시, 보통=탭해서 보기, 실전=없음
+// 이 상황 최근 점수 80+ 이면 한국어 뜻만 표시(탭하면 그 힌트의 중국어 보기)
 function callRenderHints(){
   var el=document.getElementById('clHints');if(!el||!callS)return;
+  if(callS.level===3){el.innerHTML='';el.style.display='none';return;}
   var h=(callS.hints||[]).filter(function(x){return x&&x.z;});
-  if(callS.level===3||!h.length){el.innerHTML='';el.style.display='none';return;}
+  if(!h.length){
+    if(callS.hintLoading){el.style.display='block';el.innerHTML='<div class="cl-hl">💡 힌트 준비 중…</div>';}
+    else{el.innerHTML='';el.style.display='none';}
+    return;
+  }
   el.style.display='block';
   if(callS.level===2&&!callS.hintOpen){
-    el.innerHTML='<button class="cl-hbtn" id="clHintBtn">💡 이렇게 말해 보세요 (힌트 보기)</button>';
+    el.innerHTML='<button class="cl-hbtn" id="clHintBtn">💡 '+(callS.hintKo?'한국어 힌트 보기':'이렇게 말해 보세요 (힌트 보기)')+'</button>';
     document.getElementById('clHintBtn').addEventListener('click',function(){callS.hintOpen=true;callRenderHints();});
     return;
   }
-  el.innerHTML='<div class="cl-hl">💡 이렇게 말해 보세요</div>'+h.slice(0,3).map(function(x){
+  var ko=callS.hintKo;
+  el.innerHTML='<div class="cl-hl">💡 '+(ko?'이 뜻을 중국어로 말해 보세요 · 막히면 탭':'이렇게 말해 보세요')+'</div>'+h.slice(0,3).map(function(x,i){
+    if(ko&&!callS.peek[i])return '<div class="cl-hi2 ko" data-peek="'+i+'"><div class="kbig">'+esc(x.k||'')+'</div></div>';
     return '<div class="cl-hi2"><div class="z zh">'+esc(x.z)+'</div>'+(x.p?'<div class="p">'+esc(x.p)+'</div>':'')+(x.k?'<div class="k">'+esc(x.k)+'</div>':'')+'</div>';
   }).join('');
+  el.querySelectorAll('[data-peek]').forEach(function(d){d.addEventListener('click',function(){
+    callS.peek[+d.dataset.peek]=true;callS.peeks=(callS.peeks||0)+1;callRenderHints();
+  });});
+}
+// 힌트는 턴 응답과 따로 받는다 → 상대 음성이 나오는 동안 준비된다
+function callFetchHints(){
+  if(!callLive()||callS.level===3)return;
+  var seq=++callS.hintSeq;
+  callS.hintLoading=true;callRenderHints();
+  callPost('/call/hints',{sc:callScPayload(callS.sc),history:callS.turns.map(function(t){return {r:t.r,z:t.z};})},15000).then(function(r){
+    if(!callLive()||seq!==callS.hintSeq)return;
+    callS.hintLoading=false;
+    callS.hints=(r&&Array.isArray(r.hints))?r.hints:[];
+    callRenderHints();
+  });
 }
 function callTap(){
   if(!callS)return;
@@ -8073,9 +8106,22 @@ async function callStuck(){
 function callApplyReply(r){
   var rp=r.reply||{};
   if(rp.z)callS.turns.push({r:'npc',z:rp.z,p:rp.p||'',k:rp.k||''});
-  callS.hints=Array.isArray(r.hints)?r.hints:[];
-  callS.hintOpen=false;
+  callS.hints=[];callS.hintOpen=false;callS.peek={};
   callRenderSubs();
+  if(rp.z&&!r.end)callFetchHints();
+}
+// 응답 시간: 말이 끝나 전송한 뒤 상대 음성이 준비될 때까지(인식·답변·음성 + 전송). 무음 대기 시간은 제외.
+function callShowLat(ms,t){
+  if(!callS)return;
+  callS.lat.push(ms);
+  var el=document.getElementById('clLat');if(!el)return;
+  var f=function(x){return (Math.round(x/100)/10).toFixed(1);};
+  var h='응답 '+f(ms)+'초';
+  if(t&&typeof t.stt==='number'){
+    var net=Math.max(0,ms-t.stt-t.llm-t.tts);
+    h+=' · 인식 '+f(t.stt)+' · 답변 '+f(t.llm)+' · 음성 '+f(t.tts)+' · 전송 '+f(net);
+  }
+  el.textContent=h;
 }
 // ---------- 한 턴 전송 ----------
 async function callSend(blob){
@@ -8088,6 +8134,7 @@ async function callSend(blob){
   b64=callTrimWav(b64);
   if(!callLive())return;
   callS.n++;
+  var tSend=Date.now();
   var r=await callPost('/call/turn',{audio:b64,sc:callScPayload(callS.sc),
     history:callS.turns.map(function(t){return {r:t.r,z:t.z};}),n:callS.n},30000);
   if(!callLive())return;
@@ -8097,6 +8144,7 @@ async function callSend(blob){
     if(r.error==='quota'||r.error==='daily'||r.error==='not_allowed'||r.error==='no_server'){callPhase('idle',callErrText(r.error));callS.fatal=true;return;}
     callPhase('idle',callErrText(r.error)+' — 탭해서 다시 말하기');return;
   }
+  callShowLat(Date.now()-tSend,r.timing);
   var sec=r.sec||(prDiag&&prDiag.secs)||0;
   callUsageAdd('c',Math.ceil(sec));
   if(r.heard)callS.turns.push({r:'me',z:r.heard,sec:sec});
@@ -8131,7 +8179,8 @@ function callHang(auto){
   var mine=s.turns.filter(function(t){return t.r==='me'&&t.z;});
   if(!mine.length){setTimeout(callClose,auto?650:0);return;}
   var c=callState();
-  var e={id:s.id,key:s.key,lv:s.level||1,d:today(),dur:Math.round((Date.now()-s.t0)/1000),turns:s.turns.slice(),review:null};
+  var avg=(s.lat&&s.lat.length)?Math.round(s.lat.reduce(function(a,b){return a+b;},0)/s.lat.length):0;
+  var e={id:s.id,key:s.key,lv:s.level||1,lat:avg,ko:!!s.hintKo,peek:s.peeks||0,d:today(),dur:Math.round((Date.now()-s.t0)/1000),turns:s.turns.slice(),review:null};
   c.log.unshift(e);
   if(c.log.length>20)c.log.length=20;
   callPrune();
@@ -8171,6 +8220,7 @@ async function callReview(id,force){
   }
   var wasSlim=!!(e.review&&e.review.slim);
   e.review=r;
+  if(!wasSlim){var cs=callState();if(!cs.score)cs.score={};cs.score[e.key]=Math.max(0,Math.min(100,parseInt(r.score)||0));}
   var sit=sc.title+' — 통화';
   r.lines.forEach(function(l){
     if(!wasSlim&&l&&l.issues&&l.issues.length)gramRecord({issues:l.issues,corrected:l.z||'',corrected_ko:l.k||''},l.my||'',sit);
@@ -8193,7 +8243,7 @@ function callRenderReview(e){
   var s=Math.max(0,Math.min(100,parseInt(r.score)||0));
   var col=s>=85?'#1E7F4F':(s>=65?'#2E4A73':'#C8352E');
   var h='<div class="ptop"><button class="x" id="clX">✕</button><span class="ttl">통화 리뷰 · '+esc(sc.title)+'</span>'
-    +'<span class="cnt">'+e.d+' · '+Math.floor(e.dur/60)+'분 '+(e.dur%60)+'초</span></div>'
+    +'<span class="cnt">'+e.d+' · '+Math.floor(e.dur/60)+'분 '+(e.dur%60)+'초'+(e.lat?' · 평균 응답 '+(Math.round(e.lat/100)/10).toFixed(1)+'초':'')+'</span></div>'
     +'<div class="cl-rv">'
     +'<div class="fb-head"><div class="fb-score" style="background:'+col+'">'+s+'</div><div><div class="fb-verd">'+esc(r.verdict||'')+'</div>'
     +'<div class="fb-sub">'+esc(r.outcome||'')+'</div></div></div>'
