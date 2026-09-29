@@ -9,6 +9,7 @@
 //  POST /call/hints  {code, sc, history}            → {hints:[{z,p,k}]}   다음 내 답변 후보(앱이 상대 음성 재생 중에 따로 요청)
 //                    {code, stuck:true, sc, history} → 녹음 없이 상대가 더 쉽게 다시 묻기(STT 사용 없음)
 //  sc.level 1 연습(협조·쉬운 말·힌트) / 2 보통 / 3 실전(원래 성격 그대로),  sc.kind life|work,  sc.me 사용자 신분
+//  sc.targets [{z,k}] 재도전 목표 문장(지난 통화 교정문), sc.mission [{label,ex}] 약점 미션 — 상대가 그 말을 쓸 기회를 만들고 리뷰가 사용 여부를 채점
 //  POST /call/review {code, sc, turns}              → {score, verdict, outcome, strategy[], lines[], phrases[]}
 //  audio = 16kHz mono WAV base64 (pronounce 와 같은 형식)
 //
@@ -201,6 +202,10 @@ function cleanSc(sc: any) {
     level: [1, 2, 3].includes(Number(sc.level)) ? Number(sc.level) : 1,
     kind: sc.kind === "life" ? "life" : "work",
     me: s(sc.me, 120) || "朴总（韩国服装公司广州分公司负责人，韩国人，中文HSK4~5水平）",
+    targets: (Array.isArray(sc.targets) ? sc.targets : []).slice(0, 5)
+      .map((t: any) => ({ z: s(t?.z, 80), k: s(t?.k, 80) })).filter((t: any) => t.z),
+    mission: (Array.isArray(sc.mission) ? sc.mission : []).slice(0, 2)
+      .map((m: any) => ({ label: s(m?.label, 40), ex: s(m?.ex, 80) })).filter((m: any) => m.label),
   };
 }
 
@@ -267,7 +272,7 @@ async function npcReply(sc: ReturnType<typeof cleanSc>, history: { r: string; z:
 【对方想达成的目标（你不要主动替他完成）】${sc.goal}
 
 ${LEVEL_RULES[sc.level]}
-
+${practiceBlock(sc)}
 通用规则：
 - 只用口语化普通话，像广州本地的真实的人说话。
 - 对方中文有错误但能猜懂时，按你理解的意思自然回应，不要纠正他的中文、不要教他。完全听不懂或内容为空时，像打电话那样说"喂？刚才没听清，您再说一遍？"之类。
@@ -285,6 +290,17 @@ ${LEVEL_RULES[sc.level]}
   const j = parseJSON(await llm(TURN_MODEL, system, user, 250));
   if (!j || !j.z) throw err("npc", "캐릭터 답변 생성 실패", 502);
   return { z: String(j.z), p: String(j.p || ""), k: String(j.k || ""), end: !!j.end && !stuck };
+}
+
+// 재도전 목표·약점 미션: 상대가 그 말을 쓸 자연스러운 기회를 만들어 준다(대신 말해 주지는 않음)
+function practiceBlock(sc: ReturnType<typeof cleanSc>) {
+  const t = sc.targets.map((x) => "「" + x.z + "」").join(" ");
+  const m = sc.mission.map((x) => x.label + (x.ex ? `（例：${x.ex}）` : "")).join("；");
+  if (!t && !m) return "";
+  return `【这通电话的练习重点】对方这次想练习${t ? "这些说法：" + t : ""}${t && m ? "；以及" : ""}${m ? "这些语法/表达：" + m : ""}。
+- 请把对话自然地引到需要这些说法的地方（比如提出相关的问题、制造需要确认/要求/拒绝的情况），给他说出来的机会。
+- 绝对不要自己先说出这些句子，也不要提示他该怎么说。
+`;
 }
 
 // ---------------- 통화 리뷰 ----------------
@@ -313,11 +329,15 @@ JSON 만 출력:
 "strategy":[{"point":"${life ? "소통" : "협상"} 포인트 제목","why":"무엇이 좋았고/아쉬웠는지","z":"그 순간에 쓸 더 나은 한 마디","p":"병음","k":"뜻"}],
 "lines":[{"i":발화번호(1부터),"my":"원래 발화","ok":true/false,"z":"교정문","p":"병음","k":"뜻","issues":[{"wrong":"틀린 부분","right":"고친 부분","why":"이유","pattern":"키","label":"한국어 이름"}],"tactic":"이 발화의 ${life ? "소통" : "협상"} 관점 코멘트(없으면 빈 문자열)"}],
 "phrases":[{"z":"다음 통화에서 바로 쓸 핵심 표현","p":"병음","k":"뜻"}]}
-lines 는 나의 발화 전부를 순서대로 포함. 통하는 발화(ok:true)는 issues 를 빈 배열로, z 는 더 자연스러운 표현이 있을 때만 쓰고 없으면 빈 문자열로 둡니다(출력 길이 절약). strategy 2~4개, phrases 3~5개.`;
+${sc.targets.length || sc.mission.length ? "위 JSON 객체에 아래 키도 함께 넣습니다:\n" : ""}${sc.targets.length ? `"targets":[{"i":목표번호(1부터),"used":true/false,"ok":true/false,"note":"실제로 어떻게 말했는지 한 줄"}], ← 이번 통화의 재도전 목표 문장을 (같은 뜻으로) 말했는지(used), 맞게 말했는지(ok)
+` : ""}${sc.mission.length ? `"mission":[{"label":"미션 이름","used":true/false,"ok":true/false,"note":"어느 발화에서 어떻게 썼는지, 또는 어디서 쓸 수 있었는지 한 줄"}], ← 약점 미션 표현을 실제로 썼는지(used), 맞게 썼는지(ok)
+` : ""}lines 는 나의 발화 전부를 순서대로 포함. 통하는 발화(ok:true)는 issues 를 빈 배열로, z 는 더 자연스러운 표현이 있을 때만 쓰고 없으면 빈 문자열로 둡니다(출력 길이 절약). strategy 2~4개, phrases 3~5개.`;
 
   let i = 0;
   const script = turns.map((t: any) => (t.r === "me" ? `[나 #${++i}] ` : "[상대] ") + t.z).join("\n");
-  const user = `상황: ${sc.title} — ${sc.setting}\n상대: ${sc.npc}\n나의 목표: ${sc.goal}\n참고 핵심 표현: ${sc.keys.join(" / ")}\n\n통화 전사본:\n${script}`;
+  const tgt = sc.targets.length ? `\n재도전 목표 문장(지난 통화 교정문): ${sc.targets.map((x, k) => `${k + 1}. ${x.z}（${x.k}）`).join(" / ")}` : "";
+  const mis = sc.mission.length ? `\n약점 미션: ${sc.mission.map((x) => x.label + (x.ex ? `(예: ${x.ex})` : "")).join(" / ")}` : "";
+  const user = `상황: ${sc.title} — ${sc.setting}\n상대: ${sc.npc}\n나의 목표: ${sc.goal}\n참고 핵심 표현: ${sc.keys.join(" / ")}${tgt}${mis}\n\n통화 전사본:\n${script}`;
   const j = parseJSON(await llm(REVIEW_MODEL, system, user, 10000));
   if (!j || !Array.isArray(j.lines)) throw err("review", "리뷰 생성 실패", 502);
   return j;

@@ -651,6 +651,19 @@
   .sh-line{position:relative}
   .sh-mic{position:absolute;top:9px;right:9px;background:#fff;border:1px solid var(--hair);border-radius:9px;width:34px;height:30px;font-size:14px;cursor:pointer;font-family:inherit;line-height:1}
   /* 통화 모드 */
+  .cl-mis{background:rgba(255,255,255,.06);border:1px solid rgba(143,166,196,.35);border-radius:12px;padding:12px 14px;margin-top:12px;color:#fff}
+  .cl-mis .h{font-size:14px;font-weight:800;margin-bottom:6px}
+  .cl-mis .h span{color:var(--wash);font-weight:600;font-size:12px}
+  .cl-mis .d{font-size:12.5px;color:#D6DDE8;line-height:1.6;margin-bottom:4px}
+  .cl-mis .d s{color:#F2A7A1}
+  .cl-mis .t{font-size:13.5px;line-height:1.6;padding:3px 0}
+  .cl-mis .sw{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--wash);margin-top:8px}
+  .cl-chip{display:inline-block;background:rgba(30,127,79,.35);color:#fff;border-radius:20px;padding:5px 12px;font-size:12.5px;font-weight:700;margin-bottom:8px}
+  .cl-hi2.done{border-color:#1E7F4F;background:rgba(30,127,79,.25)}
+  .cl-dial.sub{background:rgba(255,255,255,.12);margin-top:9px;font-size:15px;padding:13px}
+  .cl-trow{display:flex;gap:9px;align-items:flex-start;border-top:1px solid var(--hair);padding:9px 0}
+  .cl-trow .m{flex-shrink:0;font-size:15px}
+  .cl-trow .n{font-size:12px;color:#4a5670;margin-top:3px;line-height:1.5}
   .cl-lat{color:var(--wash);font-size:11px;text-align:right;margin-top:4px;min-height:14px;font-variant-numeric:tabular-nums}
   .cl-hi2.ko{cursor:pointer;border:1px dashed rgba(143,166,196,.5)}
   .cl-hi2 .kbig{color:#fff;font-size:15.5px;line-height:1.5}
@@ -742,7 +755,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.9.0</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.10.0</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -7684,9 +7697,43 @@ function callSc(key){
     setting:d.setting||(rp&&rp.setting)||'',npc:d.npc||'',persona:d.persona||'',goal:d.goal||'',
     hints:hints,keys:hints.map(function(h){return h.z;}),open:open,voice:d.voice||CALL_VOICE_DEF};
 }
-function callScPayload(sc){
-  return {title:sc.title,setting:sc.setting,npc:sc.npc,persona:sc.persona,goal:sc.goal,keys:sc.keys,voice:sc.voice,
+function callScPayload(sc,extra){
+  var o={title:sc.title,setting:sc.setting,npc:sc.npc,persona:sc.persona,goal:sc.goal,keys:sc.keys,voice:sc.voice,
     kind:sc.kind,me:sc.kind==='life'?CALL_ME_LIFE:CALL_ME_WORK,level:(callS&&callS.level)||callState().level};
+  var src=extra||callS||{};
+  if(src.targets&&src.targets.length)o.targets=src.targets.map(function(t){return {z:t.z,k:t.k};});
+  if(src.mission)o.mission=[{label:src.mission.label,ex:src.mission.ex}];
+  return o;
+}
+// ---- 재도전 목표·약점 미션 ----
+// 중국어 문장 유사도(문자 bigram Dice) — 재도전 목표를 말했는지 통화 중 표시용(최종 판정은 리뷰)
+function callSim(a,b){
+  var f=function(x){return String(x||'').replace(/[\s，。！？、,.!?；;：:“”"'（）()…~～]/g,'');};
+  a=f(a);b=f(b);if(!a||!b)return 0;
+  if(a.indexOf(b)>=0||b.indexOf(a)>=0)return 1;
+  var bg=function(x){var m={};for(var i=0;i<x.length-1;i++){var k=x.substr(i,2);m[k]=(m[k]||0)+1;}return m;};
+  var A=bg(a),B=bg(b),n=0,na=0,nb=0,k;
+  for(k in A){na+=A[k];if(B[k])n+=Math.min(A[k],B[k]);}
+  for(k in B)nb+=B[k];
+  return (na+nb)?2*n/(na+nb):0;
+}
+// 리뷰에서 재도전 목표 뽑기: 틀린 발화의 교정문 우선, 부족하면 더 나은 표현·핵심 표현으로 채움(최대 4)
+function callRetryTargets(r){
+  var out=[], seen={};
+  function add(z,p,k){z=String(z||'').trim();if(!z||seen[z]||out.length>=4)return;seen[z]=1;out.push({z:z,p:p||'',k:k||''});}
+  (r.lines||[]).forEach(function(l){if(!l.ok&&l.z)add(l.z,l.p,l.k);});
+  (r.lines||[]).forEach(function(l){if(l.ok&&l.z&&l.z!==l.my)add(l.z,l.p,l.k);});
+  (r.strategy||[]).forEach(function(x){if(x.z)add(x.z,x.p,x.k);});
+  (r.phrases||[]).forEach(function(x){if(x.z)add(x.z,x.p,x.k);});
+  return out;
+}
+// 약점 미션: 반복 문법 실수 중 아직 못 고친 것 1개(2회 이상 틀림)
+function callPickMission(){
+  if(typeof gramTop!=='function')return null;
+  var g=gramTop(99).filter(function(x){return x.count>=2&&x.count>(x.fixed||0);})[0];
+  if(!g)return null;
+  var ex=(g.ex&&g.ex[0]&&g.ex[0].fix)||g.right||'';
+  return {key:g.pattern,label:g.label||g.pattern,ex:ex,wrong:g.wrong||'',right:g.right||'',why:g.why||'',count:g.count,fixed:g.fixed||0};
 }
 async function callPost(path,body,ms){
   var ctl=('AbortController' in window)?new AbortController():null;
@@ -7735,11 +7782,16 @@ function callUsageLine(srv){
   if(srv&&srv.tracked)h+='<br>서버 전체(모든 사용자) 통화 '+Math.round(srv.sec/6)/10+'분 / 상한 '+Math.round(srv.cap/60)+'분';
   return h;
 }
-function callOpen(key){
+function callOpen(key,opts){
   stopAll();
   if(typeof stopShadow==='function')stopShadow();
   var sc=callSc(key);
-  callS={key:key,sc:sc,turns:[],phase:'intro',level:callState().level};
+  opts=opts||{};
+  callS={key:key,sc:sc,turns:[],phase:'intro',level:callState().level,
+    targets:(opts.targets||[]).slice(0,4),retryOf:opts.retryOf||'',mission:null};
+  var retry=callS.targets.length>0;
+  var ms=retry?null:callPickMission();
+  if(ms&&callState().missionOff!==true)callS.mission=ms;
   var ov=callOv();
   ov.innerHTML='<div class="ptop"><button class="x" id="clX">✕</button><span class="ttl">📞 음성 통화 롤플레이</span></div>'
     +'<div class="cl-intro"><div class="cl-ic">'+sc.icon+'</div>'
@@ -7747,8 +7799,15 @@ function callOpen(key){
     +'<div class="cl-s">'+esc(sc.setting)+'</div>'
     +'<div class="cl-row"><b>상대</b><span class="zh">'+esc(sc.npc)+'</span></div>'
     +'<div class="cl-row"><b>목표</b><span>'+esc(sc.goal)+'</span></div>'
-    +(sc.keys.length?'<div class="cl-row"><b>써볼 말</b><span class="zh">'+sc.keys.map(esc).join('<br>')+'</span></div>':'')
+    +(retry?'':(sc.keys.length?'<div class="cl-row"><b>써볼 말</b><span class="zh">'+sc.keys.map(esc).join('<br>')+'</span></div>':''))
     +'</div>'
+    +(retry?'<div class="cl-mis retry"><div class="h">🔁 재도전 — 지난 통화에서 교정받은 말 '+callS.targets.length+'개</div>'
+      +'<div class="d">통화 중에 아래 뜻을 중국어로 말해 보세요. 상대가 그 말이 필요한 상황을 만들어 줍니다.</div>'
+      +callS.targets.map(function(t,i){return '<div class="t">'+(i+1)+'. '+esc(t.k||t.z)+'</div>';}).join('')+'</div>':'')
+    +(ms?'<div class="cl-mis" id="clMis"><div class="h">🎯 약점 미션 · '+esc(ms.label)+' <span>('+ms.count+'회 틀림'+(ms.fixed?' · '+ms.fixed+'회 교정':'')+')</span></div>'
+      +(ms.wrong||ms.right?'<div class="d"><s>'+esc(ms.wrong)+'</s> → <b class="zh">'+esc(ms.right)+'</b>'+(ms.why?' · '+esc(ms.why):'')+'</div>':'')
+      +(ms.ex?'<div class="d">예: <span class="zh">'+esc(ms.ex)+'</span></div>':'')
+      +'<label class="sw"><input type="checkbox" id="clMisOn"'+(callS.mission?' checked':'')+'> 이번 통화에서 이 표현 써보기 (상대가 쓸 기회를 만들어 줌)</label></div>':'')
     +'<div class="cl-lv" id="clLv">'+[1,2,3].map(function(n){return '<button data-lv="'+n+'">'+n+'. '+CALL_LV[n].name+'</button>';}).join('')+'</div>'
     +'<div class="cl-lvd" id="clLvd"></div>'
     +'<div class="cl-how">이어폰 권장 · <b>띵</b> 소리 뒤에 말하고, 멈추면 자동 전송 · 화면 가운데를 탭하면 바로 전송 · 한 턴에 3~5초 걸립니다</div>'
@@ -7758,6 +7817,8 @@ function callOpen(key){
     +(callState().log.some(function(e){return e.key===key;})?'<button class="pr-b cl-hist" id="clHist">이 상황 통화 기록</button>':'');
   document.getElementById('clX').addEventListener('click',callClose);
   document.getElementById('clDial').addEventListener('click',callDial);
+  var mo=document.getElementById('clMisOn');
+  if(mo)mo.addEventListener('change',function(){callS.mission=mo.checked?ms:null;callState().missionOff=!mo.checked;saveState();});
   function lvDraw(){
     ov.querySelectorAll('[data-lv]').forEach(function(b){b.classList.toggle('on',+b.dataset.lv===callS.level);});
     var ls=callLastScore(key), note='';
@@ -7871,6 +7932,7 @@ async function callDial(){
   callS.subs=callS.level<3?true:callState().subs;
   callS.hints=callS.sc.hints.slice();callS.hintOpen=false;callS.stuckUsed=false;
   callS.hintKo=callHintKo(callS.key);callS.peek={};callS.hintSeq=0;callS.lat=[];
+  callS.tDone={};
   callDrawCall();
   callPhase('ring');
   callBeep(440,380,0.18,0);callBeep(480,380,0.18,0);
@@ -7942,21 +8004,38 @@ function callRenderSubs(){
 // 이 상황 최근 점수 80+ 이면 한국어 뜻만 표시(탭하면 그 힌트의 중국어 보기)
 function callRenderHints(){
   var el=document.getElementById('clHints');if(!el||!callS)return;
+  var chip=callS.mission?'<div class="cl-chip">🎯 미션: '+esc(callS.mission.label)+'</div>':'';
+  if(callS.targets&&callS.targets.length){ // 재도전: 목표 문장 체크리스트(한국어 뜻, 탭하면 중국어)
+    el.style.display='block';
+    var left=callS.targets.filter(function(t,i){return !callS.tDone[i];}).length;
+    el.innerHTML='<div class="cl-hl">🔁 교정받은 말 다시 해보기 · 남은 '+left+'개 · 막히면 탭</div>'+callS.targets.map(function(t,i){
+      var done=callS.tDone[i], open=callS.peek['t'+i];
+      return '<div class="cl-hi2 ko'+(done?' done':'')+'" data-tp="'+i+'">'
+        +'<div class="kbig">'+(done?'✓ ':'')+esc(t.k||'')+'</div>'
+        +(open||done?'<div class="z zh">'+esc(t.z)+'</div>'+(t.p?'<div class="p">'+esc(t.p)+'</div>':''):'')+'</div>';
+    }).join('');
+    el.querySelectorAll('[data-tp]').forEach(function(d){d.addEventListener('click',function(){
+      var k='t'+d.dataset.tp;if(!callS.peek[k]){callS.peek[k]=true;callS.peeks=(callS.peeks||0)+1;}callRenderHints();
+    });});
+    return;
+  }
+  if(chip&&(callS.level===3)){el.style.display='block';el.innerHTML=chip;return;}
   if(callS.level===3){el.innerHTML='';el.style.display='none';return;}
   var h=(callS.hints||[]).filter(function(x){return x&&x.z;});
   if(!h.length){
-    if(callS.hintLoading){el.style.display='block';el.innerHTML='<div class="cl-hl">💡 힌트 준비 중…</div>';}
+    if(callS.hintLoading){el.style.display='block';el.innerHTML=chip+'<div class="cl-hl">💡 힌트 준비 중…</div>';}
+    else if(chip){el.style.display='block';el.innerHTML=chip;}
     else{el.innerHTML='';el.style.display='none';}
     return;
   }
   el.style.display='block';
   if(callS.level===2&&!callS.hintOpen){
-    el.innerHTML='<button class="cl-hbtn" id="clHintBtn">💡 '+(callS.hintKo?'한국어 힌트 보기':'이렇게 말해 보세요 (힌트 보기)')+'</button>';
+    el.innerHTML=chip+'<button class="cl-hbtn" id="clHintBtn">💡 '+(callS.hintKo?'한국어 힌트 보기':'이렇게 말해 보세요 (힌트 보기)')+'</button>';
     document.getElementById('clHintBtn').addEventListener('click',function(){callS.hintOpen=true;callRenderHints();});
     return;
   }
   var ko=callS.hintKo;
-  el.innerHTML='<div class="cl-hl">💡 '+(ko?'이 뜻을 중국어로 말해 보세요 · 막히면 탭':'이렇게 말해 보세요')+'</div>'+h.slice(0,3).map(function(x,i){
+  el.innerHTML=chip+'<div class="cl-hl">💡 '+(ko?'이 뜻을 중국어로 말해 보세요 · 막히면 탭':'이렇게 말해 보세요')+'</div>'+h.slice(0,3).map(function(x,i){
     if(ko&&!callS.peek[i])return '<div class="cl-hi2 ko" data-peek="'+i+'"><div class="kbig">'+esc(x.k||'')+'</div></div>';
     return '<div class="cl-hi2"><div class="z zh">'+esc(x.z)+'</div>'+(x.p?'<div class="p">'+esc(x.p)+'</div>':'')+(x.k?'<div class="k">'+esc(x.k)+'</div>':'')+'</div>';
   }).join('');
@@ -7966,7 +8045,7 @@ function callRenderHints(){
 }
 // 힌트는 턴 응답과 따로 받는다 → 상대 음성이 나오는 동안 준비된다
 function callFetchHints(){
-  if(!callLive()||callS.level===3)return;
+  if(!callLive()||callS.level===3||(callS.targets&&callS.targets.length))return;
   var seq=++callS.hintSeq;
   callS.hintLoading=true;callRenderHints();
   callPost('/call/hints',{sc:callScPayload(callS.sc),history:callS.turns.map(function(t){return {r:t.r,z:t.z};})},15000).then(function(r){
@@ -8148,6 +8227,7 @@ async function callSend(blob){
   var sec=r.sec||(prDiag&&prDiag.secs)||0;
   callUsageAdd('c',Math.ceil(sec));
   if(r.heard)callS.turns.push({r:'me',z:r.heard,sec:sec});
+  if(r.heard&&callS.targets)callS.targets.forEach(function(t,i){if(!callS.tDone[i]&&callSim(r.heard,t.z)>=0.55)callS.tDone[i]=true;});
   callS.stuckUsed=false;
   var rp=r.reply||{};
   callApplyReply(r);
@@ -8180,7 +8260,10 @@ function callHang(auto){
   if(!mine.length){setTimeout(callClose,auto?650:0);return;}
   var c=callState();
   var avg=(s.lat&&s.lat.length)?Math.round(s.lat.reduce(function(a,b){return a+b;},0)/s.lat.length):0;
-  var e={id:s.id,key:s.key,lv:s.level||1,lat:avg,ko:!!s.hintKo,peek:s.peeks||0,d:today(),dur:Math.round((Date.now()-s.t0)/1000),turns:s.turns.slice(),review:null};
+  var e={id:s.id,key:s.key,lv:s.level||1,lat:avg,ko:!!s.hintKo,peek:s.peeks||0,
+    targets:(s.targets&&s.targets.length)?s.targets.map(function(t){return {z:t.z,p:t.p,k:t.k};}):undefined,
+    retryOf:s.retryOf||undefined,
+    mission:s.mission?{key:s.mission.key,label:s.mission.label,ex:s.mission.ex}:undefined,d:today(),dur:Math.round((Date.now()-s.t0)/1000),turns:s.turns.slice(),review:null};
   c.log.unshift(e);
   if(c.log.length>20)c.log.length=20;
   callPrune();
@@ -8207,7 +8290,7 @@ async function callReview(id,force){
     +'<div class="cl-wait">내 발화 '+e.turns.filter(function(t){return t.r==='me';}).length+'개를 교정하는 중입니다… (10~20초)</div>'
     +callTranscriptHtml(e,true);
   document.getElementById('clX').addEventListener('click',callClose);
-  var r=await callPost('/call/review',{sc:callScPayload(sc),turns:e.turns.map(function(t){return {r:t.r,z:t.z};})},60000);
+  var r=await callPost('/call/review',{sc:callScPayload(sc,{targets:e.targets,mission:e.mission}),turns:e.turns.map(function(t){return {r:t.r,z:t.z};})},60000);
   if(!document.getElementById('callOv'))return;
   if((r.error||!Array.isArray(r.lines))&&e.review&&e.review.slim){callRenderReview(e);return;} // 다시 받기 실패 → 요약만
   if(r.error||!Array.isArray(r.lines)){
@@ -8222,6 +8305,9 @@ async function callReview(id,force){
   e.review=r;
   if(!wasSlim){var cs=callState();if(!cs.score)cs.score={};cs.score[e.key]=Math.max(0,Math.min(100,parseInt(r.score)||0));}
   var sit=sc.title+' — 통화';
+  if(!wasSlim&&e.mission&&Array.isArray(r.mission)&&r.mission[0]&&r.mission[0].used&&r.mission[0].ok&&state.gram&&state.gram[e.mission.key]){
+    state.gram[e.mission.key].fixed=(state.gram[e.mission.key].fixed||0)+1;
+  }
   r.lines.forEach(function(l){
     if(!wasSlim&&l&&l.issues&&l.issues.length)gramRecord({issues:l.issues,corrected:l.z||'',corrected_ko:l.k||''},l.my||'',sit);
   });
@@ -8248,6 +8334,24 @@ function callRenderReview(e){
     +'<div class="fb-head"><div class="fb-score" style="background:'+col+'">'+s+'</div><div><div class="fb-verd">'+esc(r.verdict||'')+'</div>'
     +'<div class="fb-sub">'+esc(r.outcome||'')+'</div></div></div>'
     +(r.slim?'<div class="cl-slim">오래된 기록이라 점수·총평만 남아 있습니다.<button class="pr-b" id="clReFull">전체 리뷰 다시 받기</button></div>':'');
+  if(e.targets&&e.targets.length&&!r.slim){
+    var tr=Array.isArray(r.targets)?r.targets:[];
+    var got=0;
+    var rows=e.targets.map(function(t,i){
+      var x=tr.filter(function(y){return +y.i===i+1;})[0]||{};
+      if(x.used&&x.ok)got++;
+      var mark=x.used?(x.ok?'✅':'⚠️'):'❌';
+      return '<div class="cl-trow"><span class="m">'+mark+'</span><div><div class="z zh">'+esc(t.z)+'</div><div class="k">'+esc(t.k||'')+'</div>'+(x.note?'<div class="n">'+esc(x.note)+'</div>':'')+'</div></div>';
+    }).join('');
+    h+='<div class="fb-sec">🔁 재도전 결과 · '+got+'/'+e.targets.length+' 성공</div>'+rows;
+  }
+  if(e.mission&&!r.slim){
+    var mr=(Array.isArray(r.mission)&&r.mission[0])||{};
+    h+='<div class="fb-sec">🎯 약점 미션 · '+esc(e.mission.label)+'</div>'
+      +'<div class="cl-trow"><span class="m">'+(mr.used?(mr.ok?'✅':'⚠️'):'❌')+'</span><div><div class="k">'
+      +(mr.used?(mr.ok?'성공 — 교정 횟수 +1':'썼지만 아직 틀림'):'이번 통화에서는 쓰지 못함')+'</div>'
+      +(mr.note?'<div class="n">'+esc(mr.note)+'</div>':'')+'</div></div>';
+  }
   if(r.strategy&&r.strategy.length){
     h+='<div class="fb-sec">협상 전략</div>';
     r.strategy.forEach(function(st){
@@ -8272,13 +8376,17 @@ function callRenderReview(e){
     });
   }
   h+='</div>'+callTranscriptHtml(e,false)
-    +'<div class="cl-end"><button class="cl-dial" id="clAgainCall">📞 같은 상황 다시 통화</button>'
+    +'<div class="cl-end">'
+    +(callRetryTargets(r).length&&!r.slim?'<button class="cl-dial" id="clRetry">🔁 교정받은 말로 다시 걸기</button>':'')
+    +'<button class="cl-dial'+(callRetryTargets(r).length&&!r.slim?' sub':'')+'" id="clAgainCall">📞 같은 상황 다시 통화</button>'
     +'<button class="pr-b" id="clHist2" style="width:100%;margin-top:9px">통화 기록</button></div>';
   ov.innerHTML=h;ov.scrollTop=0;
   document.getElementById('clX').addEventListener('click',callClose);
   var rf=document.getElementById('clReFull');
   if(rf)rf.addEventListener('click',function(){callReview(e.id,true);});
   document.getElementById('clAgainCall').addEventListener('click',function(){callS=null;callOpen(e.key);});
+  var rt=document.getElementById('clRetry');
+  if(rt)rt.addEventListener('click',function(){callS=null;callOpen(e.key,{targets:callRetryTargets(r),retryOf:e.id});});
   document.getElementById('clHist2').addEventListener('click',function(){callHistory('');});
   ov.querySelectorAll('[data-say]').forEach(function(b){b.addEventListener('click',function(){speak(b.dataset.say);});});
   azPrefetch([].concat((r.lines||[]).map(function(l){return l.z;}),(r.phrases||[]).map(function(p){return p.z;})).filter(Boolean));
@@ -8292,7 +8400,7 @@ function callHistory(key){
     +(list.length?list.map(function(e){
       var sc=callSc(e.key), n=e.turns.filter(function(t){return t.r==='me';}).length;
       return '<button class="cl-hi" data-id="'+e.id+'"><span class="ic">'+sc.icon+'</span><span class="t">'+esc(sc.title)
-        +'<small>'+e.d+' · '+(CALL_LV[e.lv||1].name)+' · '+Math.floor(e.dur/60)+'분 '+(e.dur%60)+'초 · 내 발화 '+n+'개</small></span>'
+        +'<small>'+e.d+' · '+(CALL_LV[e.lv||1].name)+(e.targets?' · 🔁재도전':'')+(e.mission?' · 🎯'+esc(e.mission.label):'')+' · '+Math.floor(e.dur/60)+'분 '+(e.dur%60)+'초 · 내 발화 '+n+'개</small></span>'
         +'<span class="s">'+(e.review?(parseInt(e.review.score)||0)+'점':'리뷰 전')+'</span></button>';
     }).join(''):'<div class="cl-msg">아직 통화 기록이 없습니다.</div>');
   document.getElementById('clX').addEventListener('click',callClose);

@@ -1,4 +1,4 @@
-const C='szcn-beta-8';
+const C='szcn-beta-9';
 const AUDIO_CACHE='szcn-audio';
 self.addEventListener('install',e=>{
   e.waitUntil(caches.open(C).then(c=>c.addAll(['./','./index.html','./manifest.json','./icon-192.png','./icon-512.png','./apple-touch-icon.png']).catch(()=>{})));
