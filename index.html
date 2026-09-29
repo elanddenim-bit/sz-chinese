@@ -755,7 +755,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.10.0</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.10.1</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -8043,16 +8043,22 @@ function callRenderHints(){
     callS.peek[+d.dataset.peek]=true;callS.peeks=(callS.peeks||0)+1;callRenderHints();
   });});
 }
-// 힌트는 턴 응답과 따로 받는다 → 상대 음성이 나오는 동안 준비된다
-function callFetchHints(){
-  if(!callLive()||callS.level===3||(callS.targets&&callS.targets.length))return;
+// 자막(병음·번역)과 힌트는 턴 응답과 따로 받는다 → 턴 응답은 중국어만이라 빠르고, 이건 상대 음성이 나오는 동안 준비된다
+function callFetchExtras(t,ended){
+  if(!callLive())return;
+  var wantHints=callS.level<3&&!(callS.targets&&callS.targets.length)&&!ended;
+  var needSub=t&&t.z&&!t.p&&(callS.level<3||callS.subs);
+  if(!wantHints&&!needSub)return;
   var seq=++callS.hintSeq;
-  callS.hintLoading=true;callRenderHints();
-  callPost('/call/hints',{sc:callScPayload(callS.sc),history:callS.turns.map(function(t){return {r:t.r,z:t.z};})},15000).then(function(r){
-    if(!callLive()||seq!==callS.hintSeq)return;
+  if(wantHints){callS.hintLoading=true;callRenderHints();}
+  callPost('/call/hints',{sc:callScPayload(callS.sc),history:callS.turns.map(function(x){return {r:x.r,z:x.z};}),
+    line:needSub?t.z:'',noHints:!wantHints},15000).then(function(r){
+    if(r&&r.sub&&t&&!t.p){t.p=r.sub.p||'';t.k=r.sub.k||'';}
+    if(!callLive())return;
+    callRenderSubs();
+    if(seq!==callS.hintSeq)return;
     callS.hintLoading=false;
-    callS.hints=(r&&Array.isArray(r.hints))?r.hints:[];
-    callRenderHints();
+    if(wantHints){callS.hints=(r&&Array.isArray(r.hints))?r.hints:[];callRenderHints();}
   });
 }
 function callTap(){
@@ -8183,11 +8189,11 @@ async function callStuck(){
   if(callLive())callListen();
 }
 function callApplyReply(r){
-  var rp=r.reply||{};
-  if(rp.z)callS.turns.push({r:'npc',z:rp.z,p:rp.p||'',k:rp.k||''});
+  var rp=r.reply||{}, t=null;
+  if(rp.z){t={r:'npc',z:rp.z,p:rp.p||'',k:rp.k||''};callS.turns.push(t);}
   callS.hints=[];callS.hintOpen=false;callS.peek={};
   callRenderSubs();
-  if(rp.z&&!r.end)callFetchHints();
+  if(t)callFetchExtras(t,!!r.end);
 }
 // 응답 시간: 말이 끝나 전송한 뒤 상대 음성이 준비될 때까지(인식·답변·음성 + 전송). 무음 대기 시간은 제외.
 function callShowLat(ms,t){

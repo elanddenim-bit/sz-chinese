@@ -5,8 +5,10 @@
 // 앱은 {ai}/call/<동작> 으로 부른다. Supabase 가 /functions/v1/call/* 를 전부 이 함수로 넘긴다.
 //  POST /call/ping   {code}                         → {ok, usage}
 //  POST /call/say    {code, text, sc}               → {audio}            첫 대사 음성(STT 사용 없음)
-//  POST /call/turn   {code, audio, sc, history, n}  → {heard, reply:{z,p,k}, end, audio, sec, usage, timing{stt,llm,tts}}
-//  POST /call/hints  {code, sc, history}            → {hints:[{z,p,k}]}   다음 내 답변 후보(앱이 상대 음성 재생 중에 따로 요청)
+//  POST /call/turn   {code, audio, sc, history, n}  → {heard, reply:{z}, end, audio, sec, usage, timing{stt,llm,tts}}  (p·k 는 /call/hints 의 sub)
+//  POST /call/hints  {code, sc, history, line, noHints} → {sub:{p,k}, hints:[{z,p,k}]}
+//                    상대 대사(line)의 병음·번역 자막 + 다음 내 답변 후보. 앱이 상대 음성 재생 중에 따로 요청
+//                    (턴 응답은 중국어만 만들어 지연을 줄이고, 자막은 여기서 받는다)
 //                    {code, stuck:true, sc, history} → 녹음 없이 상대가 더 쉽게 다시 묻기(STT 사용 없음)
 //  sc.level 1 연습(협조·쉬운 말·힌트) / 2 보통 / 3 실전(원래 성격 그대로),  sc.kind life|work,  sc.me 사용자 신분
 //  sc.targets [{z,k}] 재도전 목표 문장(지난 통화 교정문), sc.mission [{label,ex}] 약점 미션 — 상대가 그 말을 쓸 기회를 만들고 리뷰가 사용 여부를 채점
@@ -174,22 +176,32 @@ function cleanHistory(h: unknown) {
     .map((t: any) => ({ r: t?.r === "me" ? "me" : "npc", z: String(t?.z || "").slice(0, 200) }));
 }
 
-// 다음 내 답변 후보 — 턴 응답과 분리해서 턴 지연을 줄인다
+// 자막(상대 대사 병음·번역) + 다음 내 답변 후보 — 턴 응답과 분리해서 턴 지연을 줄인다
 async function hints(b: any) {
   const sc = cleanSc(b.sc);
-  if (sc.level >= 3) return { hints: [] };
+  const line = String(b.line || "").slice(0, 200);
+  const wantHints = sc.level < 3 && b.noHints !== true;
+  if (!line && !wantHints) return { sub: null, hints: [] };
   await dailyGate(b.code, "t");
   const history = cleanHistory(b.history);
-  const system = `你是中文口语训练App的提示助手。一个${sc.me}正在打电话。
+  const subSpec = line ? `"sub":{"p":"「${line}」的带声调符号拼音","k":"「${line}」的자연스러운 한국어 번역(존댓말)"}` : "";
+  let system: string, user: string;
+  if (wantHints) {
+    system = `你是中文口语训练App的提示助手。一个${sc.me}正在打电话。
 【场景】${sc.title}：${sc.setting}
 【电话另一头】${sc.npc}
 【他的目标】${sc.goal}
 根据到目前为止的通话，写出他下一句最可能、最自然的2~3种说法：每句不超过18个字，用HSK3~4的简单常用词，彼此意思不同（例如：答应 / 提出另一个方案 / 问一个问题），要推动他的目标。
-只输出JSON：{"hints":[{"z":"中文","p":"带声调符号的拼音","k":"자연스러운 한국어 뜻(존댓말)"}]}`;
-  const lines = history.map((t) => (t.r === "me" ? "他：" : "对方：") + t.z).join("\n");
-  const j = parseJSON(await llm(TURN_MODEL, system, `【通话】\n${lines}\n\n他下一句可以说什么？`, 400));
-  const list = j && Array.isArray(j.hints) ? j.hints : [];
-  return { hints: list.slice(0, 3).filter((h: any) => h && h.z).map((h: any) => ({ z: String(h.z), p: String(h.p || ""), k: String(h.k || "") })) };
+只输出JSON：{${subSpec ? subSpec + "," : ""}"hints":[{"z":"中文","p":"带声调符号的拼音","k":"자연스러운 한국어 뜻(존댓말)"}]}`;
+    user = `【通话】\n${history.map((t) => (t.r === "me" ? "他：" : "对方：") + t.z).join("\n")}\n\n他下一句可以说什么？`;
+  } else {
+    system = `把给出的中文句子标注拼音并翻译成韩语。只输出JSON：{${subSpec}}`;
+    user = line;
+  }
+  const j = parseJSON(await llm(TURN_MODEL, system, user, wantHints ? 450 : 150)) || {};
+  const sub = line && j.sub ? { p: String(j.sub.p || ""), k: String(j.sub.k || "") } : null;
+  const list = wantHints && Array.isArray(j.hints) ? j.hints : [];
+  return { sub, hints: list.slice(0, 3).filter((h: any) => h && h.z).map((h: any) => ({ z: String(h.z), p: String(h.p || ""), k: String(h.k || "") })) };
 }
 
 function cleanSc(sc: any) {
@@ -280,14 +292,14 @@ ${practiceBlock(sc)}
 - 通话进行到第12轮左右，或者对方明显要结束（好的/就这样/拜拜），或者事情办完/谈崩时，用一句自然的话收尾并把 end 设为 true。
 - 绝对不要跳出角色，不要解释你是AI。
 
-只输出JSON，不要其他文字：{"z":"你说的中文","p":"带声调符号的拼音","k":"자연스러운 한국어 번역(존댓말)","end":false}`;
+只输出JSON，不要其他文字：{"z":"你说的中文","end":false}`;
 
   const lines = history.map((t) => (t.r === "me" ? "对方：" : "你：") + t.z).join("\n");
   const last = stuck
     ? `【对方沉默了好几秒，好像不知道怎么说】\n请用更简单、更短的话重新问一次，最好给他两个选项让他选（例如"放门口还是放快递柜？"）。`
     : `【对方刚才说（语音识别结果，可能有识别错误）】\n${heard || "（没有听清/空白）"}\n\n这是对方的第${n}句。请回应。`;
   const user = `【到目前为止的通话】\n${lines || "（刚接通电话，你已经说了开场白）"}\n\n${last}`;
-  const j = parseJSON(await llm(TURN_MODEL, system, user, 250));
+  const j = parseJSON(await llm(TURN_MODEL, system, user, 120)); // 중국어만 → 출력이 짧아 빠름(자막은 /call/hints)
   if (!j || !j.z) throw err("npc", "캐릭터 답변 생성 실패", 502);
   return { z: String(j.z), p: String(j.p || ""), k: String(j.k || ""), end: !!j.end && !stuck };
 }
