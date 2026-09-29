@@ -6,6 +6,7 @@
 - 푸시 = 자동 배포. 문법 오류는 곧 서비스 장애이므로 푸시 전 반드시 검증(아래 "검증").
 - 단일 파일 구조 유지. 프레임워크·빌드 도구·npm 의존성 추가 금지.
 - 커밋 메시지는 한국어 한 줄.
+- [필수] 중국·홍콩 지역에서 Anthropic(Claude API)에 요청하는 경로를 만들지 말 것(Edge Function 포함). AI는 千问(알리바바 百炼). 해외 중계·VPN 등 지역 제한 우회 코드 금지.
 - index.html 이 600KB·7,500줄. 전체를 다시 쓰지 말고 필요한 부분만 Edit.
 - `audio/*.mp3` 는 건드리지 않는다(추가·삭제·이름변경 금지). 새 음성이 필요하면 mp3 없이 Azure TTS 폴백으로 동작하게 둔다.
 - index.html·manifest·아이콘을 바꾸면 `sw.js` 의 `C='szcn-beta-N'` 숫자를 올린다(구캐시 제거). `AUDIO_CACHE='szcn-audio'` 이름은 바꾸지 않는다(오프라인 음성 캐시 날아감).
@@ -26,7 +27,7 @@
   |---|---|
   | Supabase 동기화 | `SB_URL=https://qmxcfsozzrcdakkiozts.supabase.co`, `SB_KEY=sb_publishable_…`(공개키, index.html 상수) |
   | AI 서버 | Supabase Edge Functions — 같은 프로젝트 cn-trainer(ap-southeast-1), `cfg.ai`=`https://qmxcfsozzrcdakkiozts.supabase.co/functions/v1`. 함수: correct·field·pronounce·tts·vocab(대시보드 편집, 저장소에 소스 없음) + call(`supabase/functions/call/index.ts`) |
-- 시크릿: 저장소 내 없음. Supabase Edge Function 시크릿 `AZURE_SPEECH_KEY`·`AZURE_SPEECH_REGION`(pronounce 확인), Claude 키는 `ANTHROPIC_API_KEY`로 가정. 초대 코드 허용 목록: 기존 5개 함수는 코드 안 `ALLOWED` 배열, call 은 시크릿 `ALLOWED_CODES`(쉼표 구분) — 저장소 파일을 수정 없이 붙여넣어 배포. 초대 코드는 public 저장소에 절대 커밋 금지. 함수는 Verify JWT 꺼져 있음(앱이 Authorization 헤더를 안 보냄).
+- 시크릿: 저장소 내 없음. Supabase Edge Function 시크릿 `AZURE_SPEECH_KEY`·`AZURE_SPEECH_REGION`(pronounce 확인), AI 키는 `DASHSCOPE_API_KEY`(알리바바 百炼) + `QWEN_BASE`(百炼 업무공간 전용 OpenAI 호환 URL), 선택 `QWEN_TURN_MODEL`·`QWEN_REVIEW_MODEL`. `call` 함수는 2026-09-29 Anthropic→千问 전환(저장소 소스). 대시보드에만 있는 correct·field·vocab 등은 소스가 저장소에 없어 미전환 — Anthropic 호출이면 같은 방식으로 바꿀 것. 초대 코드 허용 목록: 기존 5개 함수는 코드 안 `ALLOWED` 배열, call 은 시크릿 `ALLOWED_CODES`(쉼표 구분) — 저장소 파일을 수정 없이 붙여넣어 배포. 초대 코드는 public 저장소에 절대 커밋 금지. 함수는 Verify JWT 꺼져 있음(앱이 Authorization 헤더를 안 보냄).
 - GitHub 저장소는 public.
 
 ## 파일 구조

@@ -12,9 +12,10 @@
 //  POST /call/review {code, sc, turns}              → {score, verdict, outcome, strategy[], lines[], phrases[]}
 //  audio = 16kHz mono WAV base64 (pronounce 와 같은 형식)
 //
-// 시크릿: AZURE_SPEECH_KEY, AZURE_SPEECH_REGION(pronounce 와 공유), ANTHROPIC_API_KEY
+// 시크릿: AZURE_SPEECH_KEY, AZURE_SPEECH_REGION(pronounce 와 공유), DASHSCOPE_API_KEY(알리바바 百炼), QWEN_BASE(百炼 업무공간 전용 OpenAI 호환 URL)
+// AI: 千问(알리바바 百炼) — 중국·홍콩발 Anthropic 요청 금지 규칙에 따라 Anthropic 호출 없음
 // 선택: CALL_CAP_MIN(통화 STT 월 상한 분, 기본 240 → F0 300분 중 60분은 발음 평가 몫)
-// 선택: CALL_DAY_TURNS(코드당 하루 Claude 호출 수 — 턴+힌트, 기본 300), CALL_DAY_REVIEWS(코드당 하루 리뷰 수, 기본 20) — 코드 유출 시 Claude 비용 방어
+// 선택: CALL_DAY_TURNS(코드당 하루 AI 호출 수 — 턴+힌트, 기본 300), CALL_DAY_REVIEWS(코드당 하루 리뷰 수, 기본 20) — 코드 유출 시 AI 비용 방어
 // 테이블 call_usage(아래 SQL) — 월 STT 초·하루 호출 수를 기록. 없으면 추적·상한 검사를 모두 건너뛴다(권장: 반드시 생성).
 //   create table if not exists call_usage (month text primary key, sec numeric not null default 0, updated_at timestamptz default now());
 //   alter table call_usage enable row level security;   -- 정책 없음 = service role 만 접근
@@ -25,8 +26,8 @@ const ALLOWED: string[] = [
   // "초대코드",
 ];
 
-const TURN_MODEL = "claude-haiku-4-5-20251001"; // 턴당 지연 최소화
-const REVIEW_MODEL = "claude-sonnet-5";          // 리뷰는 품질 우선
+const TURN_MODEL = "qwen3.8-flash";   // 턴당 지연 최소화 (시크릿 QWEN_TURN_MODEL로 변경 가능)
+const REVIEW_MODEL = "qwen3.7-plus";   // 리뷰는 품질 우선 (시크릿 QWEN_REVIEW_MODEL로 변경 가능)
 const VOICES = ["zh-CN-YunyangNeural", "zh-CN-YunjianNeural", "zh-CN-XiaoxiaoNeural", "zh-CN-XiaoyiNeural"];
 const DEFAULT_VOICE = "zh-CN-YunyangNeural";     // 앱 원어민 mp3 와 같은 목소리
 
@@ -133,7 +134,7 @@ async function dailyGate(code: string, kind: "t" | "r") {
   await addCount(key, 1, cur);
 }
 
-// ---------------- 통화 한 턴: STT → Claude → TTS ----------------
+// ---------------- 통화 한 턴: STT → 千问 → TTS ----------------
 async function turn(b: any) {
   const T0 = Date.now();
   const sc = cleanSc(b.sc);
@@ -185,7 +186,7 @@ async function hints(b: any) {
 根据到目前为止的通话，写出他下一句最可能、最自然的2~3种说法：每句不超过18个字，用HSK3~4的简单常用词，彼此意思不同（例如：答应 / 提出另一个方案 / 问一个问题），要推动他的目标。
 只输出JSON：{"hints":[{"z":"中文","p":"带声调符号的拼音","k":"자연스러운 한국어 뜻(존댓말)"}]}`;
   const lines = history.map((t) => (t.r === "me" ? "他：" : "对方：") + t.z).join("\n");
-  const j = parseJSON(await anthropic(TURN_MODEL, system, `【通话】\n${lines}\n\n他下一句可以说什么？`, 400));
+  const j = parseJSON(await llm(TURN_MODEL, system, `【通话】\n${lines}\n\n他下一句可以说什么？`, 400));
   const list = j && Array.isArray(j.hints) ? j.hints : [];
   return { hints: list.slice(0, 3).filter((h: any) => h && h.z).map((h: any) => ({ z: String(h.z), p: String(h.p || ""), k: String(h.k || "") })) };
 }
@@ -281,7 +282,7 @@ ${LEVEL_RULES[sc.level]}
     ? `【对方沉默了好几秒，好像不知道怎么说】\n请用更简单、更短的话重新问一次，最好给他两个选项让他选（例如"放门口还是放快递柜？"）。`
     : `【对方刚才说（语音识别结果，可能有识别错误）】\n${heard || "（没有听清/空白）"}\n\n这是对方的第${n}句。请回应。`;
   const user = `【到目前为止的通话】\n${lines || "（刚接通电话，你已经说了开场白）"}\n\n${last}`;
-  const j = parseJSON(await anthropic(TURN_MODEL, system, user, 250));
+  const j = parseJSON(await llm(TURN_MODEL, system, user, 250));
   if (!j || !j.z) throw err("npc", "캐릭터 답변 생성 실패", 502);
   return { z: String(j.z), p: String(j.p || ""), k: String(j.k || ""), end: !!j.end && !stuck };
 }
@@ -317,22 +318,27 @@ lines 는 나의 발화 전부를 순서대로 포함. 통하는 발화(ok:true)
   let i = 0;
   const script = turns.map((t: any) => (t.r === "me" ? `[나 #${++i}] ` : "[상대] ") + t.z).join("\n");
   const user = `상황: ${sc.title} — ${sc.setting}\n상대: ${sc.npc}\n나의 목표: ${sc.goal}\n참고 핵심 표현: ${sc.keys.join(" / ")}\n\n통화 전사본:\n${script}`;
-  const j = parseJSON(await anthropic(REVIEW_MODEL, system, user, 10000));
+  const j = parseJSON(await llm(REVIEW_MODEL, system, user, 10000));
   if (!j || !Array.isArray(j.lines)) throw err("review", "리뷰 생성 실패", 502);
   return j;
 }
 
-// ---------------- Anthropic ----------------
-async function anthropic(model: string, system: string, user: string, max_tokens: number) {
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
+// ---------------- 千问(알리바바 百炼) ----------------
+// 함수 이름은 호출부 변경을 줄이려고 llm 으로 둠. OpenAI 호환 /chat/completions, 사고 모드 끔(지연 최소화)
+async function llm(model: string, system: string, user: string, max_tokens: number) {
+  const base = env("QWEN_BASE").replace(/\/$/, "");
+  if (!base || !env("DASHSCOPE_API_KEY")) throw err("llm", "QWEN_BASE / DASHSCOPE_API_KEY 미설정", 500);
+  const m = model === TURN_MODEL ? (env("QWEN_TURN_MODEL") || model) : (env("QWEN_REVIEW_MODEL") || model);
+  const r = await fetch(base + "/chat/completions", {
     method: "POST",
-    headers: { "content-type": "application/json", "x-api-key": env("ANTHROPIC_API_KEY"), "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({ model, max_tokens, system, messages: [{ role: "user", content: user }] }),
+    headers: { "content-type": "application/json", authorization: "Bearer " + env("DASHSCOPE_API_KEY") },
+    body: JSON.stringify({ model: m, max_tokens, enable_thinking: false, messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
   });
   const raw = await r.text();
-  if (!r.ok) throw err("claude", "Claude " + r.status + " " + raw.slice(0, 160), 502);
+  if (!r.ok) throw err("llm", "Qwen " + r.status + " " + raw.slice(0, 160), 502);
   const d = JSON.parse(raw);
-  return (d.content || []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
+  const c = d.choices?.[0]?.message?.content ?? "";
+  return Array.isArray(c) ? c.map((x: any) => x.text || "").join("\n") : String(c);
 }
 
 // ---------------- 유틸 ----------------
