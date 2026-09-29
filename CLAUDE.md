@@ -27,7 +27,7 @@
   |---|---|
   | Supabase 동기화 | `SB_URL=https://qmxcfsozzrcdakkiozts.supabase.co`, `SB_KEY=sb_publishable_…`(공개키, index.html 상수) |
   | AI 서버 | Supabase Edge Functions — 같은 프로젝트 cn-trainer(ap-southeast-1), `cfg.ai`=`https://qmxcfsozzrcdakkiozts.supabase.co/functions/v1`. 함수: correct·field·pronounce·tts·vocab(대시보드 편집, 저장소에 소스 없음) + call(`supabase/functions/call/index.ts`) |
-- 시크릿: 저장소 내 없음. Supabase Edge Function 시크릿 `AZURE_SPEECH_KEY`·`AZURE_SPEECH_REGION`(pronounce 확인), AI 키는 `DASHSCOPE_API_KEY`(알리바바 百炼) + `QWEN_BASE`(百炼 업무공간 전용 OpenAI 호환 URL), 선택 `QWEN_TURN_MODEL`·`QWEN_REVIEW_MODEL`. `call` 함수는 2026-09-29 Anthropic→千问 전환(저장소 소스). 대시보드에만 있는 correct·field·vocab 등은 소스가 저장소에 없어 미전환 — Anthropic 호출이면 같은 방식으로 바꿀 것. 초대 코드 허용 목록: 기존 5개 함수는 코드 안 `ALLOWED` 배열, call 은 시크릿 `ALLOWED_CODES`(쉼표 구분) — 저장소 파일을 수정 없이 붙여넣어 배포. 초대 코드는 public 저장소에 절대 커밋 금지. 함수는 Verify JWT 꺼져 있음(앱이 Authorization 헤더를 안 보냄).
+- 시크릿: 저장소 내 없음. Supabase Edge Function 시크릿 `AZURE_SPEECH_KEY`·`AZURE_SPEECH_REGION`(pronounce 확인), AI 키는 `DASHSCOPE_API_KEY`(알리바바 百炼) + `QWEN_BASE`(百炼 업무공간 전용 OpenAI 호환 URL), 선택 `QWEN_TURN_MODEL`·`QWEN_REVIEW_MODEL`. `call` 함수는 2026-09-29 Anthropic→千问 전환(저장소 소스). correct·field·vocab도 2026-09-29 千问 전환 후 `supabase/functions/<이름>/index.ts`로 저장소에 추가(초대 코드는 시크릿 `ALLOWED_CODES`로만, 저장소엔 넣지 않음. 대시보드 배포본에는 기존 하드코딩 코드가 남아 있을 수 있음). 선택 시크릿 `QWEN_TEXT_MODEL`(기본 qwen3.8-flash, correct·field), `QWEN_VL_MODEL`(기본 qwen3-vl-plus, vocab). 초대 코드 허용 목록: 기존 5개 함수는 코드 안 `ALLOWED` 배열, call 은 시크릿 `ALLOWED_CODES`(쉼표 구분) — 저장소 파일을 수정 없이 붙여넣어 배포. 초대 코드는 public 저장소에 절대 커밋 금지. 함수는 Verify JWT 꺼져 있음(앱이 Authorization 헤더를 안 보냄).
 - GitHub 저장소는 public.
 
 ## 파일 구조
