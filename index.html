@@ -755,7 +755,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.10.1</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.10.2</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -7635,6 +7635,15 @@ const CALL_SC={
     hints:[{z:'对，空调不制冷，还有点漏水。',p:'Duì, kōngtiáo bú zhìlěng, hái yǒudiǎn lòushuǐ.',k:'네, 에어컨이 안 시원하고 물도 좀 새요.'},
       {z:'我五点以后在家，你五点半过来可以吗？',p:'Wǒ wǔ diǎn yǐhòu zài jiā, nǐ wǔ diǎn bàn guòlai kěyǐ ma?',k:'5시 이후에 집에 있어요. 5시 반에 오실 수 있어요?'},
       {z:'上门检查要收费吗？',p:'Shàngmén jiǎnchá yào shōufèi ma?',k:'방문 점검은 비용이 있나요?'}]},
+  hair:{kind:'life',icon:'💇',title:'미용실 예약 전화',
+    setting:'국경절 연휴를 앞두고 파마를 하려고 한다. 단골 헤어디자이너에게 전화해 쉬는 날을 확인하고, 이번 토요일 오전으로 예약한다. (실제 위챗 대화 기반)',
+    npc:'白云区美发店 发型师 阿杰（男，三十岁左右，熟客关系，说话随和）',voice:'zh-CN-YunjianNeural',
+    persona:'国庆节期间明天休息一天，其他时间正常营业。平时11点开门，熟客的话可以早点过来。会问想做什么（烫发/剪发/染发）、想烫什么样的（大卷还是自然一点）；烫发大概要两个半小时，价格三百八到五百八，看用什么药水。周六人多，会建议早点来。',
+    goal:'국경절 휴무일 확인 → 토요일 오전 예약 시간 확정 → 파마 종류·소요 시간·가격 확인',
+    open:{z:'喂，朴哥，中午好！有什么事吗？',p:'Wéi, Piáo gē, zhōngwǔ hǎo! Yǒu shénme shì ma?',k:'여보세요, 박형님, 안녕하세요! 무슨 일이세요?'},
+    hints:[{z:'你们国庆节哪几天休息？我想烫个头发。',p:'Nǐmen Guóqìngjié nǎ jǐ tiān xiūxi? Wǒ xiǎng tàng ge tóufa.',k:'국경절에 며칠 쉬어요? 파마를 하고 싶어서요.'},
+      {z:'这周六上午可以约吗？我上午比较方便。',p:'Zhè zhōuliù shàngwǔ kěyǐ yuē ma? Wǒ shàngwǔ bǐjiào fāngbiàn.',k:'이번 토요일 오전에 예약돼요? 저는 오전이 편해요.'},
+      {z:'十一点可以吗？',p:'Shíyī diǎn kěyǐ ma?',k:'11시 괜찮아요?'}]},
   // ---- 업무 통화 ----
   delay:{kind:'work',npc:'东莞针织厂 王总（老板，四十多岁，做了二十年，讲人情但很会拖）',
     persona:'布厂交布晚是真的，但你们自己排产也有问题，不想承认。先说“可能拖四五天”，被追问才给具体日期；不愿意写书面承诺；可以提出分批出货。朴总提到韩国总部压力和以后的订单时才松口。',
@@ -7652,7 +7661,7 @@ const CALL_SC={
     persona:'先怀疑是运输压的、或者韩国那边标准太严；要求看照片；承认一部分问题后，愿意派人返工，但对赔偿很抗拒，最多同意下单抵扣一部分。',
     goal:'불량 사실 인정 → 사진·수량 근거 제시 → 재검품/수선 일정 확정 → 보상(다음 오더 차감 등) 합의'}
 };
-const CALL_GROUPS=[['생활 통화',['kuaidi','waimai','didi','booking','aircon']],['업무 통화',['delay','pricefight','claim']]];
+const CALL_GROUPS=[['생활 통화',['kuaidi','waimai','didi','booking','aircon','hair']],['업무 통화',['delay','pricefight','claim']]];
 const CALL_LV={
   1:{name:'연습',desc:'상대가 쉽고 천천히, 답변 힌트 표시, 2.2초 멈추면 전송, 막히면 상대가 도와줌',sil:2200,stuck:7000},
   2:{name:'보통',desc:'상대가 조금 버팀, 힌트는 탭해서 보기, 1.6초 멈추면 전송',sil:1600,stuck:8000},
