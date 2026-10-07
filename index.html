@@ -755,7 +755,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.10.3</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.10.4</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -4599,17 +4599,31 @@ function setDot(c){document.getElementById('syncDot').style.background=c;}
 function cfgReady(){return SB_URL&&SB_KEY&&cfg&&cfg.sid;}
 function sbHeaders(){return {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};}
 function sbBase(){return SB_URL.replace(/\/+$/,'')+'/rest/v1/trainer';}
+// 서버 동기화 실패 원인(빨간 점): 'network'(접속 불가·응답 없음) | 'HTTP 4xx/5xx'
+let syncErr='';
+function sbFetch(url,opt,ms){
+  var ctl=('AbortController' in window)?new AbortController():null;
+  var to=ctl?setTimeout(function(){ctl.abort();},ms||10000):0;
+  opt=Object.assign({},opt||{});if(ctl)opt.signal=ctl.signal;
+  return fetch(url,opt).finally(function(){if(to)clearTimeout(to);});
+}
+function syncErrText(){
+  if(!syncErr)return '';
+  return syncErr==='network'?'서버(supabase.co)에 접속하지 못했습니다. 중국 네트워크에서는 VPN을 켜고 다시 시도하세요.'
+    :'서버가 요청을 거부했습니다('+syncErr+'). 배포자에게 알려 주세요.';
+}
 async function remoteLoad(){
   if(!cfgReady())return null;
   try{
-    const r=await fetch(sbBase()+'?id=eq.'+encodeURIComponent(cfg.sid)+'&select=data',{headers:sbHeaders()});
-    if(!r.ok)throw new Error(r.status);
+    const r=await sbFetch(sbBase()+'?id=eq.'+encodeURIComponent(cfg.sid)+'&select=data',{headers:sbHeaders()});
+    if(!r.ok){syncErr='HTTP '+r.status;throw new Error(r.status);}
+    syncErr='';
     const j=await r.json();
     setDot('#2ecc71');
     remoteOk=true;
     remoteScore=(j.length&&j[0].data)?stScore(j[0].data):0;
     return j.length?j[0].data:null;
-  }catch(e){setDot('#e74c3c');remoteOk=false;return null;}
+  }catch(e){if(!/^HTTP/.test(syncErr))syncErr='network';setDot('#e74c3c');remoteOk=false;return null;}
 }
 async function remoteSave(){
   if(!cfgReady()){setDot('#c6cbd6');return false;}
@@ -4621,13 +4635,14 @@ async function remoteSave(){
     return false;
   }
   try{
-    const r=await fetch(sbBase(),{method:'POST',
+    const r=await sbFetch(sbBase(),{method:'POST',
       headers:Object.assign(sbHeaders(),{'Prefer':'resolution=merge-duplicates'}),
-      body:JSON.stringify([{id:cfg.sid,data:state,updated_at:new Date().toISOString()}])});
+      body:JSON.stringify([{id:cfg.sid,data:state,updated_at:new Date().toISOString()}])},20000);
     setDot(r.ok?'#2ecc71':'#e74c3c');
+    syncErr=r.ok?'':'HTTP '+r.status;
     if(r.ok)remoteScore=ls;
     return r.ok;
-  }catch(e){setDot('#e74c3c');return false;}
+  }catch(e){syncErr='network';setDot('#e74c3c');return false;}
 }
 function stScore(s){
   try{
@@ -6610,14 +6625,14 @@ async function registerCode(sid,statEl){
     if(typeof renderProgress==='function')renderProgress();
     return true;
   }
-  statEl.innerHTML='<span style="color:#C8352E">연결 실패 — 네트워크를 확인하거나 배포자에게 문의하세요.</span>';
+  statEl.innerHTML='<span style="color:#C8352E">연결 실패 — '+esc(syncErrText()||'네트워크를 확인하거나 배포자에게 문의하세요.')+' 기록은 이 기기에 계속 저장됩니다.</span>';
   return false;
 }
 document.getElementById('btnCfg').addEventListener('click',()=>{
   document.getElementById('cfgSid').value=cfg&&cfg.sid?cfg.sid:'';
   var aiEl=document.getElementById('cfgAi'); if(aiEl)aiEl.value=(cfg&&cfg.ai)?cfg.ai:'';
   var clEl=document.getElementById('cfgCall'); if(clEl)clEl.value=(cfg&&cfg.call)?cfg.call:'';
-  document.getElementById('cfgStat').textContent='';
+  document.getElementById('cfgStat').innerHTML=syncErr?'<span style="color:#C8352E">빨간 점: '+esc(syncErrText())+'</span>':'';
   cfgModal.classList.add('show');
 });
 document.getElementById('bkExport').addEventListener('click',bkExportFile);
