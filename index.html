@@ -755,7 +755,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#8FA6C4" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:var(--wash);font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.10.2</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:var(--wash);font-size:11px;font-weight:700;vertical-align:2px">BETA 3.10.3</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -7799,6 +7799,7 @@ function callOpen(key,opts){
   callS={key:key,sc:sc,turns:[],phase:'intro',level:callState().level,
     targets:(opts.targets||[]).slice(0,4),retryOf:opts.retryOf||'',mission:null};
   var retry=callS.targets.length>0;
+  if(sc.open&&sc.voice!==CALL_VOICE_DEF&&callBase())callS.openSay={z:sc.open.z,p:callPost('/call/say',{text:sc.open.z,sc:callScPayload(sc)},12000)};
   var ms=retry?null:callPickMission();
   if(ms&&callState().missionOff!==true)callS.mission=ms;
   var ov=callOv();
@@ -7865,19 +7866,28 @@ function callBeep(f,ms,vol,delay){
     o.connect(g);g.connect(ctx.destination);o.start(t);o.stop(t+ms/1000+0.02);
   }catch(e){}
 }
-function callPlaySrc(src){
+// 재생이 4초 안에 시작되지 않으면(iOS 오디오 세션 전환·블루투스 이어폰 프로필 전환 중 멈춤) 실패로 보고 다음 경로로 넘어간다
+function callPlaySrc(src,tag){
   return new Promise(function(res){
     if(!callLive()||!src){res(false);return;}
-    var a=callS.audio, done=false;
-    function fin(ok){if(done)return;done=true;a.onended=a.onerror=null;clearTimeout(guard);res(ok);}
-    var guard=setTimeout(function(){fin(false);},30000);
+    var a=callS.audio, done=false, started=false;
+    function fin(ok,why){
+      if(done)return;done=true;
+      a.onended=a.onerror=a.onplaying=null;clearTimeout(guard);clearTimeout(stall);
+      if(!ok){try{a.pause();}catch(e){}}
+      if(callS&&callS.audLog)callS.audLog.push((tag||'?')+(ok?'':'×'+(why||'')));
+      res(ok);
+    }
+    var guard=setTimeout(function(){fin(false,'시간초과');},30000);
+    var stall=setTimeout(function(){if(!started)fin(false,'시작안됨');},4000);
+    a.onplaying=function(){started=true;clearTimeout(stall);};
     a.onended=function(){fin(true);};
-    a.onerror=function(){fin(false);};
+    a.onerror=function(){fin(false,'오류');};
     try{
       a.src=src;a.playbackRate=1;
       var p=a.play();
-      if(p&&p.catch)p.catch(function(){fin(false);});
-    }catch(e){fin(false);}
+      if(p&&p.catch)p.catch(function(e){fin(false,(e&&e.name)||'차단');});
+    }catch(e){fin(false,'예외');}
   });
 }
 function callTtsFallback(t){
@@ -7888,7 +7898,7 @@ function callTtsFallback(t){
       if(typeof zhVoice!=='undefined'&&zhVoice)u.voice=zhVoice;
       u.onend=function(){res(true);};u.onerror=function(){res(false);};
       speechSynthesis.cancel();speechSynthesis.speak(u);
-      setTimeout(function(){res(false);},20000);
+      setTimeout(function(){res(false);},Math.min(12000,3000+String(t).length*350));
     }catch(e){res(false);}
   });
 }
@@ -7896,19 +7906,26 @@ function callTtsFallback(t){
 async function callSay(o,b64){
   if(!callLive())return;
   callS.lastNpc={o:o,b64:b64};
+  callS.audLog=[];
   callPhase('npc');
   var ok=false;
-  if(b64)ok=await callPlaySrc('data:audio/mpeg;base64,'+b64);
+  if(b64)ok=await callPlaySrc('data:audio/mpeg;base64,'+b64,'서버');
   if(!ok&&callLive()&&callS.sc.voice===CALL_VOICE_DEF){
     if(!AUDIO_SET)buildAudioSet();
-    if(AUDIO_SET.has(o.z))ok=await callPlaySrc(audioUrl(fnv(o.z)));
+    if(AUDIO_SET.has(o.z)){callPhase('npc','음성 다시 시도 중…');ok=await callPlaySrc(audioUrl(fnv(o.z)),'mp3');}
   }
   if(!ok&&callLive()&&!b64&&callS.sc.voice!==CALL_VOICE_DEF){
-    var r=await callPost('/call/say',{text:o.z,sc:callScPayload(callS.sc)},12000);
-    if(callLive()&&r&&r.audio){callS.lastNpc.b64=r.audio;ok=await callPlaySrc('data:audio/mpeg;base64,'+r.audio);}
+    callPhase('npc','음성 준비 중…');
+    var say=callS.openSay&&callS.openSay.z===o.z?await callS.openSay.p:null; // 시작 화면에서 미리 받아 둔 첫 대사 음성
+    var r=say&&say.audio?say:await callPost('/call/say',{text:o.z,sc:callScPayload(callS.sc)},12000);
+    if(callLive()&&r&&r.audio){callS.lastNpc.b64=r.audio;callPhase('npc');ok=await callPlaySrc('data:audio/mpeg;base64,'+r.audio,'say');}
+    else if(callS&&callS.audLog)callS.audLog.push('say×'+((r&&r.error)||'없음'));
   }
-  if(!ok&&callLive()){var u=await azFetch(o.z);if(u)ok=await callPlaySrc(u);}
-  if(!ok&&callLive())await callTtsFallback(o.z);
+  if(!ok&&callLive()){callPhase('npc','음성 다시 시도 중…');var u=await azFetch(o.z);if(u)ok=await callPlaySrc(u,'tts');else if(callS.audLog)callS.audLog.push('tts×없음');}
+  if(!ok&&callLive()){callPhase('npc','기기 음성으로 재생 중…');ok=await callTtsFallback(o.z);if(callS&&callS.audLog)callS.audLog.push('기기'+(ok?'':'×'));}
+  if(callLive()&&callS.audLog&&callS.audLog.some(function(x){return x.indexOf('×')>=0;})){
+    callS.audFail=(ok?'음성 경로: ':'음성 재생 실패 — 자막을 보고 대답하세요 · ')+callS.audLog.join(' → ');
+  }else if(callS)callS.audFail='';
 }
 
 // ---------- 통화 화면 ----------
@@ -8086,7 +8103,7 @@ async function callListen(){
   if(!callLive())return;
   try{callS.audio.pause();}catch(e){}
   try{speechSynthesis.cancel();}catch(e){}
-  callPhase('listen');
+  callPhase('listen',callS.audFail||'');
   await prWait(350); // iOS: 재생 직후 마이크를 열면 무음이 들어온다
   if(!callS||callS.phase!=='listen')return;
   var stream;
