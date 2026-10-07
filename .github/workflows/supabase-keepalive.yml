@@ -1,0 +1,26 @@
+# Supabase 무료 플랜은 1주일 동안 DB 요청이 거의 없으면 프로젝트를 일시정지한다(연휴·출장 중 미사용 대비).
+# 매일 한 번 공개키(publishable, index.html 에 이미 공개된 값)로 trainer 테이블을 가볍게 조회해 활동을 남긴다.
+name: supabase-keepalive
+on:
+  schedule:
+    - cron: "17 1 * * *"   # 매일 01:17 UTC (중국 09:17)
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: index.html
+          sparse-checkout-cone-mode: false
+      - name: Ping Supabase REST
+        run: |
+          URL=$(grep -oP 'const SB_URL = "\K[^"]+' index.html)
+          KEY=$(grep -oP 'const SB_KEY = "\K[^"]+' index.html)
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+            "$URL/rest/v1/trainer?select=id&limit=1" -H "apikey: $KEY" -H "Authorization: Bearer $KEY")
+          echo "Supabase REST HTTP $code"
+          # 일시정지 상태면 540 등 오류 → 실패로 표시해 GitHub 알림 메일이 오게 한다
+          test "$code" = "200"

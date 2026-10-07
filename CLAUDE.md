@@ -79,6 +79,7 @@
 ## 주의사항 / 알려진 이슈
 - Supabase 접근 정책(RLS) 미확인. 인증·권한 관련 변경은 소유자 확인 후 진행.
 - correct·field·pronounce·tts·vocab 소스는 저장소에 없음(Supabase 대시보드에만 있음). 스펙 변경 시 대시보드 코드를 받아서 수정.
+- Supabase 무료 플랜은 1주일간 DB 활동이 적으면 프로젝트 일시정지(2026-10-08 국경절 연휴 뒤 실제 발생 → 동기화·AI 전부 중단, 대시보드 Resume project 로 복구). `.github/workflows/supabase-keepalive.yml` 이 매일 공개키로 trainer 를 조회해 방지, 실패 시 GitHub 알림.
 - `.DS_Store` 커밋되어 있음(삭제 무해).
 - `sw.js` 는 index.html 등 앱셸을 네트워크 우선으로 받으므로 배포 즉시 반영되나, 캐시 이름을 올려야 구버전 캐시 정리.
 - 중국 본토에서 `*.supabase.co` 접속이 불안정(2026-10-08 5G에서 동기화 빨간 점·통화 음성 실패 보고). 동기화·통화 요청은 10초 타임아웃(`sbFetch`), 실패 원인은 `syncErr`로 ⚙ 모달에 표시. 실패 시 로컬 저장으로 동작.
