@@ -11,12 +11,10 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: index.html
-          sparse-checkout-cone-mode: false
+      # checkout 액션 없이 실행(Node 버전 경고·지원 종료 영향 없음). 주소·키는 index.html 원본에서 읽는다
       - name: Ping Supabase REST
         run: |
+          curl -sf --max-time 30 -o index.html "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/index.html"
           URL=$(grep -oP 'const SB_URL = "\K[^"]+' index.html)
           KEY=$(grep -oP 'const SB_KEY = "\K[^"]+' index.html)
           code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
