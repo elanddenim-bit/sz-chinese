@@ -6,7 +6,7 @@
 // 흐름: 앱이 영상 업로드 URL을 받아 R2에 직접 PUT → start(百炼 음성인식 비동기 작업) → poll(완료 시 千问으로 병음·번역·표현 정리)
 //  POST /video/upload {code, type, size, name}  → {key, put}             R2 서명 PUT URL(1시간)
 //  POST /video/start  {code, key}                → {task}                 百炼 파일 전사 작업 제출
-//  POST /video/poll   {code, task, known?[]}     → {status:'RUNNING'} | {status:'SUCCEEDED', dur, sents:[{t0,t1,z,p,k}], words:[{z,p,k,ex}]}
+//  POST /video/poll   {code, task, known?[], kind?:'work'|'life'}     → {status:'RUNNING'} | {status:'SUCCEEDED', dur, sents:[{t0,t1,z,p,k}], words:[{z,p,k,ex}]}
 //  POST /video/url    {code, key}                → {url}                  재생용 서명 GET URL(6시간)
 //  POST /video/ping   {code}                     → {ok, usage}
 //
@@ -156,7 +156,8 @@ async function poll(b: any) {
 
   if (!sents.length) return { status: "SUCCEEDED", dur, sents: [], words: [], note: "말소리를 찾지 못했습니다(보통화 대사가 있는 영상인지 확인)." };
   const known = Array.isArray(b.known) ? b.known.slice(0, 150).map((x: unknown) => String(x).slice(0, 12)) : [];
-  const ann = await annotate(sents.map((s) => s.z), known);
+  const kind = b.kind === "life" ? "life" : "work";
+  const ann = await annotate(sents.map((s) => s.z), known, kind);
   return {
     status: "SUCCEEDED",
     dur,
@@ -167,27 +168,36 @@ async function poll(b: any) {
 
 // ---------------- 千问 정리 (병음·한국어·현장 표현) ----------------
 const SYSTEM = "당신은 중국어 영상 자막을 학습용 JSON으로 정리하는 변환기입니다. 설명, 인사말, 코드펜스 없이 JSON 객체 하나만 출력합니다.";
-function rules(n: number, known: string[]) {
-  return `아래는 광저우 의류 소싱 실무자가 공부하려고 고른 중국어 영상의 자동 자막(음성인식 결과)입니다. 번호마다 한 문장입니다.
+// kind: work = 공장·원단 등 업무 영상 / life = 드라마·애니·생활 영상 (표현 고르는 기준과 예문 상황이 다름)
+const WORDS_WORK = `2. words: 실무자가 외워 두면 공장·원단시장·위챗에서 바로 쓸 표현 8~12개.
+   - 자막에 실제로 나온 단어·구(2~10자)를 우선. 你好·谢谢 같은 기초어, 사람·회사·브랜드 이름, 금액·날짜는 제외.
+   - 이미 아는 표현(아래 목록)은 제외.
+   - 각 항목 {"z","p","k","ex":{"z","p","k"}}. k는 20자 이내. 예문은 자막 문장을 옮기지 말고 광저우 현장 상황으로 새로 만듭니다(한자 8~18자).`;
+const WORDS_LIFE = `2. words: 이 영상은 드라마·애니·생활 영상입니다. 중국에 사는 성인이 일상 대화(가족·식당·택시·이웃·친구·전화)에서 바로 쓸 구어 표현 8~12개를 고릅니다.
+   - 자막에 실제로 나온 표현을 우선. 감정 반응·맞장구·되묻기·부탁·거절처럼 대화에서 자주 쓰는 말을 우선합니다(예: 凭什么, 别闹了, 你什么意思).
+   - 고어·문언문 구절, 극 중 사람 이름, 판타지·궁중 전용 용어, 你好·谢谢 같은 기초어는 제외. 이미 아는 표현(아래 목록)도 제외.
+   - 각 항목 {"z","p","k","ex":{"z","p","k"}}. k는 20자 이내. 예문은 자막 문장을 옮기지 말고 광저우 일상 생활 상황(식당·택시·택배·이웃·가족)으로 새로 만듭니다(한자 8~18자). 의류·공장 상황으로 억지로 만들지 않습니다.`;
+function rules(n: number, known: string[], kind: string) {
+  const intro = kind === "life"
+    ? "아래는 광저우에 사는 한국인 실무자가 생활 중국어를 익히려고 고른 드라마·애니·생활 영상의 자동 자막(음성인식 결과)입니다."
+    : "아래는 광저우 의류 소싱 실무자가 공부하려고 고른 중국어 영상의 자동 자막(음성인식 결과)입니다.";
+  return `${intro} 번호마다 한 문장입니다.
 
 할 일
 1. lines: 모든 번호(0~${n - 1})에 대해 순서대로 {"i":번호,"p":병음,"k":한국어 뜻}을 만듭니다. 빠뜨리지 않습니다.
    - 병음은 성조 부호(숫자 표기 금지), 문장 첫 글자만 대문자.
    - 한국어 뜻은 자연스러운 존댓말 구어, 40자 이내. 음성인식 오타로 보이는 글자는 문맥상 맞는 뜻으로 옮깁니다(중문 원문은 고치지 않음).
-2. words: 실무자가 외워 두면 공장·원단시장·위챗에서 바로 쓸 표현 8~12개.
-   - 자막에 실제로 나온 단어·구(2~10자)를 우선. 你好·谢谢 같은 기초어, 사람·회사·브랜드 이름, 금액·날짜는 제외.
-   - 이미 아는 표현(아래 목록)은 제외.
-   - 각 항목 {"z","p","k","ex":{"z","p","k"}}. k는 20자 이내. 예문은 자막 문장을 옮기지 말고 광저우 현장 상황으로 새로 만듭니다(한자 8~18자).
+${kind === "life" ? WORDS_LIFE : WORDS_WORK}
 
 이미 아는 표현: ${known.length ? known.join(", ") : "(없음)"}
 
 출력 형식 (이 JSON 객체 하나만):
 {"lines":[{"i":0,"p":"Zhège miànliào shǒugǎn hěn hǎo.","k":"이 원단 촉감이 좋네요."}],"words":[{"z":"手感","p":"shǒugǎn","k":"촉감","ex":{"z":"这块布手感有点硬。","p":"Zhè kuài bù shǒugǎn yǒudiǎn yìng.","k":"이 원단은 촉감이 좀 뻣뻣해요."}}]}`;
 }
-async function annotate(lines: string[], known: string[]) {
+async function annotate(lines: string[], known: string[], kind: string) {
   const base = env("QWEN_BASE").replace(/\/$/, "");
   if (!base) throw err("config", "QWEN_BASE 미설정", 500);
-  const user = rules(lines.length, known) + "\n\n자막:\n" + lines.map((z, i) => `${i}. ${z}`).join("\n");
+  const user = rules(lines.length, known, kind) + "\n\n자막:\n" + lines.map((z, i) => `${i}. ${z}`).join("\n");
   const r = await fetch(base + "/chat/completions", {
     method: "POST",
     headers: dsHeaders(),

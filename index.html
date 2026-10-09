@@ -7154,7 +7154,7 @@ function vcDelete(z){
 // ================= 영상 섀도잉 (R2 업로드 → 百炼 음성인식 → 千问 정리) =================
 // 서버: {ai}/video/* (supabase/functions/video/index.ts). 결과는 state.vid=[{key,d,name,dur,s:[[t0,t1,z,p,k]],w:[단어]}] 최근 VD_KEEP개
 const VD_MAX_SEC=300, VD_MAX_MB=200, VD_KEEP=12, VD_PEND_KEY='szcn-vid-pend';
-let vdBusy=false, vdCur=null, vdSeg=null, vdLoop=false, vdRate=1;
+let vdBusy=false, vdCur=null, vdSeg=null, vdLoop=false, vdRate=1, vdKind='work';
 const vdLocal={}; // key → objectURL (이번 세션에 올린 영상은 내려받지 않고 바로 재생)
 function videoUrl(){var u=aiUrl();return u?u+'/video':'';}
 function vdList(){if(!Array.isArray(state.vid))state.vid=[];return state.vid;}
@@ -7196,18 +7196,23 @@ function vdOpen(){
     +'<div class="vc-note">위챗·더우인·샤오홍슈에서 사진첩에 저장한 <b>보통화</b> 영상을 올리면 문장별 자막(병음·뜻)과 외울 표현을 만들어 드립니다. '
     +'5분 이하, 1~3분짜리가 가장 좋습니다. 영상은 이 초대 코드 전용 저장소에만 보관됩니다.</div>';
   if(pend&&!vdBusy)h+='<button class="vc-btn" id="vdResume" style="width:100%;margin-bottom:8px;padding:13px">⏳ 처리 중이던 영상 결과 받기</button>';
-  h+='<button class="vc-btn main" id="vdPick" style="width:100%;padding:15px;font-size:14px;background:var(--sky);border-color:var(--sky)"'+(vdBusy?' disabled':'')+'>＋ 사진첩에서 영상 고르기</button>'
+  h+='<div class="vc-bar">'
+    +'<button class="vc-btn main" data-vpk="work" style="padding:15px;font-size:13.5px;background:var(--sky);border-color:var(--sky)"'+(vdBusy?' disabled':'')+'>🏭 업무 영상</button>'
+    +'<button class="vc-btn main" data-vpk="life" style="padding:15px;font-size:13.5px;background:var(--sky);border-color:var(--sky)"'+(vdBusy?' disabled':'')+'>🎬 드라마·생활</button></div>'
+    +'<div class="vc-note" style="margin-top:-4px">업무 영상은 공장·원단 실무 표현을, 드라마·생활은 일상 구어 표현을 뽑습니다.</div>'
     +'<input type="file" id="vdFile" accept="video/*" style="display:none">';
   if(L.length){
     h+='<h4>내 영상 '+L.length+'</h4>';
     L.slice().reverse().forEach(function(v){
-      h+='<div class="vd-row" data-vk="'+esc(v.key)+'"><div class="vd-ic">▶</div><div style="flex:1;min-width:0">'
+      h+='<div class="vd-row" data-vk="'+esc(v.key)+'"><div class="vd-ic">'+(v.kind==='life'?'🎬':'🏭')+'</div><div style="flex:1;min-width:0">'
         +'<div class="vd-nm zh">'+esc(v.name||'영상')+'</div>'
         +'<div class="vd-mt">'+esc(v.d||'')+' · '+vdFmt(v.dur)+' · 문장 '+(v.s||[]).length+' · 표현 '+(v.w||[]).length+'</div></div></div>';
     });
   }
   openSheet(h);
-  document.getElementById('vdPick').addEventListener('click',function(){document.getElementById('vdFile').click();});
+  document.querySelectorAll('#sheetBody [data-vpk]').forEach(function(b){
+    b.addEventListener('click',function(){vdKind=b.dataset.vpk;document.getElementById('vdFile').click();});
+  });
   document.getElementById('vdFile').addEventListener('change',function(e){
     var f=e.target.files&&e.target.files[0];e.target.value='';if(f)vdUpload(f);
   });
@@ -7259,17 +7264,18 @@ async function vdUpload(file){
   var st;
   try{st=await vdPost('start',{key:up.key});}
   catch(e){vdFail(e,'자막 작업 시작 실패');return;}
-  var p={key:up.key,task:st.task,dur:meta.d,t:Date.now()};
+  var p={key:up.key,task:st.task,dur:meta.d,kind:vdKind,t:Date.now()};
   vdSetPend(p);
   vdPoll(p);
 }
 async function vdPoll(p){
   var est=p.dur?Math.max(20,Math.round(p.dur/3)):60;
-  vdStep('자막 만드는 중','음성을 받아 적고, 병음·뜻과 외울 표현을 정리하고 있습니다.<br>보통 '+est+'초~1분 정도 걸립니다.<br>앱을 닫아도 나중에 «처리 중이던 영상 결과 받기»로 이어 받을 수 있습니다.',null);
+  var estTxt=est<55?(est+'초~1분'):('1~'+Math.ceil(est/60+0.5)+'분');
+  vdStep('자막 만드는 중','음성을 받아 적고, 병음·뜻과 외울 표현을 정리하고 있습니다.<br>보통 '+estTxt+' 정도 걸립니다.<br>앱을 닫아도 나중에 «처리 중이던 영상 결과 받기»로 이어 받을 수 있습니다.',null);
   var known=deck().words.slice(-120).map(function(w){return w.z;});
   for(var i=0;i<90;i++){
     var r;
-    try{r=await vdPost('poll',{task:p.task,known:known},140000);}
+    try{r=await vdPost('poll',{task:p.task,known:known,kind:p.kind||'work'},140000);}
     catch(e){
       if(e.code==='asr_failed'){vdSetPend(null);}
       vdFail(e,'자막 만들기 실패');return;
@@ -7289,7 +7295,7 @@ function vdSave(p,r){
   }
   var L=vdList();
   var name=s[0][2].slice(0,18)+(s[0][2].length>18?'…':'');
-  L.push({key:p.key,d:today(),name:name,dur:Math.round(r.dur||p.dur||0),s:s,w:r.words||[]});
+  L.push({key:p.key,d:today(),name:name,kind:p.kind||'work',dur:Math.round(r.dur||p.dur||0),s:s,w:r.words||[]});
   while(L.length>VD_KEEP){var old=L.shift();if(vdLocal[old.key]){URL.revokeObjectURL(vdLocal[old.key]);delete vdLocal[old.key];}}
   saveState();renderVocabBar();
   vdPlay(p.key);
