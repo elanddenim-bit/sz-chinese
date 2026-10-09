@@ -6,9 +6,12 @@
 //  POST /voice/status         {code} → {voice, status}
 //  POST /voice/tts            {code, text} → audio/mpeg (내 목소리로 읽기, R2 캐시)
 //  GET  /ping                 상태 확인
+//  GET  /  ·  GET /agent      박비서(음성 비서) 화면 · 그 WebSocket — 서버가 도구 호출을 실행 (agent.js)
 // 시크릿: DASHSCOPE_API_KEY, DASHSCOPE_WS_HOST, ALLOWED_CODES
 // [필수] Anthropic 호출 없음 — 百炼(알리바바)만 사용
 // =========================================================
+
+import { AGENT_TOOLS, AGENT_PROMPT, AGENT_HTML, runTool } from "./agent.js";
 
 const ORIGINS = ["https://elanddenim-bit.github.io"];
 const RT_MAX_SEC = 600;
@@ -42,7 +45,9 @@ export default {
     if (req.method === "OPTIONS") return new Response(null, { headers: cors(req) });
     try {
       if (url.pathname === "/ping") return json(req, { ok: true, host: host(env).replace(/^ws-[a-z0-9]{4}/, "ws-…"), key: !!env.DASHSCOPE_API_KEY });
-      if (url.pathname === "/rt") return await realtime(req, env, ctx, url);
+      if (url.pathname === "/rt") return await realtime(req, env, ctx, url, false);
+      if (url.pathname === "/agent") return await realtime(req, env, ctx, url, true);
+      if (url.pathname === "/" && req.method === "GET") return new Response(AGENT_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (req.method !== "POST") return json(req, { error: "not_found" }, 404);
       let b;
       try { b = await req.json(); } catch { return json(req, { error: "bad_json" }, 400); }
@@ -61,7 +66,7 @@ export default {
 const err = (code, message, status = 502) => Object.assign(new Error(message), { code, status });
 
 // ---------------- 실시간 통화 중계 ----------------
-async function realtime(req, env, ctx, url) {
+async function realtime(req, env, ctx, url, agent) {
   if (req.headers.get("upgrade") !== "websocket") return new Response("websocket only", { status: 426 });
   const pair = new WebSocketPair();
   const client = pair[0], server = pair[1];
@@ -104,8 +109,41 @@ async function realtime(req, env, ctx, url) {
     done(env.KV.put(dayKey, String(used + sec), { expirationTtl: 3 * 86400 }).catch(() => {}));
   };
   const timer = setTimeout(() => end("time_limit"), limit * 1000);
-  server.addEventListener("message", (e) => { try { ws.send(e.data); } catch { end("upstream_send"); } });
-  ws.addEventListener("message", (e) => { try { server.send(e.data); } catch { end("client_send"); } });
+  const sess = {};
+  const toUp = (o) => { try { ws.send(JSON.stringify(o)); } catch { end("upstream_send"); } };
+  const toDown = (o) => { try { server.send(JSON.stringify(o)); } catch {} };
+  server.addEventListener("message", (e) => {
+    // 박비서: 앱이 보내는 agent.* 는 여기서 처리(위치), 세션 설정은 서버만 보낸다
+    if (agent && typeof e.data === "string" && e.data.startsWith('{"type":"agent.')) {
+      try { const m = JSON.parse(e.data); if (m.type === "agent.gps" && /^-?\d+\.\d+,-?\d+\.\d+$/.test(m.loc || "")) sess.gps = m.loc; } catch {}
+      return;
+    }
+    if (agent && typeof e.data === "string" && e.data.includes('"session.update"')) return;
+    try { ws.send(e.data); } catch { end("upstream_send"); }
+  });
+  ws.addEventListener("message", (e) => {
+    if (agent && typeof e.data === "string" && !e.data.startsWith('{"type":"response.audio.delta"')) {
+      if (e.data.includes('"session.created"')) {
+        toUp({ type: "session.update", session: {
+          modalities: ["text", "audio"], instructions: AGENT_PROMPT, tools: AGENT_TOOLS,
+          input_audio_format: "pcm16", output_audio_format: "pcm24",
+          input_audio_transcription: { model: "qwen3-asr-flash-realtime" },
+          turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 700 },
+        } });
+      } else if (e.data.includes('"response.function_call_arguments.done"')) {
+        let m; try { m = JSON.parse(e.data); } catch {}
+        if (m && m.call_id) {
+          let args = {}; try { args = JSON.parse(m.arguments || "{}"); } catch {}
+          toDown({ type: "agent.tool", name: m.name, label: TOOL_LABEL[m.name] || m.name });
+          ctx.waitUntil(runTool(env, sess, m.name, args).then((out) => {
+            toUp({ type: "conversation.item.create", item: { type: "function_call_output", call_id: m.call_id, output: String(out).slice(0, 4000) } });
+            toUp({ type: "response.create" });
+          }));
+        }
+      }
+    }
+    try { server.send(e.data); } catch { end("client_send"); }
+  });
   server.addEventListener("close", () => { clearTimeout(timer); end("client_close"); });
   ws.addEventListener("close", (e) => { clearTimeout(timer); end("upstream_close " + (e.code || "") + " " + (e.reason || "")); });
   server.addEventListener("error", () => end("client_error"));
@@ -114,6 +152,8 @@ async function realtime(req, env, ctx, url) {
   try { server.send(JSON.stringify({ type: "relay.ready", model, limit_sec: limit })); } catch {}
   return new Response(null, { status: 101, webSocket: client });
 }
+
+const TOOL_LABEL = { get_weather: "날씨 조회", convert_currency: "환율 계산", find_place: "주소록 검색", plan_route: "동선 계산(高德)", trip_info: "스페인 일정", now: "현재 시각" };
 
 // ---------------- 내 목소리 (CosyVoice 음성 복제) ----------------
 const ttsModel = (env) => env.TTS_MODEL || "cosyvoice-v3.5-plus";

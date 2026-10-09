@@ -18,5 +18,10 @@ id = "5cff0c7000034e1bbdff8cb3433a1ed0"   # sz-voice
 binding = "R2"
 bucket_name = "sz-chinese-video"
 
-# 시크릿(대시보드): DASHSCOPE_API_KEY, DASHSCOPE_WS_HOST(예: ws-xxxx.cn-beijing.maas.aliyuncs.com), ALLOWED_CODES
+# 박비서 도구: 디디 주소록(서비스 바인딩) — 시크릿 DIDI_ACCESS_KEY 와 함께
+[[services]]
+binding = "DIDI"
+service = "didi-address"
+
+# 시크릿(대시보드): DASHSCOPE_API_KEY, DASHSCOPE_WS_HOST(예: ws-xxxx.cn-beijing.maas.aliyuncs.com), ALLOWED_CODES, DIDI_ACCESS_KEY(박비서)
 # 선택 변수: RT_MODEL(기본 qwen3.8-omni-flash-realtime), RT_DAY_MIN(코드당 하루 분, 기본 30), TTS_MODEL(기본 cosyvoice-v3.5-plus)

@@ -35,7 +35,7 @@
 - `index.html` — 전체 앱(CSS 14–653행, HTML, 단일 `<script>` 875행~).
 - `supabase/functions/call/index.ts` — 통화 모드 Edge Function 소스. 정적 앱과 무관, Pages 로 공개되므로 초대 코드·키를 넣지 말 것.
 - `supabase/functions/video/index.ts` — 영상 섀도잉 Edge Function(R2 SigV4 서명은 외부 라이브러리 없이 직접 구현, AWS 테스트 벡터로 검증).
-- `voice/` — sz-voice Worker(`worker.js`, `wrangler.toml`). 정적 앱과 별개로 Workers Builds 가 배포.
+- `voice/` — sz-voice Worker(`worker.js` 라우팅·중계·음성 복제, `agent.js` 박비서 도구·화면, `wrangler.toml`). 정적 앱과 별개로 Workers Builds 가 배포.
 - `sw.js` — 서비스워커. 앱셸 네트워크 우선·캐시 폴백, `/audio/*.mp3` 는 캐시 우선(`szcn-audio`).
 - `manifest.json` — PWA(이름 "실전 중국어 - 광저우 지사장", 테마 #1664B0).
 - `audio/<8자리 hex>.mp3` — 원어민 음성 약 3,700개. 파일명 = `fnv(문장 텍스트)` (FNV-1a 32bit, UTF-8, 소문자 hex 8자리 패딩).
@@ -55,7 +55,8 @@
   - sz-voice(2026-10-09, `voice/worker.js`, Cloudflare Worker `sz-voice`, 도메인 voice.zhnote.net, Workers Builds Root directory `voice`): 앱 상수 `VOICE_URL_DEF`(⚙ `cfg.voice` 로 덮어쓰기 가능).
     - ⚡ 실시간 통화: 통화 시작 화면 `#clRt` → `rtDial()` → `wss://voice…/rt?code=` 중계 → 百炼 Qwen-Omni 실시간(`RT_MODEL` 기본 qwen3.8-omni-flash-realtime, 업무공간 주소 `DASHSCOPE_WS_HOST` 필수 — 공용 dashscope.aliyuncs.com 은 2026-09-30부터 신기능 미지원). 마이크 16k PCM16(ScriptProcessor 다운샘플) → `input_audio_buffer.append`, 출력 24k PCM(`response.audio.delta`) WebAudio 재생, server_vad(난이도별 무음 900/700/500ms). 기본은 상대가 말하는 동안 마이크 전송 안 함(스피커 에코로 스스로 끊김 방지), '끼어들기' 체크 시 `response.cancel`. 끊으면 `callS.turns` 를 기존 `callHang()`→`/call/review` 로 넘겨 같은 리뷰. 코드당 하루 `RT_DAY_MIN`(기본 30분, KV `rt:날짜:해시`), 한 통화 10분.
     - 🗣 내 목소리: 발음 탭 카드(`mvCardHtml`) → 15초 녹음(MediaRecorder m4a) → `/voice/enroll`(百炼 임시 저장소 oss:// 업로드 → CosyVoice `voice-enrollment` create_voice, `TTS_MODEL` 기본 cosyvoice-v3.5-plus, 이전 목소리 삭제) → `/voice/status` OK 면 `state.myVoice={on,voice,st}`. 켜져 있으면 `speak()` 가 중국어 문장을 `/voice/tts`(CosyVoice WebSocket run-task, R2 `tts/<voice>/<fnv>.mp3` 캐시)로 재생, 실패 시 원래 음성(`mvBypass`).
-    - Worker 시크릿: `DASHSCOPE_API_KEY`, `DASHSCOPE_WS_HOST`, `ALLOWED_CODES`. 바인딩 KV `KV`(sz-voice), R2 `R2`(sz-chinese-video).
+    - 🎙 박비서(2026-10-09, `voice/agent.js`): `https://voice.zhnote.net/` 단독 화면(초대 코드 1회 입력, localStorage `pb-code`). `/agent` WebSocket — `/rt` 와 같은 중계지만 서버가 `session.created` 에 `session.update`(지시문·`AGENT_TOOLS`)를 직접 보내고 앱의 session.update 는 무시. 모델의 `response.function_call_arguments.done` 을 서버가 `runTool()` 로 실행 → `conversation.item.create{function_call_output}` + `response.create`, 앱에는 `agent.tool` 이벤트로 표시. 도구: get_weather(Open-Meteo 지오코딩+예보), convert_currency(Frankfurter), find_place·plan_route(서비스 바인딩 `DIDI`→didi-address `/api/places`·`/api/route`, 시크릿 `DIDI_ACCESS_KEY`), trip_info(스페인 일정 상수 `SPAIN`), now. 앱 → `{type:'agent.gps',loc}` 로 현재 위치(WGS84). 응답은 한국어. 하루 사용량은 실시간 통화와 같은 KV 상한.
+    - Worker 시크릿: `DASHSCOPE_API_KEY`, `DASHSCOPE_WS_HOST`, `ALLOWED_CODES`, `DIDI_ACCESS_KEY`. 바인딩 KV `KV`(sz-voice), R2 `R2`(sz-chinese-video), 서비스 `DIDI`(didi-address).
   - 초대 코드에 AI 권한이 없으면 서버가 거부 → UI 문구 "이 초대 코드는 AI … 사용할 수 없습니다".
 - Supabase REST: `GET {SB_URL}/rest/v1/trainer?id=eq.<sid>&select=data`, `POST …/trainer` (Prefer: resolution=merge-duplicates) body `[{id:sid,data:state,updated_at}]`.
 
