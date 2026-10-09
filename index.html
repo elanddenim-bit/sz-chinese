@@ -7942,12 +7942,18 @@ function rtDown(f32,sr){ // 마이크(44.1/48k) → 16k PCM16
   return o;
 }
 function rtSend(o){try{if(rt&&rt.ws&&rt.ws.readyState===1)rt.ws.send(JSON.stringify(o));}catch(e){}}
+// 24k PCM16 조각 재생: 홀수 바이트는 다음 조각으로 넘기고(어긋나면 지지직), 끊겼다 다시 시작할 땐 0.12초 여유 + 짧은 페이드인(틱 방지)
 function rtPlay(b64){
   if(!rt||!rt.ctx)return;
-  var bin=atob(b64),n=bin.length>>1,buf=rt.ctx.createBuffer(1,n,24000),ch=buf.getChannelData(0);
-  for(var i=0;i<n;i++){var v=bin.charCodeAt(2*i)|(bin.charCodeAt(2*i+1)<<8);if(v>=0x8000)v-=0x10000;ch[i]=v/0x8000;}
+  var bin=atob(b64),L=bin.length+(rt.left!=null?1:0),a=new Uint8Array(L),o=0;
+  if(rt.left!=null){a[0]=rt.left;o=1;rt.left=null;}for(var k=0;k<bin.length;k++)a[o+k]=bin.charCodeAt(k);
+  if(L%2){rt.left=a[L-1];L--;}var n=L>>1;if(!n)return;
+  var buf=rt.ctx.createBuffer(1,n,24000),ch=buf.getChannelData(0);
+  for(var i=0;i<n;i++){var v=a[2*i]|(a[2*i+1]<<8);if(v>=0x8000)v-=0x10000;ch[i]=v/0x8000;}
+  var now=rt.ctx.currentTime,t;
+  if(!rt.next||rt.next<now+0.02){t=now+0.12;for(var f=0,F=Math.min(120,n);f<F;f++)ch[f]*=f/F;}else t=rt.next;
   var src=rt.ctx.createBufferSource();src.buffer=buf;src.connect(rt.ctx.destination);
-  var t=Math.max(rt.ctx.currentTime+0.04,rt.next||0);src.start(t);rt.next=t+buf.duration;
+  src.start(t);rt.next=t+buf.duration;
   rt.srcs.push(src);src.onended=function(){var k=rt?rt.srcs.indexOf(src):-1;if(k>=0)rt.srcs.splice(k,1);};
 }
 function rtStopPlay(){if(!rt)return;rt.srcs.forEach(function(s){try{s.stop();}catch(e){}});rt.srcs=[];rt.next=0;}
@@ -7988,7 +7994,7 @@ function rtEvent(ev){
     for(var i=0;i<callS.turns.length;i++){var t=callS.turns[i];if(t.r==='me'&&!t.z&&!t.done){t.z=z;t.done=1;break;}}
     rtRender();return;
   }
-  if(ty==='response.created'){rt.responding=true;rt.cur={r:'npc',z:''};callS.turns.push(rt.cur);rtPhase('🔊','상대가 말하는 중');return;}
+  if(ty==='response.created'){rt.responding=true;rt.left=null;rt.cur={r:'npc',z:''};callS.turns.push(rt.cur);rtPhase('🔊','상대가 말하는 중');return;}
   if(ty==='response.audio_transcript.delta'){if(rt.cur){rt.cur.z+=ev.delta||'';rtRender();}return;}
   if(ty==='response.audio_transcript.done'){if(rt.cur&&ev.transcript){rt.cur.z=ev.transcript;rtRender();}return;}
   if(ty==='response.audio.delta'){if(ev.delta)rtPlay(ev.delta);return;}

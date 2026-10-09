@@ -225,9 +225,16 @@ function add(cls,t){var hint=log.querySelector('.hint');if(hint)hint.remove();va
 function say(t){st.textContent=t||'';}
 function b64(i16){var u=new Uint8Array(i16.buffer),s='';for(var i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s);}
 function down(f,sr){var r=sr/16000,n=Math.floor(f.length/r),o=new Int16Array(n);for(var i=0;i<n;i++){var a=Math.floor(i*r),b=Math.min(f.length,Math.floor((i+1)*r)),x=0;for(var j=a;j<b;j++)x+=f[j];var v=Math.max(-1,Math.min(1,x/Math.max(1,b-a)));o[i]=v<0?v*0x8000:v*0x7fff;}return o;}
-function play(d){var bin=atob(d),n=bin.length>>1,buf=S.ctx.createBuffer(1,n,24000),ch=buf.getChannelData(0);
-  for(var i=0;i<n;i++){var v=bin.charCodeAt(2*i)|(bin.charCodeAt(2*i+1)<<8);if(v>=0x8000)v-=0x10000;ch[i]=v/0x8000;}
-  var s=S.ctx.createBufferSource();s.buffer=buf;s.connect(S.ctx.destination);var t=Math.max(S.ctx.currentTime+0.04,S.next||0);s.start(t);S.next=t+buf.duration;S.srcs.push(s);}
+// 24k PCM16 조각 재생: 홀수 바이트는 다음 조각으로 넘기고(어긋나면 지지직), 끊겼다 다시 시작할 땐 0.12초 여유 + 짧은 페이드인(틱 방지)
+function play(d){var bin=atob(d),L=bin.length+(S.left!=null?1:0),a=new Uint8Array(L),o=0;
+  if(S.left!=null){a[0]=S.left;o=1;S.left=null;}for(var k=0;k<bin.length;k++)a[o+k]=bin.charCodeAt(k);
+  if(L%2){S.left=a[L-1];L--;}var n=L>>1;if(!n)return;
+  var buf=S.ctx.createBuffer(1,n,24000),ch=buf.getChannelData(0);
+  for(var i=0;i<n;i++){var v=a[2*i]|(a[2*i+1]<<8);if(v>=0x8000)v-=0x10000;ch[i]=v/0x8000;}
+  var now=S.ctx.currentTime,t;
+  if(!S.next||S.next<now+0.02){t=now+0.12;for(var f=0,F=Math.min(120,n);f<F;f++)ch[f]*=f/F;}else t=S.next;
+  var s=S.ctx.createBufferSource();s.buffer=buf;s.connect(S.ctx.destination);s.start(t);S.next=t+buf.duration;S.srcs.push(s);
+  s.onended=function(){var x=S?S.srcs.indexOf(s):-1;if(x>=0)S.srcs.splice(x,1);};}
 function stopPlay(){S.srcs.forEach(function(s){try{s.stop()}catch(e){}});S.srcs=[];S.next=0;}
 function speaking(){return S.next>S.ctx.currentTime+0.05;}
 function send(o){if(S&&S.ws&&S.ws.readyState===1)S.ws.send(JSON.stringify(o));}
@@ -239,7 +246,7 @@ function ev(e){
   if(t==='input_audio_buffer.speech_stopped'){S.me=add('me','…');say('생각하는 중…');return;}
   if(t==='conversation.item.input_audio_transcription.completed'){if(S.me){S.me.textContent=e.transcript||'(인식 안 됨)';S.me=null;}else add('me',e.transcript||'');return;}
   if(t==='agent.tool'){add('tool','🔧 '+e.label);say('찾아보는 중…');return;}
-  if(t==='response.created'){S.resp=true;S.cur=null;return;}
+  if(t==='response.created'){S.resp=true;S.cur=null;S.left=null;return;}
   if(t==='response.audio_transcript.delta'){if(!S.cur)S.cur=add('ai','');S.cur.textContent+=e.delta||'';log.scrollTop=log.scrollHeight;return;}
   if(t==='response.audio_transcript.done'){if(S.cur&&e.transcript)S.cur.textContent=e.transcript;return;}
   if(t==='response.audio.delta'){if(e.delta)play(e.delta);say('🔊');return;}
