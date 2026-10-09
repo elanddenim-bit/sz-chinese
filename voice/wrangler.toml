@@ -1,0 +1,22 @@
+# sz-voice — 실전 중국어 실시간 음성 중계(Qwen-Omni 실시간 통화) · 내 목소리 합성(CosyVoice 음성 복제)
+# Cloudflare Workers Builds: 저장소 sz-chinese, Root directory = voice
+name = "sz-voice"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+# 중국에서 VPN 없이 열리도록 커스텀 도메인
+routes = [{ pattern = "voice.zhnote.net", custom_domain = true }]
+
+# 하루 사용량(실시간 통화 초)·내 목소리 voice_id
+[[kv_namespaces]]
+binding = "KV"
+id = "5cff0c7000034e1bbdff8cb3433a1ed0"   # sz-voice
+
+# 내 목소리 합성 결과 캐시(tts/<voice>/<hash>.mp3) — 영상 섀도잉과 같은 버킷
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "sz-chinese-video"
+
+# 시크릿(대시보드): DASHSCOPE_API_KEY, DASHSCOPE_WS_HOST(예: ws-xxxx.cn-beijing.maas.aliyuncs.com), ALLOWED_CODES
+# 선택 변수: RT_MODEL(기본 qwen3.8-omni-flash-realtime), RT_DAY_MIN(코드당 하루 분, 기본 30), TTS_MODEL(기본 cosyvoice-v3.5-plus)

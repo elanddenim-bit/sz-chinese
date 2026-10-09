@@ -35,6 +35,7 @@
 - `index.html` — 전체 앱(CSS 14–653행, HTML, 단일 `<script>` 875행~).
 - `supabase/functions/call/index.ts` — 통화 모드 Edge Function 소스. 정적 앱과 무관, Pages 로 공개되므로 초대 코드·키를 넣지 말 것.
 - `supabase/functions/video/index.ts` — 영상 섀도잉 Edge Function(R2 SigV4 서명은 외부 라이브러리 없이 직접 구현, AWS 테스트 벡터로 검증).
+- `voice/` — sz-voice Worker(`worker.js`, `wrangler.toml`). 정적 앱과 별개로 Workers Builds 가 배포.
 - `sw.js` — 서비스워커. 앱셸 네트워크 우선·캐시 폴백, `/audio/*.mp3` 는 캐시 우선(`szcn-audio`).
 - `manifest.json` — PWA(이름 "실전 중국어 - 광저우 지사장", 테마 #1664B0).
 - `audio/<8자리 hex>.mp3` — 원어민 음성 약 3,700개. 파일명 = `fnv(문장 텍스트)` (FNV-1a 32bit, UTF-8, 소문자 hex 8자리 패딩).
@@ -51,6 +52,10 @@
   - `{ai}/tts` {code, text} → 오디오 blob(400B 미만이면 실패 처리)
   - 통화 모드(서버 기준 `cfg.call` 없으면 `cfg.ai`): `/call/ping` {code}, `/call/say` {code,text,sc}, `/call/turn` {code,audio(16kHz WAV b64),sc{…,level,kind,me},history,n} → {heard,reply:{z},end,audio,sec,usage,timing{stt,llm,tts}}(턴 응답은 중국어만 — 지연 단축) (`stuck:true` 면 오디오 없이 다시 묻기), `/call/hints` {code,sc,history,line,noHints} → {sub:{p,k},hints[]}(상대 대사 자막+힌트, 상대 음성 재생 중 `callFetchExtras`로 받음), `/call/review` {code,sc,turns}. 서버 소스는 `supabase/functions/call/index.ts`(대시보드 Code 탭에 그대로 붙여넣어 배포, 초대 코드는 시크릿 ALLOWED_CODES). 미배포면 앱은 "통화 서버 미배포" 안내. 테이블 `call_usage`(SQL은 파일 주석)를 범용 카운터로 사용: 월 STT 초(상한 `CALL_CAP_MIN` 240분) + 코드별 하루 턴·리뷰 수(`CALL_DAY_TURNS` 300(턴+힌트), `CALL_DAY_REVIEWS` 20, 초과 시 429 daily). 테이블 없으면 상한 전부 미적용. 앱은 전송 전 앞뒤 무음을 잘라(`callTrimWav`) STT 사용 초를 줄이고, 리뷰 전문은 최근 10건만 state 에 보관(`callPrune`).
   - 영상 섀도잉(2026-10-09, HSK 탭 '🎬 영상 섀도잉' `vdOpen`): `{ai}/video/upload` {code,type,size,name}→{key,put}(R2 서명 PUT, 앱이 XHR로 직접 업로드) → `/video/start` {code,key}→{task}(百炼 파일 전사, 기본 `fun-asr`) → `/video/poll` {code,task,known}→{status, dur, sents[{t0,t1,z,p,k}], words[]}(완료 시 千问이 병음·뜻·표현 정리, kind work=업무 실무 표현 / life=드라마·애니·생활 구어 표현) · `/video/url` {code,key}→재생용 서명 GET. 서버 소스 `supabase/functions/video/index.ts`(대시보드에 이름 `video`로 그대로 붙여넣기, Verify JWT 끔). 버킷 R2 `sz-chinese-video`(APAC, CORS: github.io 오리진 PUT/GET/HEAD). 키 = `<초대코드 해시>/<시각>-<랜덤>.<확장자>`(다른 코드 영상 접근 차단). 상한: `call_usage` 의 `vid:YYYY-MM`(월 전사 초, `VIDEO_CAP_MIN` 기본 120분)·`vday:날짜:해시`(코드당 하루 `VIDEO_DAY_MAX` 기본 15개). 앱은 5분·200MB 초과 영상을 올리지 않음. 처리 중 앱을 닫으면 localStorage `szcn-vid-pend` 로 이어 받기. 표현 담기는 `vcReview` 재사용.
+  - sz-voice(2026-10-09, `voice/worker.js`, Cloudflare Worker `sz-voice`, 도메인 voice.zhnote.net, Workers Builds Root directory `voice`): 앱 상수 `VOICE_URL_DEF`(⚙ `cfg.voice` 로 덮어쓰기 가능).
+    - ⚡ 실시간 통화: 통화 시작 화면 `#clRt` → `rtDial()` → `wss://voice…/rt?code=` 중계 → 百炼 Qwen-Omni 실시간(`RT_MODEL` 기본 qwen3.8-omni-flash-realtime, 업무공간 주소 `DASHSCOPE_WS_HOST` 필수 — 공용 dashscope.aliyuncs.com 은 2026-09-30부터 신기능 미지원). 마이크 16k PCM16(ScriptProcessor 다운샘플) → `input_audio_buffer.append`, 출력 24k PCM(`response.audio.delta`) WebAudio 재생, server_vad(난이도별 무음 900/700/500ms). 기본은 상대가 말하는 동안 마이크 전송 안 함(스피커 에코로 스스로 끊김 방지), '끼어들기' 체크 시 `response.cancel`. 끊으면 `callS.turns` 를 기존 `callHang()`→`/call/review` 로 넘겨 같은 리뷰. 코드당 하루 `RT_DAY_MIN`(기본 30분, KV `rt:날짜:해시`), 한 통화 10분.
+    - 🗣 내 목소리: 발음 탭 카드(`mvCardHtml`) → 15초 녹음(MediaRecorder m4a) → `/voice/enroll`(百炼 임시 저장소 oss:// 업로드 → CosyVoice `voice-enrollment` create_voice, `TTS_MODEL` 기본 cosyvoice-v3.5-plus, 이전 목소리 삭제) → `/voice/status` OK 면 `state.myVoice={on,voice,st}`. 켜져 있으면 `speak()` 가 중국어 문장을 `/voice/tts`(CosyVoice WebSocket run-task, R2 `tts/<voice>/<fnv>.mp3` 캐시)로 재생, 실패 시 원래 음성(`mvBypass`).
+    - Worker 시크릿: `DASHSCOPE_API_KEY`, `DASHSCOPE_WS_HOST`, `ALLOWED_CODES`. 바인딩 KV `KV`(sz-voice), R2 `R2`(sz-chinese-video).
   - 초대 코드에 AI 권한이 없으면 서버가 거부 → UI 문구 "이 초대 코드는 AI … 사용할 수 없습니다".
 - Supabase REST: `GET {SB_URL}/rest/v1/trainer?id=eq.<sid>&select=data`, `POST …/trainer` (Prefer: resolution=merge-duplicates) body `[{id:sid,data:state,updated_at}]`.
 

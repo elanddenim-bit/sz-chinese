@@ -720,6 +720,19 @@
   .cl-how{color:var(--wash);font-size:12px;line-height:1.7;margin:14px 2px}
   .cl-dial{width:100%;border:none;background:#1E7F4F;color:#fff;border-radius:14px;padding:16px;font-size:17px;font-weight:800;cursor:pointer;font-family:inherit}
   .cl-msg{color:#F2C3BF;font-size:13px;line-height:1.6;margin:12px 2px}
+  .cl-dial.cl-rt{background:#1664B0;margin-top:9px}
+  .cl-dial.cl-rt small{display:block;font-size:11.5px;font-weight:600;opacity:.8;margin-top:2px}
+  .rt-tr{max-height:38vh;overflow-y:auto;margin:10px 0}
+  .rt-opt{display:flex;gap:8px;align-items:center;justify-content:center;color:#C9D3E0;font-size:12.5px;margin:6px 0 2px}
+  .mv-card{background:#fff;border:1px solid var(--hair);border-radius:14px;padding:13px 14px;margin:0 0 12px}
+  .mv-card .t{font-weight:800;color:var(--navy);font-size:14px}
+  .mv-card .s{font-size:12px;color:var(--grey);line-height:1.6;margin:4px 0 9px}
+  .mv-card .row{display:flex;gap:7px}
+  .mv-card button{flex:1;border:1px solid var(--hair);background:#fff;border-radius:10px;padding:11px 6px;font-size:13px;font-weight:700;color:var(--navy);font-family:inherit}
+  .mv-card button.main{background:var(--sky);border-color:var(--sky);color:#fff}
+  .mv-card button.on{background:#1E7F4F;border-color:#1E7F4F;color:#fff}
+  .mv-card .ex{font-size:13px;line-height:1.75;background:var(--bg);border-radius:9px;padding:9px 11px;margin:8px 0;color:var(--navy)}
+  .mv-card .msg{font-size:12px;color:var(--danger);margin-top:7px;line-height:1.5}
   .cl-wait{color:#fff;font-size:14px;margin:18px 2px;line-height:1.6}
   .cl-use{color:var(--wash);font-size:11.5px;line-height:1.6;margin:10px 2px}
   .cl-hist{width:100%;margin-top:6px}
@@ -2935,6 +2948,8 @@ function speak(t,r){
   const key=fnv(t);
   const my=++speakSeq;
   stopAll();
+  // 내 목소리 모드: 중국어 문장은 sz-voice 의 CosyVoice 복제 음성으로 (실패하면 아래 기본 음성)
+  if(!mvBypass&&mvOn()&&/[\u4e00-\u9fff]/.test(t)){mvSpeak(t,rr,my);return;}
   // mp3 대상이 아니거나, 서버에 없다고 확인된 텍스트 → 즉시 TTS
   if(!AUDIO_SET.has(t)||audioMiss[key]===404){azSpeak(t,rr,my);return;}
   try{
@@ -7870,8 +7885,10 @@ function renderPron(){
       return '<button class="pr-mode'+(prMode===m[0]?' on':'')+'" data-pm="'+m[0]+'">'+m[1]+'</button>';
     }).join('')+'</div>';
   if(!pronUrl())h+='<div class="pr-card"><div class="pr-empty">발음 채점은 AI 서버가 필요합니다. 좌측 상단 ⚙︎에서 서버 주소를 등록하세요.</div></div>';
+  h+=mvCardHtml();
   h+=(prMode==='train'?prTrainHtml():(prMode==='weak'?prWeakHtml():prLogHtml()));
   el.innerHTML=h;
+  mvBind(el);
   el.querySelectorAll('[data-pm]').forEach(function(b){
     b.addEventListener('click',function(){prMode=b.dataset.pm;renderPron();});
   });
@@ -7885,6 +7902,247 @@ function renderPron(){
     prSrcList().forEach(function(s){if(s.id===prSrc)lbl=s.label;});
     prOpen(q,lbl);
   });
+}
+
+// ================= sz-voice: ⚡ 실시간 통화(Qwen-Omni) · 🗣 내 목소리(CosyVoice) =================
+// 서버: voice/worker.js (Cloudflare Worker sz-voice, voice.zhnote.net). 키는 서버에만, 앱은 초대 코드만 보냄.
+const VOICE_URL_DEF='https://voice.zhnote.net';
+function voiceUrl(){var v=(cfg&&cfg.voice)?String(cfg.voice).trim():'';return (v||VOICE_URL_DEF).replace(/\/+$/,'');}
+async function vPost(path,body,ms){
+  var res=await sbFetch(voiceUrl()+path,{method:'POST',headers:{'content-type':'application/json'},
+    body:JSON.stringify(Object.assign({code:(cfg&&cfg.sid)||''},body||{}))},ms||20000);
+  if((res.headers.get('content-type')||'').indexOf('audio/')===0)return res;
+  var j=null;try{j=await res.json();}catch(e){}
+  if(!res.ok||!j||j.error){var e=new Error((j&&(j.detail||j.error))||('HTTP '+res.status));e.code=j&&j.error;throw e;}
+  return j;
+}
+
+// ---------- ⚡ 실시간 통화 ----------
+var rt=null;
+function rtPrompt(sc,lv){
+  var me=sc.kind==='life'?CALL_ME_LIFE:CALL_ME_WORK;
+  var L={1:'对方中文不太好：你说话要慢一点，用简单常用的词，每次只说一两句短句；对方卡住或听不懂时，换更简单的说法，或者给他二选一的问题。',
+    2:'用正常语速和日常口语，每次一两句；可以有一点坚持，但最后可以商量。',
+    3:'完全按真实情况说话：正常偏快的语速，很口语，会坚持自己的立场，会反问；每次一到三句。'}[lv]||'';
+  var t='你正在和对方打电话。你扮演：'+sc.npc+'。\n场景：'+sc.setting+'\n你的性格和做法：'+sc.persona+'\n对方是：'+me+'\n'+L
+    +'\n规则：只说普通话，不说韩语或英语；不要说自己是AI；不要用括号描述动作；像真实电话一样自然、简短；目的达成后自然道别。';
+  if(callS&&callS.targets&&callS.targets.length)t+='\n请在对话里制造机会，让对方需要说出这些意思：'+callS.targets.map(function(x){return x.k||x.z;}).join('；');
+  if(callS&&callS.mission)t+='\n请制造机会让对方用到这个表达：'+callS.mission.label+(callS.mission.ex?'（例：'+callS.mission.ex+'）':'');
+  return t;
+}
+function rtB64(int16){
+  var u=new Uint8Array(int16.buffer),bin='';
+  for(var i=0;i<u.length;i+=0x8000)bin+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));
+  return btoa(bin);
+}
+function rtDown(f32,sr){ // 마이크(44.1/48k) → 16k PCM16
+  var ratio=sr/16000,n=Math.floor(f32.length/ratio),o=new Int16Array(n);
+  for(var i=0;i<n;i++){var a=Math.floor(i*ratio),b=Math.min(f32.length,Math.floor((i+1)*ratio)),sum=0;
+    for(var j=a;j<b;j++)sum+=f32[j];var v=sum/Math.max(1,b-a);v=Math.max(-1,Math.min(1,v));o[i]=v<0?v*0x8000:v*0x7fff;}
+  return o;
+}
+function rtSend(o){try{if(rt&&rt.ws&&rt.ws.readyState===1)rt.ws.send(JSON.stringify(o));}catch(e){}}
+function rtPlay(b64){
+  if(!rt||!rt.ctx)return;
+  var bin=atob(b64),n=bin.length>>1,buf=rt.ctx.createBuffer(1,n,24000),ch=buf.getChannelData(0);
+  for(var i=0;i<n;i++){var v=bin.charCodeAt(2*i)|(bin.charCodeAt(2*i+1)<<8);if(v>=0x8000)v-=0x10000;ch[i]=v/0x8000;}
+  var src=rt.ctx.createBufferSource();src.buffer=buf;src.connect(rt.ctx.destination);
+  var t=Math.max(rt.ctx.currentTime+0.04,rt.next||0);src.start(t);rt.next=t+buf.duration;
+  rt.srcs.push(src);src.onended=function(){var k=rt?rt.srcs.indexOf(src):-1;if(k>=0)rt.srcs.splice(k,1);};
+}
+function rtStopPlay(){if(!rt)return;rt.srcs.forEach(function(s){try{s.stop();}catch(e){}});rt.srcs=[];rt.next=0;}
+function rtSpeaking(){return rt&&rt.ctx&&rt.next>rt.ctx.currentTime+0.05;}
+function rtPhase(ic,txt){var a=document.getElementById('clOrbIc'),b=document.getElementById('clPh');if(a)a.textContent=ic;if(b)b.textContent=txt;}
+function rtRender(){
+  var el=document.getElementById('rtTr');if(!el||!callS)return;
+  el.innerHTML=callS.turns.filter(function(t){return t.z||t.r==='me';}).map(function(t){
+    return '<div class="cl-ln '+t.r+'"><div class="z zh">'+(t.z?esc(t.z):'<span style="opacity:.5">…</span>')+'</div></div>';
+  }).join('');
+  el.scrollTop=el.scrollHeight;
+}
+function rtEvent(ev){
+  if(!rt||!callS)return;
+  var ty=ev.type;
+  if(ty==='relay.ready'){rtPhase('📞','연결 중…');return;}
+  if(ty==='session.created'){
+    rtSend({type:'session.update',session:{modalities:['text','audio'],instructions:rtPrompt(callS.sc,callS.level),
+      input_audio_format:'pcm16',output_audio_format:'pcm24',
+      input_audio_transcription:{model:'qwen3-asr-flash-realtime'},
+      turn_detection:{type:'server_vad',threshold:0.5,prefix_padding_ms:300,silence_duration_ms:({1:900,2:700,3:500})[callS.level]||800}}});
+    return;
+  }
+  if(ty==='session.updated'){
+    if(rt.started)return;rt.started=true;
+    callS.t0=Date.now();
+    var o=callS.sc.open;
+    rtSend({type:'response.create',response:{instructions:'电话刚接通，你先开口。第一句请说：'+(o?o.z:'喂，你好。')}});
+    return;
+  }
+  if(ty==='input_audio_buffer.speech_started'){
+    if(rt.responding&&rt.barge){rtStopPlay();rtSend({type:'response.cancel'});}
+    rtPhase('🎤','듣는 중…');return;
+  }
+  if(ty==='input_audio_buffer.speech_stopped'){callS.turns.push({r:'me',z:''});rtRender();rtPhase('⏳','생각하는 중…');return;}
+  if(ty==='conversation.item.input_audio_transcription.completed'){
+    var z=String(ev.transcript||'').trim();
+    for(var i=0;i<callS.turns.length;i++){var t=callS.turns[i];if(t.r==='me'&&!t.z&&!t.done){t.z=z;t.done=1;break;}}
+    rtRender();return;
+  }
+  if(ty==='response.created'){rt.responding=true;rt.cur={r:'npc',z:''};callS.turns.push(rt.cur);rtPhase('🔊','상대가 말하는 중');return;}
+  if(ty==='response.audio_transcript.delta'){if(rt.cur){rt.cur.z+=ev.delta||'';rtRender();}return;}
+  if(ty==='response.audio_transcript.done'){if(rt.cur&&ev.transcript){rt.cur.z=ev.transcript;rtRender();}return;}
+  if(ty==='response.audio.delta'){if(ev.delta)rtPlay(ev.delta);return;}
+  if(ty==='response.done'){rt.responding=false;rt.cur=null;
+    setTimeout(function(){if(rt&&!rt.responding)rtPhase('🎤','말하세요');},Math.max(0,((rt.next||0)-(rt.ctx?rt.ctx.currentTime:0))*1000));return;}
+  if(ty==='error'){
+    var m=(ev.error&&(ev.error.message||ev.error.code))||'오류';
+    var msg=document.getElementById('rtMsg');if(msg)msg.textContent='⚠ '+m;
+    if(ev.error&&/daily_cap|not_allowed|config|upstream/.test(ev.error.code||''))rt.fatal=m;
+    return;
+  }
+  if(ty==='relay.closed'){if(!rt.ending){var mm=document.getElementById('rtMsg');if(mm&&!rt.fatal)mm.textContent=ev.reason==='time_limit'?'통화 시간 한도(10분)에 도달했습니다.':'';rtHang();}}
+}
+async function rtDial(){
+  if(!callS)return;
+  var msgEl=document.getElementById('clMsg');
+  if(!window.WebSocket||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){msgEl.textContent='이 브라우저는 실시간 통화를 지원하지 않습니다.';return;}
+  var Ctx=window.AudioContext||window.webkitAudioContext,ctx;
+  try{ctx=new Ctx();if(ctx.resume)ctx.resume();}catch(e){msgEl.textContent='오디오를 열 수 없습니다.';return;}
+  var stream;
+  try{stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1}});}
+  catch(e){msgEl.textContent='마이크 권한이 필요합니다.';try{ctx.close();}catch(_){}return;}
+  try{if(navigator.wakeLock)callS.lock=await navigator.wakeLock.request('screen');}catch(e){}
+  callS.ctx=ctx;callS.id='c'+Date.now().toString(36);callS.turns=[];callS.lat=[];callS.rt=true;
+  rt={ctx:ctx,stream:stream,srcs:[],next:0,started:false,responding:false,cur:null,barge:false,ending:false};
+  var ov=callOv(),sc=callS.sc;
+  ov.innerHTML='<div class="cl-call"><div class="cl-top"><span class="cl-name">⚡ '+sc.icon+' '+esc(sc.npc.split('（')[0])+'</span><span class="cl-time" id="clTime">00:00</span></div>'
+    +'<div class="cl-stage"><div class="cl-orb npc" id="clOrb"><span id="clOrbIc">📞</span></div><div class="cl-ph" id="clPh">연결 중…</div>'
+    +'<div class="cl-sub">멈추면 바로 대답합니다 · 이어폰 권장</div></div>'
+    +'<div class="rt-opt"><label><input type="checkbox" id="rtBarge"> 상대 말 끊고 끼어들기 (이어폰 낀 경우만)</label></div>'
+    +'<div class="rt-tr" id="rtTr"></div><div class="cl-msg" id="rtMsg"></div>'
+    +'<div class="cl-ctl"><button class="cl-hang" id="clHang">📵 끊기</button></div></div>';
+  document.getElementById('clHang').addEventListener('click',rtHang);
+  document.getElementById('rtBarge').addEventListener('change',function(){rt.barge=this.checked;});
+  callS.clock=setInterval(function(){var el=document.getElementById('clTime');if(!el||!callS||!callS.t0)return;
+    var s=Math.floor((Date.now()-callS.t0)/1000);el.textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');},1000);
+  // 마이크 → 16k PCM → 중계(상대가 말하는 동안은 끼어들기를 켠 경우에만 보냄 — 스피커 소리가 다시 들어가 스스로 끊기는 것 방지)
+  var src=ctx.createMediaStreamSource(stream),proc=ctx.createScriptProcessor(4096,1,1);
+  proc.onaudioprocess=function(e){
+    e.outputBuffer.getChannelData(0).fill(0);
+    if(!rt||!rt.started||rt.ending)return;
+    if(!rt.barge&&(rt.responding||rtSpeaking()))return;
+    rtSend({type:'input_audio_buffer.append',audio:rtB64(rtDown(e.inputBuffer.getChannelData(0),ctx.sampleRate))});
+  };
+  src.connect(proc);proc.connect(ctx.destination);rt.proc=proc;rt.srcNode=src;
+  var ws;
+  try{ws=new WebSocket(voiceUrl().replace(/^http/,'ws')+'/rt?code='+encodeURIComponent((cfg&&cfg.sid)||''));}
+  catch(e){document.getElementById('rtMsg').textContent='서버에 연결하지 못했습니다.';return;}
+  rt.ws=ws;
+  ws.onmessage=function(m){var ev;try{ev=JSON.parse(m.data);}catch(e){return;}rtEvent(ev);};
+  ws.onerror=function(){var mm=document.getElementById('rtMsg');if(mm&&!rt.started)mm.textContent='실시간 서버(voice.zhnote.net)에 연결하지 못했습니다.';};
+  ws.onclose=function(){if(rt&&!rt.ending&&rt.started)rtHang();};
+}
+function rtCleanup(){
+  if(!rt)return;
+  rt.ending=true;
+  try{rt.ws&&rt.ws.close();}catch(e){}
+  try{rt.proc&&rt.proc.disconnect();rt.srcNode&&rt.srcNode.disconnect();}catch(e){}
+  try{rt.stream&&rt.stream.getTracks().forEach(function(t){t.stop();});}catch(e){}
+  rtStopPlay();
+}
+function rtHang(){
+  if(!rt||!callS)return;
+  if(rt.ending&&callS.over)return;
+  rtCleanup();
+  var keepMsg=rt.fatal;
+  callS.turns=callS.turns.filter(function(t){return t.z;}).map(function(t){return {r:t.r,z:t.z};});
+  rt=null;
+  if(keepMsg&&!callS.turns.some(function(t){return t.r==='me';})){
+    var ov=callOv();ov.innerHTML='<div class="ptop"><button class="x" id="clX">✕</button><span class="ttl">⚡ 실시간 통화</span></div><div class="cl-msg">'+esc(keepMsg)+'</div>';
+    document.getElementById('clX').addEventListener('click',callClose);callTeardown();return;
+  }
+  callHang(false);
+}
+
+// ---------- 🗣 내 목소리 ----------
+var mvBypass=false,mvAudio=null,mvCache={},mvRec=null;
+function mvSt(){if(!state.myVoice)state.myVoice={on:false,voice:'',st:''};return state.myVoice;}
+function mvOn(){var m=state&&state.myVoice;return !!(m&&m.on&&m.voice&&m.st==='OK');}
+const MV_SCRIPT='你好，我是朴总。我们公司在广州，主要做女装和童装。这批货的交期很紧，麻烦你们帮忙安排一下，有问题随时在微信上跟我说。谢谢！';
+function mvCardHtml(){
+  var m=mvSt();
+  var h='<div class="mv-card" id="mvCard"><div class="t">🗣 내 목소리로 듣는 원어민 중국어</div>';
+  if(!m.voice){
+    h+='<div class="s">15초 정도 아래 문장을 읽어 녹음하면, 앱의 중국어 문장을 <b>내 목소리 + 원어민 발음</b>으로 들려줍니다. 조용한 곳에서, 평소 말투로 읽어 주세요. 중국어가 서툴러도 목소리만 쓰므로 괜찮습니다.</div>'
+      +'<div class="ex zh">'+MV_SCRIPT+'</div>'
+      +'<div class="row"><button class="main" id="mvRec">● 녹음 시작</button></div>';
+  }else if(m.st!=='OK'){
+    h+='<div class="s">목소리를 만드는 중입니다(보통 1분 안쪽). 잠시 뒤 확인을 눌러 주세요.</div>'
+      +'<div class="row"><button class="main" id="mvChk">상태 확인</button><button id="mvRe">다시 녹음</button></div>';
+  }else{
+    h+='<div class="s">켜 두면 앱의 모든 중국어 문장이 내 목소리로 나옵니다(처음 듣는 문장은 1~2초 걸림). 끄면 원래 원어민 음성.</div>'
+      +'<div class="row"><button class="'+(m.on?'on':'')+'" id="mvTog">'+(m.on?'✓ 내 목소리 켜짐':'내 목소리 켜기')+'</button>'
+      +'<button id="mvTry">▶ 들어보기</button><button id="mvRe">다시 녹음</button></div>';
+  }
+  return h+'<div class="msg" id="mvMsg"></div></div>';
+}
+function mvMsg(t){var e=document.getElementById('mvMsg');if(e)e.textContent=t||'';}
+function mvBind(el){
+  var b;
+  if((b=document.getElementById('mvRec')))b.addEventListener('click',mvRecord);
+  if((b=document.getElementById('mvRe')))b.addEventListener('click',function(){var m=mvSt();m.voice='';m.st='';m.on=false;saveState();renderPron();});
+  if((b=document.getElementById('mvChk')))b.addEventListener('click',mvCheck);
+  if((b=document.getElementById('mvTog')))b.addEventListener('click',function(){var m=mvSt();m.on=!m.on;saveState();renderPron();});
+  if((b=document.getElementById('mvTry')))b.addEventListener('click',function(){mvSpeak('这批货的交期能不能提前一个星期？',rate,++speakSeq);});
+}
+async function mvRecord(){
+  var btn=document.getElementById('mvRec');
+  if(mvRec){mvRec.stop();return;}
+  if(!window.MediaRecorder){mvMsg('이 브라우저는 녹음을 지원하지 않습니다.');return;}
+  var stream;
+  try{stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:true,autoGainControl:true}});}
+  catch(e){mvMsg('마이크 권한이 필요합니다.');return;}
+  var mime=MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported('audio/mp4')?'audio/mp4':'';
+  var rec=mime?new MediaRecorder(stream,{mimeType:mime}):new MediaRecorder(stream),chunks=[],t0=Date.now();
+  mvRec=rec;
+  rec.ondataavailable=function(e){if(e.data&&e.data.size)chunks.push(e.data);};
+  var tick=setInterval(function(){var s=Math.round((Date.now()-t0)/1000);if(btn)btn.textContent='■ 녹음 끝내기 · '+s+'초'+(s<12?' (12초 이상)':'');if(s>=40)rec.stop();},500);
+  rec.onstop=async function(){
+    clearInterval(tick);mvRec=null;stream.getTracks().forEach(function(t){t.stop();});
+    var sec=(Date.now()-t0)/1000;
+    if(sec<10){mvMsg('10초 이상 녹음해 주세요.');if(btn)btn.textContent='● 녹음 시작';return;}
+    var blob=new Blob(chunks,{type:rec.mimeType||mime||'audio/mp4'});
+    if(btn){btn.disabled=true;btn.textContent='목소리 등록 중…';}
+    var b64=await new Promise(function(ok){var fr=new FileReader();fr.onload=function(){ok(String(fr.result).split(',')[1]);};fr.readAsDataURL(blob);});
+    try{
+      var r=await vPost('/voice/enroll',{audio:b64,mime:blob.type},60000);
+      var m=mvSt();m.voice=r.voice;m.st='';saveState();renderPron();setTimeout(mvCheck,8000);
+    }catch(e){mvMsg('등록 실패: '+e.message);if(btn){btn.disabled=false;btn.textContent='● 다시 녹음';}}
+  };
+  rec.start(500);
+  if(btn)btn.textContent='■ 녹음 끝내기';
+  mvMsg('');
+}
+async function mvCheck(){
+  try{var r=await vPost('/voice/status',{},15000);var m=mvSt();
+    if(!r.voice){m.voice='';m.st='';saveState();renderPron();return;}
+    m.voice=r.voice;m.st=r.status==='OK'?'OK':r.status;
+    if(m.st==='OK')m.on=true;saveState();renderPron();
+    if(m.st!=='OK')mvMsg('상태: '+(r.status||'확인 중')+(r.status==='UNDEPLOYED'?' — 녹음이 불분명해 만들지 못했습니다. 다시 녹음해 주세요.':''));
+  }catch(e){mvMsg('확인 실패: '+e.message);}
+}
+function mvSpeak(t,rr,my){
+  // iOS 자동재생 제한: 탭 흐름 안에서 같은 오디오 요소를 먼저 깨워 둔다
+  if(!mvAudio){mvAudio=new Audio();mvAudio.setAttribute('playsinline','');}
+  var a=mvAudio;
+  if(!mvCache[t]){try{a.src='data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA';var p0=a.play();if(p0&&p0.catch)p0.catch(function(){});}catch(e){}}
+  function std(){if(my!==speakSeq)return;mvBypass=true;try{speak(t,rr);}finally{mvBypass=false;}}
+  function play(url){if(my!==speakSeq)return;a.src=url;a.playbackRate=rr||1;curAudio=a;var p=a.play();if(p&&p.catch)p.catch(std);}
+  if(mvCache[t]){play(mvCache[t]);return;}
+  vPost('/voice/tts',{text:t},20000).then(function(res){
+    if(!res||!res.blob)throw new Error('tts');
+    return res.blob();
+  }).then(function(b){var u=URL.createObjectURL(b);mvCache[t]=u;play(u);}).catch(std);
 }
 
 // ================= 통화 모드 (음성 롤플레이) =================
@@ -8125,11 +8383,13 @@ function callOpen(key,opts){
     +'<div class="cl-lvd" id="clLvd"></div>'
     +'<div class="cl-how">이어폰 권장 · <b>띵</b> 소리 뒤에 말하고, 멈추면 자동 전송 · 화면 가운데를 탭하면 바로 전송 · 한 턴에 3~5초 걸립니다</div>'
     +'<button class="cl-dial" id="clDial">📞 전화 걸기</button>'
+    +'<button class="cl-dial cl-rt" id="clRt">⚡ 실시간 통화 <small>BETA · 텀 없이 바로 대답</small></button>'
     +'<div class="cl-msg" id="clMsg"></div>'
     +'<div class="cl-use" id="clUse">'+callUsageLine(null)+'</div>'
     +(callState().log.some(function(e){return e.key===key;})?'<button class="pr-b cl-hist" id="clHist">이 상황 통화 기록</button>':'');
   document.getElementById('clX').addEventListener('click',callClose);
   document.getElementById('clDial').addEventListener('click',callDial);
+  document.getElementById('clRt').addEventListener('click',rtDial);
   var mo=document.getElementById('clMisOn');
   if(mo)mo.addEventListener('change',function(){callS.mission=mo.checked?ms:null;callState().missionOff=!mo.checked;saveState();});
   function lvDraw(){
