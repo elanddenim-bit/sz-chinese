@@ -6,12 +6,14 @@
 //  POST /voice/status         {code} → {voice, status}
 //  POST /voice/tts            {code, text} → audio/mpeg (내 목소리로 읽기, R2 캐시)
 //  GET  /ping                 상태 확인
+//  POST /u · GET /usage · POST /usage/data   앱 사용량 기록·사용량판(주인 전용) (usage.js)
 //  GET  /  ·  GET /agent      박비서(음성 비서) 화면 · 그 WebSocket — 서버가 도구 호출을 실행 (agent.js)
 // 시크릿: DASHSCOPE_API_KEY, DASHSCOPE_WS_HOST, ALLOWED_CODES
 // [필수] Anthropic 호출 없음 — 百炼(알리바바)만 사용
 // =========================================================
 
 import { AGENT_TOOLS, AGENT_PROMPT, AGENT_HTML, runTool } from "./agent.js";
+import { beacon, logUse, usageData, USAGE_HTML } from "./usage.js";
 import ICON180 from "./icon-180.png";
 import ICON192 from "./icon-192.png";
 import ICON512 from "./icon-512.png";
@@ -60,11 +62,14 @@ export default {
       if (url.pathname === "/agent") return await realtime(req, env, ctx, url, true);
       if (ICONS[url.pathname]) return new Response(ICONS[url.pathname], { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (url.pathname === "/manifest.webmanifest") return new Response(MANIFEST, { headers: { "content-type": "application/manifest+json; charset=utf-8", "cache-control": "public, max-age=3600" } });
+      if (url.pathname === "/u" && req.method === "POST") return await beacon(req, env, ctx);
+      if (url.pathname === "/usage" && req.method === "GET") return new Response(USAGE_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/" && req.method === "GET") return new Response(AGENT_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (req.method !== "POST") return json(req, { error: "not_found" }, 404);
       let b;
       try { b = await req.json(); } catch { return json(req, { error: "bad_json" }, 400); }
       if (!allowed(env, b.code)) return json(req, { error: "not_allowed" }, 403);
+      if (url.pathname === "/usage/data") return json(req, await usageData(env, b));
       if (!env.DASHSCOPE_API_KEY) return json(req, { error: "config", detail: "DASHSCOPE_API_KEY 시크릿 없음" }, 500);
       const h = await hash(String(b.code).trim());
       if (url.pathname === "/voice/enroll") return json(req, await enroll(env, h, b));
@@ -92,7 +97,8 @@ async function realtime(req, env, ctx, url, agent) {
   const code = url.searchParams.get("code") || "";
   if (!allowed(env, code)) return fail("not_allowed", "이 초대 코드는 실시간 통화를 쓸 수 없습니다.");
   if (!env.DASHSCOPE_API_KEY) return fail("config", "서버에 DASHSCOPE_API_KEY 가 없습니다.");
-  const dayKey = "rt:" + cnDay() + ":" + (await hash(code));
+  const who = await hash(code);
+  const dayKey = "rt:" + cnDay() + ":" + who;
   const used = Number(await env.KV.get(dayKey)) || 0;
   const cap = (Number(env.RT_DAY_MIN) || 30) * 60;
   if (used >= cap) return fail("daily_cap", "오늘 실시간 통화 한도(" + Math.round(cap / 60) + "분)를 다 썼습니다.");
@@ -119,7 +125,10 @@ async function realtime(req, env, ctx, url, agent) {
     try { ws.close(1000, "end"); } catch {}
     try { server.close(1000, "end"); } catch {}
     const sec = Math.ceil((Date.now() - t0) / 1000);
-    done(env.KV.put(dayKey, String(used + sec), { expirationTtl: 3 * 86400 }).catch(() => {}));
+    done(Promise.all([
+      env.KV.put(dayKey, String(used + sec), { expirationTtl: 3 * 86400 }).catch(() => {}),
+      logUse(env, agent ? "pb" : "rt", { session: 1, ...(sess.tools || {}) }, sec, who).catch(() => {}),
+    ]));
   };
   const timer = setTimeout(() => end("time_limit"), limit * 1000);
   const sess = {};
@@ -148,6 +157,7 @@ async function realtime(req, env, ctx, url, agent) {
         if (m && m.call_id) {
           let args = {}; try { args = JSON.parse(m.arguments || "{}"); } catch {}
           toDown({ type: "agent.tool", name: m.name, label: TOOL_LABEL[m.name] || m.name });
+          if (TOOL_LABEL[m.name]) { sess.tools = sess.tools || {}; sess.tools[m.name] = (sess.tools[m.name] || 0) + 1; }
           ctx.waitUntil(runTool(env, sess, m.name, args).then((out) => {
             toUp({ type: "conversation.item.create", item: { type: "function_call_output", call_id: m.call_id, output: String(out).slice(0, 4000) } });
             toUp({ type: "response.create" });

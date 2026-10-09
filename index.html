@@ -4910,7 +4910,7 @@ function wxScroll(){
   const b=document.getElementById('rpChat');
   if(b)b.scrollTop=b.scrollHeight;
 }
-function startRP(id){
+function startRP(id){uT('rp');
   const scen=RP.find(s=>s.id===id);
   rpCur={scen:scen,pts:0,node:scen.start,log:[]};
   const area=document.getElementById('rpArea');
@@ -5644,6 +5644,7 @@ async function runField(){
   res.innerHTML='<div class="fb-loading">분석 중입니다 <span class="fb-dots"><i></i><i></i><i></i></span></div>';
   let r=null;
   try{
+    uT('field');
     const resp=await fetch(fieldUrl(),{method:'POST',headers:{'content-type':'application/json'},
       body:JSON.stringify({mode:fdMode,text:text,code:(cfg&&cfg.sid)||'',situation:(sitEl&&sitEl.value||'')})});
     r=await resp.json();
@@ -6711,7 +6712,7 @@ function goTab(p){
   document.querySelectorAll('.pane').forEach(function(x){x.classList.remove('on');});
   var t=document.querySelector('.tab[data-p="'+p+'"]');
   if(t)t.classList.add('on');
-  document.getElementById(p).classList.add('on');
+  document.getElementById(p).classList.add('on');uT('tab_'+p);
   speechSynthesis.cancel();if(typeof stopShadow==='function')stopShadow();
 }
 function startDaily(mode,src){
@@ -6998,7 +6999,7 @@ function renderVocabBar(){
 }
 // 위챗·메일 대화 붙여넣기 → 현장 표현 추출 (vocab 함수 text 모드, 결과는 사진과 같은 고르기 화면)
 var vcPasteText='';
-function vcPasteOpen(){
+function vcPasteOpen(){uT('paste');
   openSheet('<h4>대화 붙여넣기 → 현장 표현</h4>'
     +'<div class="vc-note">공장·거래처와 주고받은 위챗·메일·회의 메모를 그대로 붙여넣으세요(한국어·중국어 섞여도 됩니다). '
     +'외워 둘 중국어 표현 8~15개를 뽑아 드립니다. 이미 내 단어에 있는 것은 빼고, 사람·회사 이름과 금액은 넣지 않습니다.</div>'
@@ -7259,7 +7260,7 @@ function vdPut(url,file,onPct){
     x.send(file);
   });
 }
-async function vdUpload(file){
+async function vdUpload(file){uT('video');
   if(file.size>VD_MAX_MB*1048576){alert('영상이 너무 큽니다('+Math.round(file.size/1048576)+'MB). '+VD_MAX_MB+'MB 이하로 잘라서 올려 주세요.');return;}
   vdBusy=true;
   vdStep('영상 확인 중','영상 길이를 확인하고 있습니다.',null);
@@ -7671,7 +7672,7 @@ async function prSend(blob){
   prRecordResult(it,r);
   prShow(it,r);
 }
-function prRecordResult(it,r){
+function prRecordResult(it,r){uT('pron');
   var p=prState();
   var sc=(r.scores&&r.scores.pron)||0;
   var st=p.sents[it.z]||{p:'',k:'',best:0,n:0};
@@ -7908,6 +7909,21 @@ function renderPron(){
 // 서버: voice/worker.js (Cloudflare Worker sz-voice, voice.zhnote.net). 키는 서버에만, 앱은 초대 코드만 보냄.
 const VOICE_URL_DEF='https://voice.zhnote.net';
 function voiceUrl(){var v=(cfg&&cfg.voice)?String(cfg.voice).trim():'';return (v||VOICE_URL_DEF).replace(/\/+$/,'');}
+// 사용 기록(📊 사용량판, voice.zhnote.net/usage) — 기능별 횟수·켜 둔 시간만, 문장·음성 내용은 안 보냄. 초대 코드는 해시만
+function uT(e,n){var c=(window.__uc=window.__uc||{});c[e]=(c[e]||0)+(n||1);}
+function uFlush(force){
+  if(!force&&document.visibilityState==='visible')return;
+  var now=Date.now(),sec=Math.round(((window.__us||0)+(window.__uv?now-window.__uv:0))/1000);window.__uv=0;window.__us=0;
+  var c=window.__uc||{};window.__uc={};if(!Object.keys(c).length&&sec<3)return;
+  try{navigator.sendBeacon(voiceUrl()+'/u',JSON.stringify({app:'szcn',c:c,sec:sec,w:window.__uw||''}));}catch(e){}
+}
+(function(){
+  window.__uv=Date.now();uT('open');
+  try{if(cfg&&cfg.sid&&crypto.subtle)crypto.subtle.digest('SHA-256',new TextEncoder().encode(String(cfg.sid).trim())).then(function(d){
+    window.__uw=Array.prototype.slice.call(new Uint8Array(d),0,6).map(function(x){return ('0'+x.toString(16)).slice(-2);}).join('');});}catch(e){}
+  document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible'){window.__uv=Date.now();uT('open');}else uFlush();});
+  window.addEventListener('pagehide',function(){uFlush(true);});
+})();
 async function vPost(path,body,ms){
   var res=await sbFetch(voiceUrl()+path,{method:'POST',headers:{'content-type':'application/json'},
     body:JSON.stringify(Object.assign({code:(cfg&&cfg.sid)||''},body||{}))},ms||20000);
@@ -8141,7 +8157,7 @@ async function mvCheck(){
     if(m.st!=='OK')mvMsg('상태: '+(r.status||'확인 중')+(r.status==='UNDEPLOYED'?' — 녹음이 불분명해 만들지 못했습니다. 다시 녹음해 주세요.':''));
   }catch(e){mvMsg('확인 실패: '+e.message);}
 }
-function mvSpeak(t,rr,my){
+function mvSpeak(t,rr,my){uT('mv');
   // iOS 자동재생 제한: 탭 흐름 안에서 같은 오디오 요소를 먼저 깨워 둔다
   if(!mvAudio){mvAudio=new Audio();mvAudio.setAttribute('playsinline','');}
   var a=mvAudio;
@@ -8502,7 +8518,7 @@ async function callSay(o,b64){
 }
 
 // ---------- 통화 화면 ----------
-async function callDial(){
+async function callDial(){uT('call');
   if(!callS)return;
   if(callS.pingErr&&callS.pingErr!=='network'&&callS.pingErr!=='timeout'){
     document.getElementById('clMsg').textContent=callErrText(callS.pingErr);return;
