@@ -1,3 +1,4 @@
+# 빌드 재실행 2026-10-09
 # sz-voice — 실전 중국어 실시간 음성 중계(Qwen-Omni 실시간 통화) · 내 목소리 합성(CosyVoice 음성 복제)
 # Cloudflare Workers Builds: 저장소 sz-chinese, Root directory = voice
 name = "sz-voice"
