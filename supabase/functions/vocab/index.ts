@@ -1,6 +1,7 @@
 // supabase/functions/vocab/index.ts
 // 단어 학습 자료 사진 → 앱 단어 JSON (千问 Vision, 알리바바 百炼)
 // 요청: POST { code, images:[{media_type,data}], hint? }
+//   또는 POST { code, text, known?:[중문] } — 위챗·메일 대화 붙여넣기 → 현장 표현 (사진 없이 글자만)
 // 응답: { ok, day, words:[{z,p,k,ex:{z,p,k}}] }
 
 const ALLOWED: string[] = [
@@ -43,6 +44,21 @@ const RULES = `이 사진은 중국어 단어 학습 자료입니다. 아래 규
 출력 형식 (이 JSON 객체 하나만):
 {"day":3,"words":[{"z":"品类","p":"pǐnlèi","k":"품목·카테고리","ex":{"z":"你们厂主要做什么品类？","p":"Nǐmen chǎng zhǔyào zuò shénme pǐnlèi?","k":"공장 주력 품목이 뭐예요?"}}]}`;
 
+const TEXT_RULES = `아래 글은 사용자가 광저우 의류 소싱 현장에서 실제로 주고받은 위챗·메일·회의 대화입니다.
+여기서 사용자가 외워 두면 현장에서 바로 쓸 중국어 표현을 8~15개 뽑으세요.
+
+1. 우선순위: ① 글에 실제로 나온 중국어 단어·표현 ② 글의 내용과 관련된 봉제·원단·납기·단가·품질 실무 용어 ③ 그래도 부족하면 상황에 꼭 맞는 관련 용어.
+   ③처럼 글에 직접 나오지 않은 항목은 k 끝에 "(관련 용어)"를 붙입니다.
+2. 글이 한국어뿐이면 그 내용을 중국 현장에서 말할 때 쓰는 중국어 표현을 뽑습니다.
+3. 사람 이름·회사명·브랜드명·품번·금액·날짜는 항목으로 뽑지 않고, 예문에도 쓰지 않습니다.
+4. "이미 아는 표현" 목록에 있는 것은 뽑지 않습니다. 你好·谢谢 같은 기초 단어도 뺍니다.
+5. z는 간체자 단어나 짧은 구(2~10자). 병음은 성조 부호(숫자 표기 금지). 한국어 뜻은 20자 이내.
+6. 예문은 새로 만듭니다(글의 문장을 그대로 옮기지 않음). 한자 8~18자, 실제로 오갈 법한 말투.
+   예문 병음도 성조 부호, 문장 첫 글자만 대문자.
+
+출력 형식 (이 JSON 객체 하나만):
+{"day":null,"words":[{"z":"交期","p":"jiāoqī","k":"납기","ex":{"z":"这批货的交期能不能提前？","p":"Zhè pī huò de jiāoqī néng bu néng tíqián?","k":"이번 물건 납기 앞당길 수 있어요?"}}]}`;
+
 function pickJson(t: string): any {
   let s = (t || "").trim();
   s = s.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
@@ -74,6 +90,31 @@ Deno.serve(async (req) => {
 
   if (!ALLOWED.includes(code)) {
     return json({ error: "이 코드로는 사진 단어 추출을 사용할 수 없습니다." }, 403);
+  }
+  const textIn = String(payload?.text ?? "").trim();
+  if (textIn && !(Array.isArray(images) && images.length)) {
+    if (textIn.length > 4000) return json({ error: "글이 너무 깁니다. 4000자 이내로 나눠서 붙여넣어 주세요." }, 400);
+    const known = (Array.isArray(payload?.known) ? payload.known : [])
+      .map((k: unknown) => clean(k, 24)).filter(Boolean).slice(0, 120);
+    const TMODEL = Deno.env.get("QWEN_TEXT_MODEL") ?? "qwen3.8-flash";
+    const user = TEXT_RULES + (known.length ? `\n\n[이미 아는 표현]\n${known.join(", ")}` : "")
+      + `\n\n[대화]\n${textIn}`;
+    let tr: { ok: boolean; status: number; text: string; raw: string };
+    try {
+      tr = await qwenChat(TMODEL, SYSTEM, user, 3000, true);
+    } catch (e) {
+      return json({ error: "AI 서버 연결 실패", detail: String(e) }, 502);
+    }
+    if (!tr.ok) return json({ error: `AI 오류 ${tr.status}`, detail: tr.raw.slice(0, 400) }, 502);
+    let tp: any;
+    try { tp = pickJson(tr.text); } catch {
+      return json({ error: "표현을 정리하지 못했습니다. 다시 시도해 주세요.", detail: tr.text.slice(0, 300) }, 502);
+    }
+    const knownSet: Record<string, boolean> = {};
+    known.forEach((k: string) => { knownSet[k.replace(/\s/g, "")] = true; });
+    const tw = normWords(tp.words).filter((w: any) => !knownSet[w.z.replace(/\s/g, "")]);
+    if (!tw.length) return json({ ok: false, message: "새로 뽑을 표현을 찾지 못했습니다." });
+    return json({ ok: true, day: null, model: TMODEL, src: "text", words: tw });
   }
   if (!Array.isArray(images) || !images.length) {
     return json({ error: "사진이 없습니다." }, 400);
@@ -114,8 +155,20 @@ Deno.serve(async (req) => {
     return json({ error: "단어를 읽지 못했습니다. 사진을 더 밝게 찍어 다시 시도해 주세요.", detail: text.slice(0, 300) }, 502);
   }
 
+  const words = normWords(parsed.words);
+
+  if (!words.length) {
+    return json({ ok: false, message: "사진에서 단어를 찾지 못했습니다. 글자가 잘 보이게 다시 찍어 주세요." });
+  }
+
+  const day = Number.isFinite(parsed.day) ? parsed.day : null;
+
+  return json({ ok: true, day, model: MODEL, words });
+});
+
+function normWords(list: any): any[] {
   const seen: Record<string, boolean> = {};
-  const words = (parsed.words || [])
+  return (Array.isArray(list) ? list : [])
     .map((w: any) => {
       const z = clean(w?.z, 24);
       if (!z || !/[\u4e00-\u9fff]/.test(z) || seen[z]) return null;
@@ -131,15 +184,7 @@ Deno.serve(async (req) => {
     })
     .filter(Boolean)
     .slice(0, 60);
-
-  if (!words.length) {
-    return json({ ok: false, message: "사진에서 단어를 찾지 못했습니다. 글자가 잘 보이게 다시 찍어 주세요." });
-  }
-
-  const day = Number.isFinite(parsed.day) ? parsed.day : null;
-
-  return json({ ok: true, day, model: MODEL, words });
-});
+}
 
 // ---------------- 千问(알리바바 百炼) 호출 ----------------
 // 중국·홍콩발 Anthropic 요청 금지 → AI는 千问. 시크릿: DASHSCOPE_API_KEY, QWEN_BASE
