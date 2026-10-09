@@ -183,6 +183,9 @@ export const AGENT_HTML = String.raw`<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="박비서">
 <meta name="theme-color" content="#1664B0">
+<link rel="apple-touch-icon" sizes="180x180" href="/icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+<link rel="manifest" href="/manifest.webmanifest">
 <title>박비서</title>
 <style>
 :root{--sky:#1664B0;--bg:#EFE8DE;--ink:#1A2330;--grey:#857E74;--hair:#E2D9CB;--red:#D21624}

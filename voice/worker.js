@@ -12,6 +12,17 @@
 // =========================================================
 
 import { AGENT_TOOLS, AGENT_PROMPT, AGENT_HTML, runTool } from "./agent.js";
+import ICON180 from "./icon-180.png";
+import ICON192 from "./icon-192.png";
+import ICON512 from "./icon-512.png";
+
+// 박비서 홈 화면 아이콘(소유자 지정 일러스트) · PWA manifest
+const ICONS = { "/icon-180.png": ICON180, "/apple-touch-icon.png": ICON180, "/icon-192.png": ICON192, "/icon-512.png": ICON512 };
+const MANIFEST = JSON.stringify({
+  name: "박비서", short_name: "박비서", start_url: "/", scope: "/", display: "standalone",
+  background_color: "#EFE8DE", theme_color: "#1664B0",
+  icons: [{ src: "/icon-192.png", sizes: "192x192", type: "image/png" }, { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" }],
+});
 
 const ORIGINS = ["https://elanddenim-bit.github.io"];
 const RT_MAX_SEC = 600;
@@ -47,6 +58,8 @@ export default {
       if (url.pathname === "/ping") return json(req, { ok: true, host: host(env).replace(/^ws-[a-z0-9]{4}/, "ws-…"), key: !!env.DASHSCOPE_API_KEY });
       if (url.pathname === "/rt") return await realtime(req, env, ctx, url, false);
       if (url.pathname === "/agent") return await realtime(req, env, ctx, url, true);
+      if (ICONS[url.pathname]) return new Response(ICONS[url.pathname], { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
+      if (url.pathname === "/manifest.webmanifest") return new Response(MANIFEST, { headers: { "content-type": "application/manifest+json; charset=utf-8", "cache-control": "public, max-age=3600" } });
       if (url.pathname === "/" && req.method === "GET") return new Response(AGENT_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (req.method !== "POST") return json(req, { error: "not_found" }, 404);
       let b;

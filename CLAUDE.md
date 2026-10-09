@@ -35,7 +35,7 @@
 - `index.html` — 전체 앱(CSS 14–653행, HTML, 단일 `<script>` 875행~).
 - `supabase/functions/call/index.ts` — 통화 모드 Edge Function 소스. 정적 앱과 무관, Pages 로 공개되므로 초대 코드·키를 넣지 말 것.
 - `supabase/functions/video/index.ts` — 영상 섀도잉 Edge Function(R2 SigV4 서명은 외부 라이브러리 없이 직접 구현, AWS 테스트 벡터로 검증).
-- `voice/` — sz-voice Worker(`worker.js` 라우팅·중계·음성 복제, `agent.js` 박비서 도구·화면, `wrangler.toml`). 정적 앱과 별개로 Workers Builds 가 배포.
+- `voice/` — sz-voice Worker(`worker.js` 라우팅·중계·음성 복제, `agent.js` 박비서 도구·화면, `icon-180/192/512.png` 박비서 홈 화면 아이콘(소유자 지정 일러스트, Data 규칙으로 import), `wrangler.toml`). 정적 앱과 별개로 Workers Builds 가 배포.
 - `sw.js` — 서비스워커. 앱셸 네트워크 우선·캐시 폴백, `/audio/*.mp3` 는 캐시 우선(`szcn-audio`).
 - `manifest.json` — PWA(이름 "실전 중국어 - 광저우 지사장", 테마 #1664B0).
 - `audio/<8자리 hex>.mp3` — 원어민 음성 약 3,700개. 파일명 = `fnv(문장 텍스트)` (FNV-1a 32bit, UTF-8, 소문자 hex 8자리 패딩).
