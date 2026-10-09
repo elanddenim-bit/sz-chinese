@@ -225,18 +225,26 @@ function add(cls,t){var hint=log.querySelector('.hint');if(hint)hint.remove();va
 function say(t){st.textContent=t||'';}
 function b64(i16){var u=new Uint8Array(i16.buffer),s='';for(var i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s);}
 function down(f,sr){var r=sr/16000,n=Math.floor(f.length/r),o=new Int16Array(n);for(var i=0;i<n;i++){var a=Math.floor(i*r),b=Math.min(f.length,Math.floor((i+1)*r)),x=0;for(var j=a;j<b;j++)x+=f[j];var v=Math.max(-1,Math.min(1,x/Math.max(1,b-a)));o[i]=v<0?v*0x8000:v*0x7fff;}return o;}
-// 24k PCM16 조각 재생: 홀수 바이트는 다음 조각으로 넘기고(어긋나면 지지직), 끊겼다 다시 시작할 땐 0.12초 여유 + 짧은 페이드인(틱 방지)
-function play(d){var bin=atob(d),L=bin.length+(S.left!=null?1:0),a=new Uint8Array(L),o=0;
-  if(S.left!=null){a[0]=S.left;o=1;S.left=null;}for(var k=0;k<bin.length;k++)a[o+k]=bin.charCodeAt(k);
-  if(L%2){S.left=a[L-1];L--;}var n=L>>1;if(!n)return;
-  var buf=S.ctx.createBuffer(1,n,24000),ch=buf.getChannelData(0);
-  for(var i=0;i<n;i++){var v=a[2*i]|(a[2*i+1]<<8);if(v>=0x8000)v-=0x10000;ch[i]=v/0x8000;}
-  var now=S.ctx.currentTime,t;
-  if(!S.next||S.next<now+0.02){t=now+0.12;for(var f=0,F=Math.min(120,n);f<F;f++)ch[f]*=f/F;}else t=S.next;
-  var s=S.ctx.createBufferSource();s.buffer=buf;s.connect(S.ctx.destination);s.start(t);S.next=t+buf.duration;S.srcs.push(s);
-  s.onended=function(){var x=S?S.srcs.indexOf(s):-1;if(x>=0)S.srcs.splice(x,1);};}
-function stopPlay(){S.srcs.forEach(function(s){try{s.stop()}catch(e){}});S.srcs=[];S.next=0;}
-function speaking(){return S.next>S.ctx.currentTime+0.05;}
+// 24k PCM16 재생: 조각마다 따로 재생하면 기기(48k)로 바뀔 때 경계마다 지지직 → 한 줄 버퍼에 이어 붙여 마이크 처리 노드에서 직접 보간 출력
+function mkPcm(sr){return {buf:new Float32Array(48000),r:0,w:0,on:false,g:0,left:null,done:false,rate:24000/sr};}
+function pcmPush(P,d){var bin=atob(d),L=bin.length+(P.left!=null?1:0),a=new Uint8Array(L),o=0;
+  if(P.left!=null){a[0]=P.left;o=1;P.left=null;}for(var k=0;k<bin.length;k++)a[o+k]=bin.charCodeAt(k);
+  if(L%2){P.left=a[L-1];L--;}var n=L>>1;if(!n)return;
+  var r0=Math.floor(P.r),keep=P.w-r0;
+  if(P.w+n>P.buf.length){var nb=new Float32Array(Math.max(48000,2*(keep+n)));nb.set(P.buf.subarray(r0,P.w));P.buf=nb;P.r-=r0;P.w=keep;}
+  for(var i=0;i<n;i++){var v=a[2*i]|(a[2*i+1]<<8);if(v>=0x8000)v-=0x10000;P.buf[P.w++]=v/0x8000;}}
+function pcmPull(P,out){var N=out.length,i=0;
+  if(!P||!P.on){if(P&&(P.w-P.r>=3600||(P.done&&P.w-P.r>1))){P.on=true;P.g=0;}else{out.fill(0);return;}}
+  for(;i<N;i++){var x=Math.floor(P.r);if(x+1>=P.w){P.on=false;break;}var f=P.r-x,s=P.buf[x]+(P.buf[x+1]-P.buf[x])*f;
+    if(P.g<1)P.g=Math.min(1,P.g+1/240);out[i]=s*P.g;P.r+=P.rate;}
+  var last=i?out[i-1]:0;for(;i<N;i++){last*=0.97;out[i]=last;}
+  if(!P.on&&P.w-P.r<=1){P.r=0;P.w=0;}}
+function pcmStop(P){if(!P)return;P.r=0;P.w=0;P.on=false;P.left=null;}
+function pcmBusy(P){return !!P&&(P.on||P.w-P.r>1);}
+function pcmLeftMs(P){return P?Math.max(0,(P.w-P.r)/24000*1000):0;}
+function play(d){pcmPush(S.pl,d);}
+function stopPlay(){pcmStop(S.pl);}
+function speaking(){return pcmBusy(S.pl);}
 function send(o){if(S&&S.ws&&S.ws.readyState===1)S.ws.send(JSON.stringify(o));}
 function ev(e){
   var t=e.type;
@@ -246,11 +254,11 @@ function ev(e){
   if(t==='input_audio_buffer.speech_stopped'){S.me=add('me','…');say('생각하는 중…');return;}
   if(t==='conversation.item.input_audio_transcription.completed'){if(S.me){S.me.textContent=e.transcript||'(인식 안 됨)';S.me=null;}else add('me',e.transcript||'');return;}
   if(t==='agent.tool'){add('tool','🔧 '+e.label);say('찾아보는 중…');return;}
-  if(t==='response.created'){S.resp=true;S.cur=null;S.left=null;return;}
+  if(t==='response.created'){S.resp=true;S.cur=null;S.pl.left=null;S.pl.done=false;return;}
   if(t==='response.audio_transcript.delta'){if(!S.cur)S.cur=add('ai','');S.cur.textContent+=e.delta||'';log.scrollTop=log.scrollHeight;return;}
   if(t==='response.audio_transcript.done'){if(S.cur&&e.transcript)S.cur.textContent=e.transcript;return;}
   if(t==='response.audio.delta'){if(e.delta)play(e.delta);say('🔊');return;}
-  if(t==='response.done'){S.resp=false;setTimeout(function(){if(S&&!S.resp)say('말씀하세요');},Math.max(0,(S.next-S.ctx.currentTime)*1000));return;}
+  if(t==='response.done'){S.resp=false;S.pl.done=true;setTimeout(function(){if(S&&!S.resp)say('말씀하세요');},pcmLeftMs(S.pl)+250);return;}
   if(t==='error'){add('tool','⚠ '+((e.error&&(e.error.message||e.error.code))||'오류'));return;}
   if(t==='relay.closed'){end();}
 }
@@ -258,9 +266,9 @@ async function start(){
   var Ctx=window.AudioContext||window.webkitAudioContext,ctx=new Ctx();if(ctx.resume)ctx.resume();
   var stream;try{stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1}});}
   catch(e){say('마이크 권한이 필요합니다');ctx.close();return;}
-  S={ctx:ctx,stream:stream,srcs:[],next:0,ready:false,resp:false,barge:document.getElementById('barge').checked};
+  S={ctx:ctx,stream:stream,pl:mkPcm(ctx.sampleRate),ready:false,resp:false,barge:document.getElementById('barge').checked};
   var src=ctx.createMediaStreamSource(stream),pr=ctx.createScriptProcessor(4096,1,1);
-  pr.onaudioprocess=function(e){e.outputBuffer.getChannelData(0).fill(0);if(!S||!S.ready)return;if(!S.barge&&(S.resp||speaking()))return;
+  pr.onaudioprocess=function(e){pcmPull(S&&S.pl,e.outputBuffer.getChannelData(0));if(!S||!S.ready)return;if(!S.barge&&(S.resp||speaking()))return;
     send({type:'input_audio_buffer.append',audio:b64(down(e.inputBuffer.getChannelData(0),ctx.sampleRate))});};
   src.connect(pr);pr.connect(ctx.destination);S.pr=pr;S.src=src;
   var ws=new WebSocket(location.origin.replace(/^http/,'ws')+'/agent?code='+encodeURIComponent(CODE));S.ws=ws;
