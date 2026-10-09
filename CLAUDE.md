@@ -27,12 +27,13 @@
   |---|---|
   | Supabase 동기화 | `SB_URL=https://qmxcfsozzrcdakkiozts.supabase.co`, `SB_KEY=sb_publishable_…`(공개키, index.html 상수) |
   | AI 서버 | Supabase Edge Functions — 같은 프로젝트 cn-trainer(ap-southeast-1), `cfg.ai`=`https://qmxcfsozzrcdakkiozts.supabase.co/functions/v1`. 함수: correct·field·pronounce·tts·vocab(대시보드 편집, 저장소에 소스 없음) + call(`supabase/functions/call/index.ts`) |
-- 시크릿: 저장소 내 없음. Supabase Edge Function 시크릿 `AZURE_SPEECH_KEY`·`AZURE_SPEECH_REGION`(pronounce 확인), AI 키는 `DASHSCOPE_API_KEY`(알리바바 百炼) + `QWEN_BASE`(百炼 업무공간 전용 OpenAI 호환 URL), 선택 `QWEN_TURN_MODEL`·`QWEN_REVIEW_MODEL`. `call` 함수는 2026-09-29 Anthropic→千问 전환(저장소 소스). correct·field·vocab도 2026-09-29 千问 전환 후 `supabase/functions/<이름>/index.ts`로 저장소에 추가(초대 코드는 시크릿 `ALLOWED_CODES`로만, 저장소엔 넣지 않음. 대시보드 배포본에는 기존 하드코딩 코드가 남아 있을 수 있음). 선택 시크릿 `QWEN_TEXT_MODEL`(기본 qwen3.8-flash, correct·field), `QWEN_VL_MODEL`(기본 qwen3-vl-plus, vocab). 초대 코드 허용 목록: 기존 5개 함수는 코드 안 `ALLOWED` 배열, call 은 시크릿 `ALLOWED_CODES`(쉼표 구분) — 저장소 파일을 수정 없이 붙여넣어 배포. 초대 코드는 public 저장소에 절대 커밋 금지. 함수는 Verify JWT 꺼져 있음(앱이 Authorization 헤더를 안 보냄).
+- 시크릿: 저장소 내 없음. Supabase Edge Function 시크릿 `AZURE_SPEECH_KEY`·`AZURE_SPEECH_REGION`(pronounce 확인), AI 키는 `DASHSCOPE_API_KEY`(알리바바 百炼) + `QWEN_BASE`(百炼 업무공간 전용 OpenAI 호환 URL), 선택 `QWEN_TURN_MODEL`·`QWEN_REVIEW_MODEL`. `call` 함수는 2026-09-29 Anthropic→千问 전환(저장소 소스). correct·field·vocab도 2026-09-29 千问 전환 후 `supabase/functions/<이름>/index.ts`로 저장소에 추가(초대 코드는 시크릿 `ALLOWED_CODES`로만, 저장소엔 넣지 않음. 대시보드 배포본에는 기존 하드코딩 코드가 남아 있을 수 있음). video 함수 시크릿 `R2_ACCOUNT_ID`·`R2_ACCESS_KEY_ID`·`R2_SECRET_ACCESS_KEY`(2026-10-09 등록), 선택 `VIDEO_ASR_MODEL`·`DASHSCOPE_API_BASE`(기본 QWEN_BASE 의 /compatible-mode/v1 → /api/v1)·`VIDEO_CAP_MIN`·`VIDEO_DAY_MAX`. 선택 시크릿 `QWEN_TEXT_MODEL`(기본 qwen3.8-flash, correct·field), `QWEN_VL_MODEL`(기본 qwen3-vl-plus, vocab). 초대 코드 허용 목록: 기존 5개 함수는 코드 안 `ALLOWED` 배열, call 은 시크릿 `ALLOWED_CODES`(쉼표 구분) — 저장소 파일을 수정 없이 붙여넣어 배포. 초대 코드는 public 저장소에 절대 커밋 금지. 함수는 Verify JWT 꺼져 있음(앱이 Authorization 헤더를 안 보냄).
 - GitHub 저장소는 public.
 
 ## 파일 구조
 - `index.html` — 전체 앱(CSS 14–653행, HTML, 단일 `<script>` 875행~).
 - `supabase/functions/call/index.ts` — 통화 모드 Edge Function 소스. 정적 앱과 무관, Pages 로 공개되므로 초대 코드·키를 넣지 말 것.
+- `supabase/functions/video/index.ts` — 영상 섀도잉 Edge Function(R2 SigV4 서명은 외부 라이브러리 없이 직접 구현, AWS 테스트 벡터로 검증).
 - `sw.js` — 서비스워커. 앱셸 네트워크 우선·캐시 폴백, `/audio/*.mp3` 는 캐시 우선(`szcn-audio`).
 - `manifest.json` — PWA(이름 "실전 중국어 - 광저우 지사장", 테마 #1664B0).
 - `audio/<8자리 hex>.mp3` — 원어민 음성 약 3,700개. 파일명 = `fnv(문장 텍스트)` (FNV-1a 32bit, UTF-8, 소문자 hex 8자리 패딩).
@@ -48,12 +49,13 @@
   - `{ai}/pronounce` {code, text, audio(base64)} — 발음 평가(합격선 `PR_PASS=80`)
   - `{ai}/tts` {code, text} → 오디오 blob(400B 미만이면 실패 처리)
   - 통화 모드(서버 기준 `cfg.call` 없으면 `cfg.ai`): `/call/ping` {code}, `/call/say` {code,text,sc}, `/call/turn` {code,audio(16kHz WAV b64),sc{…,level,kind,me},history,n} → {heard,reply:{z},end,audio,sec,usage,timing{stt,llm,tts}}(턴 응답은 중국어만 — 지연 단축) (`stuck:true` 면 오디오 없이 다시 묻기), `/call/hints` {code,sc,history,line,noHints} → {sub:{p,k},hints[]}(상대 대사 자막+힌트, 상대 음성 재생 중 `callFetchExtras`로 받음), `/call/review` {code,sc,turns}. 서버 소스는 `supabase/functions/call/index.ts`(대시보드 Code 탭에 그대로 붙여넣어 배포, 초대 코드는 시크릿 ALLOWED_CODES). 미배포면 앱은 "통화 서버 미배포" 안내. 테이블 `call_usage`(SQL은 파일 주석)를 범용 카운터로 사용: 월 STT 초(상한 `CALL_CAP_MIN` 240분) + 코드별 하루 턴·리뷰 수(`CALL_DAY_TURNS` 300(턴+힌트), `CALL_DAY_REVIEWS` 20, 초과 시 429 daily). 테이블 없으면 상한 전부 미적용. 앱은 전송 전 앞뒤 무음을 잘라(`callTrimWav`) STT 사용 초를 줄이고, 리뷰 전문은 최근 10건만 state 에 보관(`callPrune`).
+  - 영상 섀도잉(2026-10-09, HSK 탭 '🎬 영상 섀도잉' `vdOpen`): `{ai}/video/upload` {code,type,size,name}→{key,put}(R2 서명 PUT, 앱이 XHR로 직접 업로드) → `/video/start` {code,key}→{task}(百炼 파일 전사, 기본 `fun-asr`) → `/video/poll` {code,task,known}→{status, dur, sents[{t0,t1,z,p,k}], words[]}(완료 시 千问이 병음·뜻·표현 정리) · `/video/url` {code,key}→재생용 서명 GET. 서버 소스 `supabase/functions/video/index.ts`(대시보드에 이름 `video`로 그대로 붙여넣기, Verify JWT 끔). 버킷 R2 `sz-chinese-video`(APAC, CORS: github.io 오리진 PUT/GET/HEAD). 키 = `<초대코드 해시>/<시각>-<랜덤>.<확장자>`(다른 코드 영상 접근 차단). 상한: `call_usage` 의 `vid:YYYY-MM`(월 전사 초, `VIDEO_CAP_MIN` 기본 120분)·`vday:날짜:해시`(코드당 하루 `VIDEO_DAY_MAX` 기본 15개). 앱은 5분·200MB 초과 영상을 올리지 않음. 처리 중 앱을 닫으면 localStorage `szcn-vid-pend` 로 이어 받기. 표현 담기는 `vcReview` 재사용.
   - 초대 코드에 AI 권한이 없으면 서버가 거부 → UI 문구 "이 초대 코드는 AI … 사용할 수 없습니다".
 - Supabase REST: `GET {SB_URL}/rest/v1/trainer?id=eq.<sid>&select=data`, `POST …/trainer` (Prefer: resolution=merge-duplicates) body `[{id:sid,data:state,updated_at}]`.
 
 ## 데이터
 - localStorage:
-  - `szcn-trainer-v1` — state `{prog:{}, stats:{total,correct,days:{YYYY-MM-DD:{n,c,min,sq,m,am,mv,pm}}}, mastered, myWords:{}, rp:{}, gram:{}, ptDone:{}, goals:{min:220,sent:60,quiz:200,mast:35}, pron:{…}, call:{level:1|2|3, score:{key:최근점수}, missionOff, log:[{id,key,lv,lat,ko,peek,targets?,retryOf?,mission?,d,dur,turns:[{r:'me'|'npc',z,p,k,sec}],review}] (최근 20건, 오디오 미저장), usage:{'YYYY-MM':{c:통화초,p:발음초}}, subs}}` — `call` 은 `callState()` 가 지연 초기화
+  - `szcn-trainer-v1` — state `{prog:{}, stats:{total,correct,days:{YYYY-MM-DD:{n,c,min,sq,m,am,mv,pm}}}, mastered, myWords:{}, rp:{}, gram:{}, ptDone:{}, goals:{min:220,sent:60,quiz:200,mast:35}, pron:{…}, call:{level:1|2|3, score:{key:최근점수}, missionOff, log:[{id,key,lv,lat,ko,peek,targets?,retryOf?,mission?,d,dur,turns:[{r:'me'|'npc',z,p,k,sec}],review}] (최근 20건, 오디오 미저장), usage:{'YYYY-MM':{c:통화초,p:발음초}}, subs}, vid:[{key,d,name,dur,s:[[t0,t1,z,p,k]],w:[{z,p,k,ex}]}](최근 12개, 영상 원본은 R2)}` — `call` 은 `callState()` 가 지연 초기화
   - `szcn-trainer-cfg` — `{sid, ai, call?}`
   - `szcn-trainer-bak` — `{t, state}` 자동백업(점수가 더 클 때만 갱신)
 - Supabase 테이블 `trainer(id text PK = 초대코드, data jsonb, updated_at)`.
