@@ -34,7 +34,7 @@
 - `index.html` — 전체 앱(CSS 14–653행, HTML, 단일 `<script>` 875행~).
 - `supabase/functions/call/index.ts` — 통화 모드 Edge Function 소스. 정적 앱과 무관, Pages 로 공개되므로 초대 코드·키를 넣지 말 것.
 - `sw.js` — 서비스워커. 앱셸 네트워크 우선·캐시 폴백, `/audio/*.mp3` 는 캐시 우선(`szcn-audio`).
-- `manifest.json` — PWA(이름 "실전 중국어 - 광저우 지사장", 테마 #1B1F22).
+- `manifest.json` — PWA(이름 "실전 중국어 - 광저우 지사장", 테마 #1664B0).
 - `audio/<8자리 hex>.mp3` — 원어민 음성 약 3,700개. 파일명 = `fnv(문장 텍스트)` (FNV-1a 32bit, UTF-8, 소문자 hex 8자리 패딩).
 - `icon-192.png`, `icon-512.png`, `apple-touch-icon.png`, `.DS_Store`(불필요, 커밋되어 있음).
 
@@ -72,9 +72,9 @@
 - 외부 폰트·CDN 추가 금지 — 중국 본토에서 VPN 없이 열려야 함(Google Fonts 요청 하나로 페이지가 멈춤).
 - 수정은 필요한 부분만 Edit → main 푸시. 전체 HTML 재출력 하지 않음.
 - 데이터: 기기별 localStorage + 초대 코드 기준 Supabase 동기화(아이패드·아이폰 통합). `state` 호환 유지, 스키마 변경 시 마이그레이션 포함.
-- 색상 토큰(`:root`): `--navy:#1B1F22`(헤더), `--red:#2E4A73`(이름과 달리 블루 계열 강조색), `--danger:#C8352E`, `--ok:#1E7F4F`, `--bg:#F3F2EE`, `--wash:#8FA6C4`. 시나리오 색 `--c0..c5`(실사 인디고/협상 앰버/클레임 레드/위챗 그린/생활 퍼플/오더 딥그린) + `--cNbg`.
+- 색상(2026-10-09 소유자 지정 개인 팔레트): Aegean Sky `#1664B0`(헤더·푸터 `--sky`, 강조 `--red`) · Sandy Linen `#EFE8DE`(바탕 `--bg`) · Scarlet Bikini `#D21624`(헤더 아래 줄 `--wash`, 경고 `--danger`·`--c2`). `--navy:#1A2330`은 글자색 겸 진한 버튼 바탕(딥 잉크). 시나리오 색 `--c0..c5`는 구분용으로 유지. theme-color·manifest `#1664B0`. 아이콘 = 헤더 말풍선 로고를 이 팔레트로(파랑 바탕·리넨 말풍선·스칼렛 점).
 - 모바일(아이폰·아이패드) 우선, 하단 탭바, 바텀시트(`#sheet`), 모달(`#cfgModal`, `#welModal`).
-- E·LAND CI 레드(#D51030)를 쓰지 않는 개인 브랜드형 디자인 — 유지.
+- E·LAND CI 레드(#D51030)를 쓰지 않는 개인 브랜드형 디자인 — 위 개인 팔레트 유지.
 
 ## 주의사항 / 알려진 이슈
 - Supabase 접근 정책(RLS) 미확인. 인증·권한 관련 변경은 소유자 확인 후 진행.
