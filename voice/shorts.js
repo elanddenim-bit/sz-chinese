@@ -48,13 +48,22 @@ async function dsPost(env, path, body, async_) {
 async function qwen(env, messages, opt = {}) {
   const body = { model: opt.model || env.SHORTS_MODEL || "qwen3.8-flash", messages, temperature: 0.85, response_format: { type: "json_object" }, enable_thinking: false };
   if (opt.search) body.enable_search = true;
-  let r = await fetch("https://" + host(env) + "/compatible-mode/v1/chat/completions", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" }, body: JSON.stringify(body) });
-  if (!r.ok && opt.search) { delete body.enable_search; r = await fetch("https://" + host(env) + "/compatible-mode/v1/chat/completions", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" }, body: JSON.stringify(body) }); }
-  if (!r.ok && r.status === 400) { delete body.response_format; delete body.enable_thinking; r = await fetch("https://" + host(env) + "/compatible-mode/v1/chat/completions", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" }, body: JSON.stringify(body) }); }
+  // 百炼 쪽 일시 오류(5xx·520·429·연결 끊김)는 잠깐 쉬고 두 번까지 다시 시도
+  const call = async () => {
+    for (let k = 0; ; k++) {
+      let r = null;
+      try { r = await fetch("https://" + host(env) + "/compatible-mode/v1/chat/completions", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" }, body: JSON.stringify(body) }); } catch (e) { if (k >= 2) throw serr("千问 연결 실패: " + (e.message || e), 502); }
+      if (r && (r.ok || (r.status < 500 && r.status !== 429) || k >= 2)) return r;
+      await new Promise((ok) => setTimeout(ok, 1500 * (k + 1)));
+    }
+  };
+  let r = await call();
+  if (!r.ok && opt.search) { delete body.enable_search; r = await call(); }
+  if (!r.ok && r.status === 400) { delete body.response_format; delete body.enable_thinking; r = await call(); }
   const t = await r.text();
   let j = {};
   try { j = JSON.parse(t); } catch {}
-  if (!r.ok) throw serr("千问 " + r.status + ": " + ((j.error && j.error.message) || t.slice(0, 160)), 502);
+  if (!r.ok) throw serr(r.status >= 500 ? "千问 서버가 잠시 불안정해요(" + r.status + "). 1~2분 뒤 다시 눌러 주세요." : "千问 " + r.status + ": " + ((j.error && j.error.message) || t.slice(0, 160)), 502);
   const c = String((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || "").replace(/^```(?:json)?\s*|\s*```$/g, "");
   try { return JSON.parse(c); } catch {}
   const a = c.indexOf("{"), z = c.lastIndexOf("}");
