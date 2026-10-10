@@ -515,7 +515,7 @@ async function krTry(env, b, h, synth) {
   if (!voice) throw serr("아직 목소리가 없어요.");
   const text = String(b.text || "광저우에서 아메리카노 한 잔, 얼마일까요? 한국 돈으로 3천 원이 안 돼요.").slice(0, 120);
   const bytes = await synth(env, voice, text);
-  const k = "shorts/" + h + "/" + AVA + "/try-" + (voice.slice(-6).replace(/[^\w]/g, "")) + ".mp3";
+  const k = "shorts/" + h + "/" + AVA + "/try" + (voice.slice(-6).replace(/[^\w]/g, "")) + ".mp3";
   await env.R2.put(k, bytes, { httpMetadata: { contentType: "audio/mpeg" } });
   return { ok: true, url: await fileUrl(env, k), which: voice === (await env.KV.get(krKey(h))) ? "kr" : "zh" };
 }
