@@ -16,10 +16,11 @@ export const APPS = {
   spain: { name: "스페인 일정", icon: "🇪🇸", f: { pg_home: "일정 보기" } },
   shorts: { name: "숏츠 공방", icon: "🎬", f: { ideas: "주제 추천", script: "대본", plan: "편집실 AI 계획", asr: "영상 속 말 자막", upload: "유튜브 업로드" } },
   quest: { name: "주말 탐험", icon: "🧭", f: { new: "퀘스트 받기", done: "사진 인증 성공", fail: "인증 실패", honor: "그래도 인정" } },
+  signs: { name: "간판 사냥", icon: "🪧", f: { hunt: "간판 잡기", t_engrish: "엉뚱한 영어", t_pun: "말장난", t_big: "과장 광고", t_name: "희한한 이름", t_wisdom: "생활 명언", t_rule: "이상한 안내문", t_plain: "평범" } },
   timecam: { name: "타임머신 카메라", icon: "🕰", f: { make: "사진 보내기", era_e1930: "1930년대", era_e1985: "1985년", era_e2080: "2080년", era_snow: "눈 오는 날" } },
   mystery: { name: "광저우 미스터리", icon: "🕵️", f: { new: "사건 받기", clue: "현장 사진 단서", fail: "사진 불통과", skip: "못 가요", solve: "사건 해결", wrong: "오답" } },
 };
-const OWNER_SCOPED = new Set(["szcn", "rt", "pb", "quest", "shorts", "mystery", "timecam"]); // 초대 코드별 앱 — 주인 것만 따로 보여 줌
+const OWNER_SCOPED = new Set(["szcn", "rt", "pb", "quest", "shorts", "mystery", "timecam", "signs"]); // 초대 코드별 앱 — 주인 것만 따로 보여 줌
 
 const cnDay = (t = Date.now()) => new Date(t + 8 * 3600e3).toISOString().slice(0, 10);
 const ipHits = new Map();
