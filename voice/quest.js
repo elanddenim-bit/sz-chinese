@@ -123,7 +123,7 @@ async function newQuest(env, ctx, b, h) {
     "要求：3个地点类别尽量不同，远近搭配；下雨概率≥60%时优先室内；任务必须是一张照片就能证明的具体画面（例如\"拍到园内的拱桥和水面倒影\"、\"拍到招牌上的店名和你点的那道甜品\"），不能要求拍陌生人的脸，不能危险，不能违反场所规定；" +
     "mission、title、why 用韩语，口语、轻松有趣；phrase 是在那里用得上的一句简单中文（z 汉字, p 带声调拼音, k 韩语意思）；pts 按距离和难度给 10、20 或 30。" +
     '只输出 JSON：{"intro":"韩语一句话","quests":[{"i":候选编号,"title":"","mission":"","why":"","phrase":{"z":"","p":"","k":""},"pts":10}]}';
-  const user = "今天天气：" + (wx ? JSON.stringify(wx) : "未知") + "\n心情：" + MOODS[mood].label + "\n候选：" + JSON.stringify(list);
+  const user = "今天天气：" + (wx ? wx.lo + "~" + wx.hi + "°C，降雨概率" + wx.rain + "%" + (wx.rain < 40 ? "（今天基本不会下雨，文案里不要提下雨）" : "（可能下雨，优先室内）") + (wx.uv >= 8 ? "，紫外线强" : "") : "未知") + "\n心情：" + MOODS[mood].label + "\n候选：" + JSON.stringify(list);
   const out = await qwen(env, env.QUEST_MODEL || "qwen3.8-flash", [{ role: "system", content: sys }, { role: "user", content: user }]);
   const used = new Set();
   const items = (Array.isArray(out.quests) ? out.quests : []).filter((q) => Number.isInteger(q.i) && cands[q.i] && !used.has(q.i) && used.add(q.i)).slice(0, 3).map((q, n) => {
