@@ -151,7 +151,8 @@ function editor(){
    +'<p class="lbl">왼쪽 위 위치 표시 (비우면 없음)</p><input type="text" id="tagIn" maxlength="20" value="'+esc(o.tag)+'"></div>';
   h+='<div class="card"><h2>영상 완성</h2><p class="note">폰에서 720×1280으로 녹화해요. 길이만큼 걸리니 화면을 켜 두세요.</p><button class="big ghost" id="pvAll">▶ 전체 미리보기 (녹화 안 함)</button><button class="big" id="renderBtn">🎬 영상 만들기</button><div id="out"></div></div>';
   h+='<a class="big ghost" href="/shorts">← 숏츠 공방</a>';
-  $('main').innerHTML=h;window.scrollTo(0,0);bind();
+  // 설정 칩·구간 버튼을 누를 때마다 맨 위로 튀던 것 방지: 처음 열 때만 맨 위로
+  var first=!$('renderBtn'),y0=window.scrollY||0;$('main').innerHTML=h;window.scrollTo(0,first?0:y0);bind();
 }
 function usedClips(){var u=[];D.scenes.forEach(function(s){if(CLIPS[s.clip]&&u.indexOf(s.clip)<0)u.push(s.clip);});return u.sort(function(a,b){return a-b;});}
 function clipAsr(i){return D.clips&&D.clips[i]&&D.clips[i].asr;}
