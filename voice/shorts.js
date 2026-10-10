@@ -353,13 +353,23 @@ async function dsRaw(env, path, body, extra) {
   return j;
 }
 async function ossUp(env, model, bytes, name, mime) {
-  const p = (await dsRaw(env, "/uploads?action=getPolicy&model=" + encodeURIComponent(model))).data || {};
-  if (!p.upload_host || !p.upload_dir) throw serr("임시 저장소 정책을 받지 못했어요.", 502);
+  // 정책: 업무공간 주소 → 안 되면 공용 주소(같은 키) — 내 목소리 등록에서 업무공간 주소가 멈춘 적 있음
+  let p = null;
+  for (const hst of [host(env), "dashscope.aliyuncs.com"]) {
+    try {
+      const r = await fetch("https://" + hst + "/api/v1/uploads?action=getPolicy&model=" + encodeURIComponent(model), { headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY }, signal: AbortSignal.timeout(12000) });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.data && j.data.upload_host) { p = j.data; break; }
+    } catch {}
+  }
+  if (!p || !p.upload_dir) throw serr("임시 저장소 정책을 받지 못했어요.", 502);
   const key = p.upload_dir + "/" + name, f = new FormData();
   f.append("OSSAccessKeyId", p.oss_access_key_id); f.append("Signature", p.signature); f.append("policy", p.policy);
   f.append("x-oss-object-acl", p.x_oss_object_acl); f.append("x-oss-forbid-overwrite", p.x_oss_forbid_overwrite);
   f.append("key", key); f.append("success_action_status", "200"); f.append("file", new Blob([bytes], { type: mime }), name);
-  const r = await fetch(p.upload_host, { method: "POST", body: f });
+  let r;
+  try { r = await fetch(p.upload_host, { method: "POST", body: f, signal: AbortSignal.timeout(40000) }); }
+  catch (e) { throw serr("임시 저장소 전송 " + (e.name === "TimeoutError" ? "시간 초과" : "실패") + " — 다시 눌러 주세요.", 504); }
   if (!r.ok) throw serr("임시 저장소 업로드 실패 " + r.status, 502);
   return "oss://" + key;
 }
