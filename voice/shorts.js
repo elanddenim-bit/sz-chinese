@@ -138,14 +138,15 @@ async function ideas(env, h, b) {
 }
 
 async function script(env, b, h) {
-  const topic = String(b.topic || "").trim().slice(0, 200);
+  const topic = String(b.topic || "").trim().slice(0, 400);
   if (!topic) throw serr("주제를 적어 주세요.");
   const sec = [30, 45, 60].includes(Number(b.sec)) ? Number(b.sec) : 45;
   const nScenes = sec === 30 ? 5 : sec === 45 ? 7 : 9;
   const ang = ANGLES[b.angle] || ANGLES.mix;
   const rate = (await krw(env)) || 190;
+  const ser = SERIES[b.series] || null;
   const out = await qwen(env, [
-    { role: "system", content: "너는 한국어 유튜브 숏츠 작가 겸 콘티 작가다. 채널: 광저우에 사는 한국인 직장인 부부의 광저우 생활. 약 " + sec + "초, 장면 " + nScenes + "개 세로 영상 대본을 쓴다. " + KR_RULES + " 이번 영상은 " + ang.d + ". " +
+    { role: "system", content: "너는 한국어 유튜브 숏츠 작가 겸 콘티 작가다. 채널: 광저우에 사는 한국인 직장인 부부의 광저우 생활. 약 " + sec + "초, 장면 " + nScenes + "개 세로 영상 대본을 쓴다. " + KR_RULES + " 이번 영상은 " + ang.d + ". " + (ser ? ser.rule + " " : "") +
       "가격이 나오면 위안과 원화를 같이 말한다(1위안 ≈ " + rate + "원, 반올림해서 말하기 쉽게). 한국 가격과 비교할 수 있으면 비교한다. " +
       "규칙: 1번 장면이 바로 훅(반전·질문·숫자), 자기소개 금지. say 는 한국어 구어체 1~2문장, 읽으면 4~7초. cap 은 화면 큰 글씨, 한국어 12자 이내, 이모지 1개까지. " +
       "img 는 이미지 생성 모델에 줄 중국어 장면 묘사: 세로 구도, 실사 사진 느낌, 광저우의 실제 같은 디테일(빛·사람 동작·음식·거리), 화면에 글자·간판 글씨·워터마크·로고 금지, 유명인 금지. " +
@@ -159,10 +160,12 @@ async function script(env, b, h) {
   })).filter((s) => s.say || s.img);
   if (scenes.length < 3) throw serr("대본이 너무 짧게 나왔어요. 다시 눌러 주세요.", 502);
   const id = "s" + Date.now().toString(36);
-  const d = { id, topic, sec, angle: b.angle || "mix", made: Date.now(), title: String(out.title || topic).slice(0, 90), description: String(out.description || "").slice(0, 900), tags: (Array.isArray(out.tags) ? out.tags : []).map((t) => String(t).replace(/^#/, "").slice(0, 30)).slice(0, 10), scenes };
+  let title = String(out.title || topic);
+  if (ser) { const ck = "shorts:series:" + h + ":" + b.series, n = (Number(await env.KV.get(ck)) || 0) + 1; await env.KV.put(ck, String(n)); title = "[" + ser.name + " #" + n + "] " + title.replace(/^\[[^\]]*\]\s*/, ""); }
+  const d = { id, topic, sec, series: ser ? b.series : "", angle: b.angle || "mix", made: Date.now(), title: title.slice(0, 90), description: String(out.description || "").slice(0, 900), tags: (Array.isArray(out.tags) ? out.tags : []).map((t) => String(t).replace(/^#/, "").slice(0, 30)).slice(0, 10), scenes };
   await env.KV.put(draftKey(h, id), JSON.stringify(d), { expirationTtl: 120 * 86400 });
   const l = (await env.KV.get(listKey(h), "json")) || [];
-  l.unshift({ id, title: d.title, made: d.made });
+  l.unshift({ id, title: d.title, made: d.made, series: d.series });
   await env.KV.put(listKey(h), JSON.stringify(l.slice(0, 40)));
   return { ok: true, draft: d, files: {} };
 }
@@ -170,6 +173,7 @@ async function script(env, b, h) {
 // 시리즈: 같은 형식을 반복해 구독으로 잇는다. 제목 앞 번호는 KV 카운터(shorts:series:<해시>:<키>)
 const SERIES = {
   price: { name: "광저우 물가 1분", rule: "이 영상은 '광저우 물가 1분' 시리즈다: 첫 구간 cap 은 대표 물건과 원화 가격으로 놀라게(예: '편의점 도시락 = 2,800원?!'), 가격표·메뉴판이 보이는 장면은 꼭 쓰고 그 구간 cap 에 '00위안 ≈ 0,000원'. 한국 가격과 비교 한 줄(모르면 '한국이면?' 질문). 실제로 먹거나 써 본 반응 구간 포함. 마지막 구간 say 는 '여러분 동네는 얼마예요?' 같은 댓글 질문. 제목에는 번호를 넣지 말 것(자동으로 붙음), 대신 가장 놀라운 가격을 넣는다. 태그에 광저우물가·중국물가 포함." },
+  cnet: { name: "중국 인터넷 1분", rule: "이 영상은 '중국 인터넷 1분' 시리즈다: 지금 중국 SNS(웨이보·더우인)에서 뜨는 화제를 한국 시청자에게 1분 안에 풀어 준다. 1번 장면 cap 은 '중국 네티즌 난리 난 이유' 류의 훅. 무슨 일인지 → 중국 사람들이 왜 열광/웃는지 → 한국이라면? 비교 → 마지막 장면은 '오늘의 유행어'(한자·뜻)를 cap 에 크게, say 로 읽는 법과 뜻, 그리고 댓글 질문. 실존 연예인·인물의 얼굴이나 닮은 모습은 img 에 절대 그리지 말고 상징물·소품·분위기(휴대폰 화면 속 하트, 밈 느낌의 사물, 거리 풍경)로 표현. 원본 영상·사진·로고를 묘사하지 않는다. 확인 안 된 수치·사실은 지어내지 말고 주제에 적힌 내용 안에서만. 제목에 번호는 넣지 말 것(자동). 태그에 중국인터넷·중국밈·중국유행어 포함." },
 };
 // 🎥 편집실 — 내가 찍은 클립의 캡처(폰에서 뽑은 작은 JPEG)를 보고 구간·순서·자막·내레이션을 정한다. 원본 영상은 서버로 오지 않는다
 async function plan(env, b, h) {
@@ -538,7 +542,7 @@ video.out{width:70%;max-width:320px;display:block;margin:10px auto;border-radius
 <main id="main"><div class="gate">불러오는 중…</div></main>
 <script>
 var CODE='';try{CODE=localStorage.getItem('pb-code')||'';}catch(e){}
-var L=null,D=null,F={},SEC=45,BUSY={},VIDON=false,ANG='mix';try{ANG=localStorage.getItem('sh-ang')||'mix';}catch(e){}
+var L=null,D=null,F={},SEC=45,BUSY={},VIDON=false,ANG='mix',SER='';try{ANG=localStorage.getItem('sh-ang')||'mix';}catch(e){}
 var ANGS=[['mix','골고루'],['compare','🇰🇷 한국이랑 비교'],['price','💰 원화로 얼마?'],['tip','✈️ 여행 꿀팁'],['shock','😮 문화 충격'],['food','🍜 한국인 입맛'],['life','🏠 주재원 현실']];
 function $(i){return document.getElementById(i);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -553,7 +557,7 @@ function home(){
     if(!j.ok)return gate(j.detail||j.error);L=j;$('cost').innerHTML=costTxt(j.cost,j.caps);
     var h='<div class="card"><h2>새 숏츠</h2><p class="lbl">주제</p><input type="text" id="topic" placeholder="예: 광저우 아침 早茶, 한국인이 놀라는 3가지">'
       +'<p class="lbl">한국 시청자 각도</p><div class="chips">'+ANGS.map(function(a){return '<button class="chip'+(a[0]===ANG?' on':'')+'" data-ang="'+a[0]+'">'+a[1]+'</button>';}).join('')+'</div>'
-      +'<div class="mini" style="margin-top:8px"><button id="ideaBtn">💡 주제 추천받기</button></div><div id="ideas"></div>'
+      +'<div class="mini" style="margin-top:8px"><button id="ideaBtn">💡 주제 추천받기</button><button id="cnetBtn">🔥 오늘의 중국 인터넷에서 고르기</button></div><div id="ideas"></div><p class="note" id="serNote">'+(SER==='cnet'?'시리즈: [중국 인터넷 1분] — 제목 번호 자동 <a href="#" id="serOff">빼기</a>':'')+'</p>'
       +'<p class="lbl">길이</p><div class="chips">'+[30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div>'
       +'<button class="big" id="scriptBtn">✍️ 대본 쓰기</button><div class="err" id="e1"></div></div>';
     h+='<div class="card" id="ytCard"><h2>유튜브 연결</h2><div id="ytBox" class="note">확인 중…</div></div>';
@@ -567,8 +571,16 @@ function home(){
     $('ideaBtn').onclick=function(){var b=this;b.disabled=true;b.innerHTML='<span class="spin">💡</span> 요즘 한국에서 궁금해하는 광저우 찾는 중…';api('/shorts/ideas',{angle:ANG}).then(function(r){b.disabled=false;b.textContent='💡 다시 추천받기';if(!r.ok){$('e1').textContent=r.detail||r.error;return;}
       $('ideas').innerHTML=r.ideas.map(function(x,i){return '<div class="idea"><b>'+esc(x.topic)+'</b><small>“'+esc(x.hook)+'” · '+esc(x.why)+'</small><br><button class="chip" data-idea="'+i+'">이걸로</button></div>';}).join('');
       document.querySelectorAll('[data-idea]').forEach(function(c){c.onclick=function(){var x=r.ideas[+c.getAttribute('data-idea')];$('topic').value=x.topic+' — 첫마디: '+x.hook;$('topic').scrollIntoView({block:'center'});};});});};
+    function serNote(){var n=$('serNote');if(!n)return;n.innerHTML=SER==='cnet'?'시리즈: [중국 인터넷 1분] — 제목 번호 자동 <a href="#" id="serOff">빼기</a>':'';var o=$('serOff');if(o)o.onclick=function(e){e.preventDefault();SER='';serNote();};}
+    serNote();
+    $('cnetBtn').onclick=function(){var b=this;b.disabled=true;b.innerHTML='<span class="spin">🔥</span> 오늘 판 불러오는 중…';
+      api('/trend/today').then(function(r){b.disabled=false;b.textContent='🔥 다시 불러오기';if(!r.ok){$('e1').textContent=r.detail||r.error;return;}
+        $('ideas').innerHTML='<p class="lbl">오늘의 중국 인터넷 '+esc(r.day)+' — 하나 고르면 [중국 인터넷 1분] 대본으로</p>'+r.items.map(function(x,i){return '<div class="idea"><b>'+esc(x.emo)+' '+esc(x.ko)+'</b><small>'+esc(x.what)+(x.word?' · 유행어 '+esc(x.word.z):'')+'</small><br><button class="chip" data-cn="'+i+'">이걸로</button></div>';}).join('');
+        document.querySelectorAll('[data-cn]').forEach(function(c){c.onclick=function(){var x=r.items[+c.getAttribute('data-cn')];
+          $('topic').value=x.ko+' ('+x.zh+') — '+x.what+' 왜 뜨나: '+x.why+(x.word?' 오늘의 유행어: '+x.word.z+'('+x.word.p+', '+x.word.k+')':'');
+          SER='cnet';SEC=30;document.querySelectorAll('[data-sec]').forEach(function(y){y.classList.toggle('on',+y.getAttribute('data-sec')===30);});serNote();$('topic').scrollIntoView({block:'center'});toast('대본 쓰기를 누르세요');};});});};
     $('scriptBtn').onclick=function(){var t=$('topic').value.trim();if(!t){$('e1').textContent='주제를 적거나 추천에서 골라 주세요';return;}var b=this;b.disabled=true;b.innerHTML='<span class="spin">✍️</span> 대본 쓰는 중… (15초쯤)';
-      api('/shorts/script',{topic:t,sec:SEC,angle:ANG}).then(function(r){b.disabled=false;b.textContent='✍️ 대본 쓰기';if(!r.ok){$('e1').textContent=r.detail||r.error;return;}D=r.draft;F=r.files||{};editor();});};
+      api('/shorts/script',{topic:t,sec:SEC,angle:ANG,series:SER}).then(function(r){b.disabled=false;b.textContent='✍️ 대본 쓰기';if(!r.ok){$('e1').textContent=r.detail||r.error;return;}D=r.draft;F=r.files||{};editor();});};
     ytBox();
     if(j.yt){stats(false);$('stRe').onclick=function(){stats(true);};}
   }).catch(function(){gate('서버에 연결하지 못했어요');});
