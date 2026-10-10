@@ -70,7 +70,7 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
     const l = (await env.KV.get(listKey(h), "json")) || [];
     return { ok: true, list: l, cost: await costDay(env), caps: caps(env), yt: !!(await env.KV.get("yt:" + h)), ytConfig: !!(env.YT_CLIENT_ID && env.YT_CLIENT_SECRET) };
   }
-  if (path === "/shorts/ideas") return ideas(env, h);
+  if (path === "/shorts/ideas") return ideas(env, h, b);
   if (path === "/shorts/script") return script(env, b, h);
   if (path === "/shorts/load") return load(env, b, h);
   if (path === "/shorts/update") return update(env, b, h);
@@ -83,13 +83,33 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
 }
 const caps = (env) => ({ img: Number(env.SHORTS_IMG_DAY) || 40, vid: Number(env.SHORTS_VID_DAY) || 6 });
 
-async function ideas(env, h) {
+// 한국 시청자 각도 — 중국 문화 해설이 아니라 "한국인한테 왜 쓸모있나/재밌나"
+const ANGLES = {
+  mix: { label: "골고루", d: "아래 각도를 골고루 섞어서" },
+  compare: { label: "한국이랑 비교", d: "한국과 비교되는 점(가격·서비스·생활방식·같은 메뉴 다른 맛)이 핵심이 되게" },
+  price: { label: "원화로 얼마?", d: "물가·가성비를 원화로 환산해 보여주는 것이 핵심이 되게(한국 가격과 나란히)" },
+  tip: { label: "여행 꿀팁", d: "광저우에 올 한국인(무비자 여행객·출장자)이 바로 써먹을 실용 정보(결제·디디·앱·환전·주의할 점·동선)가 핵심이 되게" },
+  shock: { label: "문화 충격", d: "한국인이 보면 '이게 된다고?' 하고 놀랄 장면·서비스·습관이 핵심이 되게" },
+  food: { label: "한국인 입맛 맛집", d: "한국인 입맛에 맞는 메뉴, 실패 없는 주문법, 한국 음식의 현지 버전이 핵심이 되게" },
+  life: { label: "주재원 현실", d: "광저우에 사는 한국 직장인 부부의 현실 생활(장보기·집·병원·주말)이 핵심이 되게. 회사 이름·업무 내용은 넣지 말 것" },
+};
+async function krw(env) {
+  try { const j = await (await fetch("https://api.frankfurter.app/latest?from=CNY&to=KRW")).json(); return Math.round(j.rates.KRW); } catch { return 0; }
+}
+const KR_RULES = "시청자는 한국에 사는 한국인이다. 중국 문화·역사 해설이나 '중국은 이렇다' 식 강의, 중국어 표현 소개 위주 내용은 피한다. " +
+  "매 이야기는 '한국인인 나에게 왜 재밌거나 쓸모 있나'가 분명해야 한다: 한국과의 비교, 원화 환산 가격, 바로 써먹을 꿀팁, 놀라운 반전 중 하나 이상. " +
+  "중국어 단어는 꼭 필요할 때만(메뉴 이름 등) 한두 개, 한글로 읽는 법을 붙인다. 정치·혐오·비하 표현 금지.";
+
+async function ideas(env, h, b) {
   const q = (await env.KV.get("quest:" + h, "json")) || {};
   const been = (q.hist || []).slice(0, 15).map((x) => x.name + "(" + (x.area || "") + ")");
+  const ang = ANGLES[b && b.angle] || ANGLES.mix;
   const out = await qwen(env, [
-    { role: "system", content: "你是一个面向韩国观众的YouTube Shorts频道策划。频道主题：一个住在广州的韩国人（中年上班族，周末和太太一起逛）的广州生活和探店。请结合最近的季节、节日、广州热门话题，提出5个30~60秒短视频选题，要让韩国观众觉得新奇、想看完。" +
-      '只输出 JSON：{"ideas":[{"topic":"韩语选题标题","hook":"开头2秒的韩语钩子句","why":"韩语一句话说明为什么会有人看"}]}' },
-    { role: "user", content: "今天：" + cnDay() + "。我最近去过：" + (been.join("、") || "（暂无记录）") },
+    { role: "system", content: "너는 한국 시청자용 유튜브 숏츠 채널 기획자다. 채널: 광저우에 사는 한국인 40대 직장인 부부가 주말에 돌아다니며 보여주는 광저우 생활. " + KR_RULES +
+      " 인터넷 검색으로 요즘 한국 뉴스·커뮤니티에서 중국·광저우와 관련해 한국인이 궁금해하는 것(예: 중국 무비자 여행, 캔톤페어, 중국 쇼핑·물가, 결제·앱 사용, 한국 브랜드·한식의 중국 반응)을 참고해, " +
+      ang.d + " 30~60초 숏츠 주제 5개를 제안하라. 제목은 한국 숏츠에서 잘 먹히는 말투(숫자·반전·질문)로, 과장 낚시는 금지." +
+      ' JSON만 출력: {"ideas":[{"topic":"한국어 주제","hook":"첫 2초에 할 한국어 한마디","why":"한국인이 왜 볼지 한 문장"}]}' },
+    { role: "user", content: "오늘: " + cnDay() + ". 최근 우리가 가 본 곳: " + (been.join(", ") || "(아직 없음)") + ". 1위안 ≈ " + ((await krw(env)) || 190) + "원." },
   ], { search: true });
   return { ok: true, ideas: (Array.isArray(out.ideas) ? out.ideas : []).slice(0, 6).map((x) => ({ topic: String(x.topic || "").slice(0, 80), hook: String(x.hook || "").slice(0, 80), why: String(x.why || "").slice(0, 120) })) };
 }
@@ -99,21 +119,24 @@ async function script(env, b, h) {
   if (!topic) throw serr("주제를 적어 주세요.");
   const sec = [30, 45, 60].includes(Number(b.sec)) ? Number(b.sec) : 45;
   const nScenes = sec === 30 ? 5 : sec === 45 ? 7 : 9;
+  const ang = ANGLES[b.angle] || ANGLES.mix;
+  const rate = (await krw(env)) || 190;
   const out = await qwen(env, [
-    { role: "system", content: "你是韩语YouTube Shorts编剧兼分镜师。频道：住在广州的韩国人分享广州生活。观众：韩国人。写一条约" + sec + "秒、" + nScenes + "个镜头的竖屏短视频。" +
-      "规则：第1个镜头就是钩子（反差/提问/数字），不要自我介绍；每个镜头旁白(say)用自然口语韩语1~2短句、读出来约4~7秒；cap 是屏幕大字（韩语，12字以内，可带1个emoji）；" +
-      "img 是给图像生成模型的中文画面描述：竖构图、写实摄影风格、广州真实感的场景细节（光线、人物动作、食物、街景），画面里不要出现任何文字、招牌字、水印、logo，不要出现知名人物；" +
-      "move 是中文镜头运动描述（例如\"镜头缓慢推进，热气升腾\"）；最后一个镜头自然收尾并引导订阅（不要太硬）。" +
-      "title 韩语40字以内吸引点击但不夸张；description 韩语2~3行；tags 8个以内（韩语/中文混合，不带#）。" +
-      '只输出 JSON：{"title":"","description":"","tags":[],"scenes":[{"cap":"","say":"","img":"","move":""}]}' },
-    { role: "user", content: "选题：" + topic },
+    { role: "system", content: "너는 한국어 유튜브 숏츠 작가 겸 콘티 작가다. 채널: 광저우에 사는 한국인 직장인 부부의 광저우 생활. 약 " + sec + "초, 장면 " + nScenes + "개 세로 영상 대본을 쓴다. " + KR_RULES + " 이번 영상은 " + ang.d + ". " +
+      "가격이 나오면 위안과 원화를 같이 말한다(1위안 ≈ " + rate + "원, 반올림해서 말하기 쉽게). 한국 가격과 비교할 수 있으면 비교한다. " +
+      "규칙: 1번 장면이 바로 훅(반전·질문·숫자), 자기소개 금지. say 는 한국어 구어체 1~2문장, 읽으면 4~7초. cap 은 화면 큰 글씨, 한국어 12자 이내, 이모지 1개까지. " +
+      "img 는 이미지 생성 모델에 줄 중국어 장면 묘사: 세로 구도, 실사 사진 느낌, 광저우의 실제 같은 디테일(빛·사람 동작·음식·거리), 화면에 글자·간판 글씨·워터마크·로고 금지, 유명인 금지. " +
+      "move 는 중국어 카메라 움직임(예: \"镜头缓慢推进，热气升腾\"). 마지막 장면은 자연스럽게 구독·댓글 유도(질문형으로, 예: '여러분이라면 뭐 시키실래요?'). " +
+      "title 은 한국어 40자 이내, 클릭하고 싶지만 과장 없이. description 한국어 2~3줄. tags 8개 이내(한국어 위주, # 없이)." +
+      ' JSON만 출력: {"title":"","description":"","tags":[],"scenes":[{"cap":"","say":"","img":"","move":""}]}' },
+    { role: "user", content: "주제: " + topic },
   ]);
   const scenes = (Array.isArray(out.scenes) ? out.scenes : []).slice(0, 10).map((s) => ({
     cap: String(s.cap || "").slice(0, 30), say: String(s.say || "").slice(0, 160), img: String(s.img || "").slice(0, 400), move: String(s.move || "").slice(0, 160),
   })).filter((s) => s.say || s.img);
   if (scenes.length < 3) throw serr("대본이 너무 짧게 나왔어요. 다시 눌러 주세요.", 502);
   const id = "s" + Date.now().toString(36);
-  const d = { id, topic, sec, made: Date.now(), title: String(out.title || topic).slice(0, 90), description: String(out.description || "").slice(0, 900), tags: (Array.isArray(out.tags) ? out.tags : []).map((t) => String(t).replace(/^#/, "").slice(0, 30)).slice(0, 10), scenes };
+  const d = { id, topic, sec, angle: b.angle || "mix", made: Date.now(), title: String(out.title || topic).slice(0, 90), description: String(out.description || "").slice(0, 900), tags: (Array.isArray(out.tags) ? out.tags : []).map((t) => String(t).replace(/^#/, "").slice(0, 30)).slice(0, 10), scenes };
   await env.KV.put(draftKey(h, id), JSON.stringify(d), { expirationTtl: 120 * 86400 });
   const l = (await env.KV.get(listKey(h), "json")) || [];
   l.unshift({ id, title: d.title, made: d.made });
@@ -377,7 +400,8 @@ video.out{width:70%;max-width:320px;display:block;margin:10px auto;border-radius
 <main id="main"><div class="gate">불러오는 중…</div></main>
 <script>
 var CODE='';try{CODE=localStorage.getItem('pb-code')||'';}catch(e){}
-var L=null,D=null,F={},SEC=45,BUSY={},VIDON=false;
+var L=null,D=null,F={},SEC=45,BUSY={},VIDON=false,ANG='mix';try{ANG=localStorage.getItem('sh-ang')||'mix';}catch(e){}
+var ANGS=[['mix','골고루'],['compare','🇰🇷 한국이랑 비교'],['price','💰 원화로 얼마?'],['tip','✈️ 여행 꿀팁'],['shock','😮 문화 충격'],['food','🍜 한국인 입맛'],['life','🏠 주재원 현실']];
 function $(i){return document.getElementById(i);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function toast(t){var d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(function(){d.remove();},3000);}
@@ -390,19 +414,21 @@ function home(){
     if(j.error==='not_allowed')return gate('초대 코드가 맞지 않아요');if(j.error==='not_owner'){$('main').innerHTML='<div class="gate">주인만 쓸 수 있는 화면이에요.</div>';return;}
     if(!j.ok)return gate(j.detail||j.error);L=j;$('cost').innerHTML=costTxt(j.cost,j.caps);
     var h='<div class="card"><h2>새 숏츠</h2><p class="lbl">주제</p><input type="text" id="topic" placeholder="예: 광저우 아침 早茶, 한국인이 놀라는 3가지">'
+      +'<p class="lbl">한국 시청자 각도</p><div class="chips">'+ANGS.map(function(a){return '<button class="chip'+(a[0]===ANG?' on':'')+'" data-ang="'+a[0]+'">'+a[1]+'</button>';}).join('')+'</div>'
       +'<div class="mini" style="margin-top:8px"><button id="ideaBtn">💡 주제 추천받기</button></div><div id="ideas"></div>'
       +'<p class="lbl">길이</p><div class="chips">'+[30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div>'
       +'<button class="big" id="scriptBtn">✍️ 대본 쓰기</button><div class="err" id="e1"></div></div>';
     h+='<div class="card" id="ytCard"><h2>유튜브 연결</h2><div id="ytBox" class="note">확인 중…</div></div>';
     if(j.list&&j.list.length)h+='<div class="card"><h2>내 숏츠</h2><div class="list">'+j.list.map(function(x){return '<a href="#" data-open="'+x.id+'"><span>'+esc(x.title)+'</span><small>'+(x.yt?'▶ '+(x.yt.privacy==='public'?'공개':x.yt.privacy==='unlisted'?'일부공개':'비공개'):new Date(x.made).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}))+'</small></a>';}).join('')+'</div></div>';
     $('main').innerHTML=h;
+    document.querySelectorAll('[data-ang]').forEach(function(b){b.onclick=function(){ANG=b.getAttribute('data-ang');try{localStorage.setItem('sh-ang',ANG);}catch(e){}document.querySelectorAll('[data-ang]').forEach(function(x){x.classList.toggle('on',x===b);});};});
     document.querySelectorAll('[data-sec]').forEach(function(b){b.onclick=function(){SEC=+b.getAttribute('data-sec');document.querySelectorAll('[data-sec]').forEach(function(x){x.classList.toggle('on',x===b);});};});
     document.querySelectorAll('[data-open]').forEach(function(a){a.onclick=function(e){e.preventDefault();openDraft(a.getAttribute('data-open'));};});
-    $('ideaBtn').onclick=function(){var b=this;b.disabled=true;b.innerHTML='<span class="spin">💡</span> 요즘 광저우 소식 찾는 중…';api('/shorts/ideas').then(function(r){b.disabled=false;b.textContent='💡 다시 추천받기';if(!r.ok){$('e1').textContent=r.detail||r.error;return;}
+    $('ideaBtn').onclick=function(){var b=this;b.disabled=true;b.innerHTML='<span class="spin">💡</span> 요즘 한국에서 궁금해하는 광저우 찾는 중…';api('/shorts/ideas',{angle:ANG}).then(function(r){b.disabled=false;b.textContent='💡 다시 추천받기';if(!r.ok){$('e1').textContent=r.detail||r.error;return;}
       $('ideas').innerHTML=r.ideas.map(function(x,i){return '<div class="idea"><b>'+esc(x.topic)+'</b><small>“'+esc(x.hook)+'” · '+esc(x.why)+'</small><br><button class="chip" data-idea="'+i+'">이걸로</button></div>';}).join('');
       document.querySelectorAll('[data-idea]').forEach(function(c){c.onclick=function(){var x=r.ideas[+c.getAttribute('data-idea')];$('topic').value=x.topic+' — 첫마디: '+x.hook;$('topic').scrollIntoView({block:'center'});};});});};
     $('scriptBtn').onclick=function(){var t=$('topic').value.trim();if(!t){$('e1').textContent='주제를 적거나 추천에서 골라 주세요';return;}var b=this;b.disabled=true;b.innerHTML='<span class="spin">✍️</span> 대본 쓰는 중… (15초쯤)';
-      api('/shorts/script',{topic:t,sec:SEC}).then(function(r){b.disabled=false;b.textContent='✍️ 대본 쓰기';if(!r.ok){$('e1').textContent=r.detail||r.error;return;}D=r.draft;F=r.files||{};editor();});};
+      api('/shorts/script',{topic:t,sec:SEC,angle:ANG}).then(function(r){b.disabled=false;b.textContent='✍️ 대본 쓰기';if(!r.ok){$('e1').textContent=r.detail||r.error;return;}D=r.draft;F=r.files||{};editor();});};
     ytBox();
   }).catch(function(){gate('서버에 연결하지 못했어요');});
 }
