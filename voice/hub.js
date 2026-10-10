@@ -21,10 +21,6 @@ main{max-width:640px;margin:0 auto;padding:14px 16px 48px}h2{font-size:13px;colo
 </style></head><body>
 <header><a class="back" href="/" aria-label="박비서">‹</a><h1>🧰 도구함</h1></header>
 <main>
-<h2>만들기</h2><div class="g">
-<a href="/edit"><i>🎥</i><b>편집실</b><small>내가 찍은 영상 → 숏츠</small></a>
-<a href="/shorts"><i>🎬</i><b>숏츠 공방</b><small>AI 숏츠 · 채널 성적</small></a>
-</div>
 <h2>놀기</h2><div class="g">
 <a href="/quest"><i>🧭</i><b>주말 탐험</b><small>오늘 갈 곳 3곳 미션</small></a>
 <a href="/mystery"><i>🕵️</i><b>광저우 미스터리</b><small>실제 장소 추리 게임</small></a>

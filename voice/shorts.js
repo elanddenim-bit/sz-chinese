@@ -534,7 +534,7 @@ video.out{width:70%;max-width:320px;display:block;margin:10px auto;border-radius
 .gate{padding:40px 0;text-align:center}
 .spin{display:inline-block;animation:sp 1.2s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
 </style></head><body>
-<header><a class="back" href="/" aria-label="박비서">‹</a><h1>🎬 숏츠 공방</h1><div class="cost" id="cost"></div></header>
+<header><h1>🎬 숏츠 공방</h1><div class="cost" id="cost"></div></header>
 <main id="main"><div class="gate">불러오는 중…</div></main>
 <script>
 var CODE='';try{CODE=localStorage.getItem('pb-code')||'';}catch(e){}
