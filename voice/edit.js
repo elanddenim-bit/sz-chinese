@@ -50,7 +50,7 @@ video.out,video.prev{width:70%;max-width:320px;display:block;margin:10px auto;bo
 <main id="main"></main><div id="stash"></div>
 <script>
 var CODE='';try{CODE=localStorage.getItem('pb-code')||'';}catch(e){}
-var CLIPS=[],D=null,SEC=45,ANG='mix',NARR={},RECING=null,MIC=null,MREC=null,AC=null,BUS=null,BGM=null,CH=null,RUN=null,SECMAN=false;try{ANG=localStorage.getItem('sh-ang')||'mix';}catch(e){}
+var CLIPS=[],D=null,SEC=45,ANG='mix',NARR={},RECING=null,MIC=null,MREC=null,AC=null,BUS=null,BGM=null,CH=null,RUN=null,SECMAN=false,SER='';try{SER=localStorage.getItem('ed-ser')||'';}catch(e){}try{ANG=localStorage.getItem('sh-ang')||'mix';}catch(e){}
 var ANGS=[['mix','골고루'],['compare','🇰🇷 한국이랑 비교'],['price','💰 원화로 얼마?'],['tip','✈️ 여행 꿀팁'],['shock','😮 문화 충격'],['food','🍜 한국인 입맛'],['life','🏠 주재원 현실']];
 function $(i){return document.getElementById(i);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -71,6 +71,7 @@ function start(){
   h+='<div class="card"><label class="pick"><input type="file" id="files" accept="video/*" multiple><b>📂 영상 클립 고르기</b>여러 개 한 번에 · 5~15초짜리가 좋아요<br>원본은 서버로 올라가지 않아요</label><div class="clips" id="clips"></div></div>';
   if(!QID){
     h+='<div class="card"><h2>어떤 영상인가요?</h2><input type="text" id="topic" placeholder="예: 永庆坊 산책, 早茶 집 첫 방문 (짧게)"><p class="lbl">한국 시청자 각도</p><div class="chips">'+ANGS.map(function(a){return '<button class="chip'+(a[0]===ANG?' on':'')+'" data-ang="'+a[0]+'">'+a[1]+'</button>';}).join('')+'</div>'
+      +'<p class="lbl">시리즈</p><div class="chips"><button class="chip'+(SER===''?' on':'')+'" data-ser="">없음</button><button class="chip'+(SER==='price'?' on':'')+'" data-ser="price">💰 광저우 물가 1분</button></div><p class="note">시리즈로 고르면 제목 앞에 [광저우 물가 1분 #번호]가 자동으로 붙고, 가격표·원화 비교·댓글 질문 형식으로 짜요.</p>'
       +'<p class="lbl">길이</p><div class="chips">'+[15,20,30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div><p class="note" id="secNote"></p>'
       +'</div><div class="dock"><button class="big" id="planBtn" disabled>🤖 AI 편집 계획 받기</button><div class="prog" id="pp"></div><div class="err" id="pe"></div></div>';
   }else h+='<div class="dock"><button class="big" id="resumeBtn" disabled>이 클립으로 편집 이어가기</button><div class="err" id="pe"></div></div>';
@@ -78,6 +79,8 @@ function start(){
   $('files').onchange=function(){addFiles(this.files);this.value='';};
   document.querySelectorAll('[data-ang]').forEach(function(b){b.onclick=function(){ANG=b.getAttribute('data-ang');try{localStorage.setItem('sh-ang',ANG);}catch(e){}document.querySelectorAll('[data-ang]').forEach(function(x){x.classList.toggle('on',x===b);});};});
   document.querySelectorAll('[data-sec]').forEach(function(b){b.onclick=function(){SEC=+b.getAttribute('data-sec');SECMAN=true;document.querySelectorAll('[data-sec]').forEach(function(x){x.classList.toggle('on',x===b);});};});
+  document.querySelectorAll('[data-ser]').forEach(function(b){b.onclick=function(){SER=b.getAttribute('data-ser');try{localStorage.setItem('ed-ser',SER);}catch(e){}document.querySelectorAll('[data-ser]').forEach(function(x){x.classList.toggle('on',x===b);});
+    if(SER==='price'){ANG='price';document.querySelectorAll('[data-ang]').forEach(function(x){x.classList.toggle('on',x.getAttribute('data-ang')==='price');});}};});
   if($('planBtn'))$('planBtn').onclick=makePlan;
   if($('resumeBtn'))$('resumeBtn').onclick=resume;
 }
@@ -113,7 +116,7 @@ async function makePlan(){
   }
   frames=frames.slice(0,40);
   pp.innerHTML='<span class="spin">🤖</span> AI가 장면을 보고 편집 계획을 짜는 중… (20~40초)';
-  var r=await api('/shorts/plan',{topic:$('topic').value.trim(),sec:SEC,angle:ANG,clips:CLIPS.map(function(c){return {dur:c.dur,name:c.name};}),frames:frames});
+  var r=await api('/shorts/plan',{topic:$('topic').value.trim(),sec:SEC,angle:ANG,series:SER,clips:CLIPS.map(function(c){return {dur:c.dur,name:c.name};}),frames:frames});
   if(!r.ok){pp.textContent='';pe.textContent=r.detail||r.error||'실패';b.disabled=false;return;}
   D=r.draft;NARR={};editor();
 }

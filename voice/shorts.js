@@ -159,6 +159,10 @@ async function script(env, b, h) {
   return { ok: true, draft: d, files: {} };
 }
 
+// 시리즈: 같은 형식을 반복해 구독으로 잇는다. 제목 앞 번호는 KV 카운터(shorts:series:<해시>:<키>)
+const SERIES = {
+  price: { name: "광저우 물가 1분", rule: "이 영상은 '광저우 물가 1분' 시리즈다: 첫 구간 cap 은 대표 물건과 원화 가격으로 놀라게(예: '편의점 도시락 = 2,800원?!'), 가격표·메뉴판이 보이는 장면은 꼭 쓰고 그 구간 cap 에 '00위안 ≈ 0,000원'. 한국 가격과 비교 한 줄(모르면 '한국이면?' 질문). 실제로 먹거나 써 본 반응 구간 포함. 마지막 구간 say 는 '여러분 동네는 얼마예요?' 같은 댓글 질문. 제목에는 번호를 넣지 말 것(자동으로 붙음), 대신 가장 놀라운 가격을 넣는다. 태그에 광저우물가·중국물가 포함." },
+};
 // 🎥 편집실 — 내가 찍은 클립의 캡처(폰에서 뽑은 작은 JPEG)를 보고 구간·순서·자막·내레이션을 정한다. 원본 영상은 서버로 오지 않는다
 async function plan(env, b, h) {
   const clips = (Array.isArray(b.clips) ? b.clips : []).slice(0, 20).map((c) => ({ dur: Math.max(0.5, Math.min(600, Number(c.dur) || 0)), name: String(c.name || "").slice(0, 60) }));
@@ -166,6 +170,7 @@ async function plan(env, b, h) {
   const frames = (Array.isArray(b.frames) ? b.frames : []).filter((f) => f && clips[f.c] && /^data:image\/jpeg;base64,/.test(f.img || "") && f.img.length < 120000).slice(0, 40);
   if (frames.length < 2) throw serr("장면 캡처를 만들지 못했어요. 다른 클립으로 해 보세요.");
   const sec = [15, 20, 30, 45, 60].includes(Number(b.sec)) ? Number(b.sec) : 45;
+  const ser = SERIES[b.series] || null;
   const ang = ANGLES[b.angle] || ANGLES.mix;
   const topic = String(b.topic || "").slice(0, 200);
   const rate = (await krw(env)) || 190;
@@ -173,7 +178,7 @@ async function plan(env, b, h) {
   for (const f of frames) { content.push({ type: "text", text: "[클립 " + (f.c + 1) + " · " + Number(f.t).toFixed(1) + "초]" }); content.push({ type: "image_url", image_url: { url: f.img } }); }
   content.push({ type: "text", text: "위는 내가 광저우에서 직접 찍은 영상 클립들의 장면 캡처다(클립 번호·시각 표시). 클립 길이: " + clips.map((c, i) => "클립 " + (i + 1) + "=" + c.dur.toFixed(1) + "초").join(", ") + ". " +
     (topic ? "내가 적은 설명: " + topic + ". " : "") +
-    "이걸로 약 " + sec + "초짜리 한국어 유튜브 숏츠 편집 계획을 짜라. " + KR_RULES + " 이번 영상은 " + ang.d + ". 가격이 보이거나 언급되면 위안과 원화(1위안≈" + rate + "원)를 같이. " +
+    "이걸로 약 " + sec + "초짜리 한국어 유튜브 숏츠 편집 계획을 짜라. " + (ser ? ser.rule + " " : "") + KR_RULES + " 이번 영상은 " + ang.d + ". 가격이 보이거나 언급되면 위안과 원화(1위안≈" + rate + "원)를 같이. " +
     "규칙: 첫 구간은 가장 눈길 끄는 장면(훅). 구간은 2.5~6초로 너무 잘게 자르지 말고(첫 구간만 1.5초도 됨), 움직임이 이어지는 장면은 한 구간으로 길게, start/end 는 그 클립 길이 안에서 캡처를 근거로 고르고, 흔들리거나 의미 없는 부분은 피한다. 같은 순간을 두 번 쓰지 않는다. 구간 합계가 약 " + sec + "초 — 단 클립이 모자라면 반복하지 말고 더 짧게 끝낸다. " +
     "cap 은 화면 큰 글씨(한국어 12자 이내, 이모지 1개까지, 필요 없으면 빈칸). say 는 그 구간에 깔 한국어 내레이션 — 구간 길이 1초당 4글자 이내로 짧게, 화면만으로 충분하면 빈칸. 사진에 없는 사실을 지어내지 말 것(모르면 느낌·질문으로). 마지막 구간은 댓글 유도 질문. " +
     'title(한국어 40자 이내), description(2~3줄), tags(8개 이내, # 없이). JSON만 출력: {"title":"","description":"","tags":[],"segments":[{"clip":1,"start":0,"end":3,"cap":"","say":""}]}' });
@@ -188,11 +193,13 @@ async function plan(env, b, h) {
   }).filter(Boolean).slice(0, 15);
   if (!segs.length) segs = clips.slice(0, 8).map((c, i) => ({ clip: i, s: 0, e: Math.min(c.dur, 4), cap: "", say: "", img: "", move: "" }));
   const id = "s" + Date.now().toString(36);
-  const d = { id, kind: "mine", topic: topic || "내 영상", sec, angle: b.angle || "mix", made: Date.now(), title: String(out.title || topic || "광저우 둘이서").slice(0, 90), description: String(out.description || "").slice(0, 900),
+  let title = String(out.title || topic || "광저우 둘이서");
+  if (ser) { const ck = "shorts:series:" + h + ":" + b.series, n = (Number(await env.KV.get(ck)) || 0) + 1; await env.KV.put(ck, String(n)); title = "[" + ser.name + " #" + n + "] " + title.replace(/^\[[^\]]*\]\s*/, ""); }
+  const d = { id, kind: "mine", series: ser ? b.series : "", topic: topic || "내 영상", sec, angle: b.angle || "mix", made: Date.now(), title: title.slice(0, 90), description: String(out.description || "").slice(0, 900),
     tags: (Array.isArray(out.tags) ? out.tags : []).map((t) => String(t).replace(/^#/, "").slice(0, 30)).slice(0, 10), clips, scenes: segs, opts: { fit: "crop", orig: 0.3, narr: true, subs: true } };
   await env.KV.put(draftKey(h, id), JSON.stringify(d), { expirationTtl: 120 * 86400 });
   const l = (await env.KV.get(listKey(h), "json")) || [];
-  l.unshift({ id, title: d.title, made: d.made, kind: "mine" });
+  l.unshift({ id, title: d.title, made: d.made, kind: "mine", series: d.series });
   await env.KV.put(listKey(h), JSON.stringify(l.slice(0, 40)));
   return { ok: true, draft: d, files: {} };
 }
