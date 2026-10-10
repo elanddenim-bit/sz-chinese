@@ -27,7 +27,7 @@ textarea{min-height:56px;resize:vertical}
 .big.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}.big.red{background:var(--red)}
 .pick{display:block;border:2px dashed var(--line);border-radius:14px;padding:22px;text-align:center;color:var(--ink2)}.pick input{display:none}.pick b{display:block;color:var(--ink);font-size:16px;margin-bottom:4px}
 .clips{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}.clips div{position:relative}.clips img{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:8px;background:var(--soft);display:block}
-.clips span{position:absolute;left:4px;bottom:4px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:1px 5px;border-radius:5px}
+.clips span{position:absolute;left:3px;bottom:3px;background:rgba(0,0,0,.6);color:#fff;font-size:10px;padding:1px 4px;border-radius:5px;white-space:nowrap}
 .seg{display:grid;grid-template-columns:72px 1fr;gap:10px;border-top:1px solid var(--line);padding:12px 0}.seg:first-of-type{border-top:0}
 .seg img{width:72px;height:128px;object-fit:cover;border-radius:8px;background:var(--soft);display:block}
 .seg .hd{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink2);margin-bottom:6px;flex-wrap:wrap}.seg .hd b{color:var(--sky)}
@@ -38,7 +38,10 @@ textarea{min-height:56px;resize:vertical}
 .prog{font-size:14px;margin:8px 0}.bar{height:6px;background:var(--soft);border-radius:3px;overflow:hidden}.bar i{display:block;height:100%;background:var(--sky);width:0}
 canvas.pv{width:60%;max-width:300px;display:block;margin:10px auto;border-radius:10px;background:#000}
 video.out,video.prev{width:70%;max-width:320px;display:block;margin:10px auto;border-radius:10px;background:#000}
-#stash{position:fixed;left:-10px;top:0;width:2px;height:2px;overflow:hidden;opacity:.01}
+#stash{position:absolute;left:0;top:0;width:2px;height:2px;overflow:hidden;opacity:.01;pointer-events:none;z-index:-1}
+.dock{position:sticky;bottom:0;z-index:5;margin:0 -16px;padding:8px 16px calc(10px + env(safe-area-inset-bottom));background:linear-gradient(rgba(239,232,222,0),var(--bg) 35%)}
+@media (prefers-color-scheme:dark){.dock{background:linear-gradient(rgba(20,26,34,0),var(--bg) 35%)}}
+.clips{grid-template-columns:repeat(5,1fr)!important}
 .toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;z-index:9;max-width:90vw;text-align:center}
 .spin{display:inline-block;animation:sp 1.2s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
 .gate{padding:40px 0;text-align:center}
@@ -66,8 +69,8 @@ function start(){
   if(!QID){
     h+='<div class="card"><h2>어떤 영상인가요?</h2><input type="text" id="topic" placeholder="예: 永庆坊 산책, 早茶 집 첫 방문 (짧게)"><p class="lbl">한국 시청자 각도</p><div class="chips">'+ANGS.map(function(a){return '<button class="chip'+(a[0]===ANG?' on':'')+'" data-ang="'+a[0]+'">'+a[1]+'</button>';}).join('')+'</div>'
       +'<p class="lbl">길이</p><div class="chips">'+[15,20,30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div><p class="note" id="secNote"></p>'
-      +'<button class="big" id="planBtn" disabled>🤖 AI 편집 계획 받기</button><div class="prog" id="pp"></div><div class="err" id="pe"></div></div>';
-  }else h+='<button class="big" id="resumeBtn" disabled>이 클립으로 편집 이어가기</button><div class="err" id="pe"></div>';
+      +'</div><div class="dock"><button class="big" id="planBtn" disabled>🤖 AI 편집 계획 받기</button><div class="prog" id="pp"></div><div class="err" id="pe"></div></div>';
+  }else h+='<div class="dock"><button class="big" id="resumeBtn" disabled>이 클립으로 편집 이어가기</button><div class="err" id="pe"></div></div>';
   $('main').innerHTML=h;
   $('files').onchange=function(){addFiles(this.files);this.value='';};
   document.querySelectorAll('[data-ang]').forEach(function(b){b.onclick=function(){ANG=b.getAttribute('data-ang');try{localStorage.setItem('sh-ang',ANG);}catch(e){}document.querySelectorAll('[data-ang]').forEach(function(x){x.classList.toggle('on',x===b);});};});
