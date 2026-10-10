@@ -89,7 +89,7 @@ export default {
       if (url.pathname.startsWith("/quest/")) return json(req, await questApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/shorts/")) {
         const out = await shortsApi(env, ctx, url.pathname, b, h, synth);
-        const ev = { "/shorts/script": "script", "/shorts/yt/upload": "upload", "/shorts/ideas": "ideas", "/shorts/plan": "plan" }[url.pathname];
+        const ev = { "/shorts/script": "script", "/shorts/yt/upload": "upload", "/shorts/ideas": "ideas", "/shorts/plan": "plan", "/shorts/asr": "asr" }[url.pathname];
         if (ev) ctx.waitUntil(logUse(env, "shorts", { [ev]: 1 }, 0, h).catch(() => {}));
         return json(req, out);
       }

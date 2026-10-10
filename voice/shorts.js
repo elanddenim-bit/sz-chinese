@@ -87,6 +87,7 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
   if (path === "/shorts/script") return script(env, b, h);
   if (path === "/shorts/load") return load(env, b, h);
   if (path === "/shorts/plan") return plan(env, b, h);
+  if (path === "/shorts/asr") return asr(env, b, h);
   if (path === "/shorts/update") return update(env, b, h);
   if (path === "/shorts/asset") return asset(env, b, h, synth);
   if (path === "/shorts/poll") return poll(env, b, h);
@@ -164,7 +165,7 @@ async function plan(env, b, h) {
   if (!clips.length) throw serr("클립을 골라 주세요.");
   const frames = (Array.isArray(b.frames) ? b.frames : []).filter((f) => f && clips[f.c] && /^data:image\/jpeg;base64,/.test(f.img || "") && f.img.length < 120000).slice(0, 40);
   if (frames.length < 2) throw serr("장면 캡처를 만들지 못했어요. 다른 클립으로 해 보세요.");
-  const sec = [30, 45, 60].includes(Number(b.sec)) ? Number(b.sec) : 45;
+  const sec = [15, 20, 30, 45, 60].includes(Number(b.sec)) ? Number(b.sec) : 45;
   const ang = ANGLES[b.angle] || ANGLES.mix;
   const topic = String(b.topic || "").slice(0, 200);
   const rate = (await krw(env)) || 190;
@@ -173,7 +174,7 @@ async function plan(env, b, h) {
   content.push({ type: "text", text: "위는 내가 광저우에서 직접 찍은 영상 클립들의 장면 캡처다(클립 번호·시각 표시). 클립 길이: " + clips.map((c, i) => "클립 " + (i + 1) + "=" + c.dur.toFixed(1) + "초").join(", ") + ". " +
     (topic ? "내가 적은 설명: " + topic + ". " : "") +
     "이걸로 약 " + sec + "초짜리 한국어 유튜브 숏츠 편집 계획을 짜라. " + KR_RULES + " 이번 영상은 " + ang.d + ". 가격이 보이거나 언급되면 위안과 원화(1위안≈" + rate + "원)를 같이. " +
-    "규칙: 첫 구간은 가장 눈길 끄는 장면(훅). 구간은 1.5~6초, start/end 는 그 클립 길이 안에서 캡처를 근거로 고르고, 흔들리거나 의미 없는 부분은 피한다. 같은 순간을 두 번 쓰지 않는다. 구간 합계가 약 " + sec + "초. " +
+    "규칙: 첫 구간은 가장 눈길 끄는 장면(훅). 구간은 1.5~6초, start/end 는 그 클립 길이 안에서 캡처를 근거로 고르고, 흔들리거나 의미 없는 부분은 피한다. 같은 순간을 두 번 쓰지 않는다. 구간 합계가 약 " + sec + "초 — 단 클립이 모자라면 반복하지 말고 더 짧게 끝낸다. " +
     "cap 은 화면 큰 글씨(한국어 12자 이내, 이모지 1개까지, 필요 없으면 빈칸). say 는 그 구간에 깔 한국어 내레이션 — 구간 길이 1초당 4글자 이내로 짧게, 화면만으로 충분하면 빈칸. 사진에 없는 사실을 지어내지 말 것(모르면 느낌·질문으로). 마지막 구간은 댓글 유도 질문. " +
     'title(한국어 40자 이내), description(2~3줄), tags(8개 이내, # 없이). JSON만 출력: {"title":"","description":"","tags":[],"segments":[{"clip":1,"start":0,"end":3,"cap":"","say":""}]}' });
   const out = await qwen(env, [{ role: "user", content }], { model: env.SHORTS_VL_MODEL || "qwen3-vl-plus" });
@@ -221,6 +222,7 @@ async function update(env, b, h) {
     if (d.kind === "mine") { o.clip = Math.max(0, Math.min(19, Math.round(Number(s.clip) || 0))); o.s = Math.max(0, Number(s.s) || 0); o.e = Math.max(o.s + 0.3, Number(s.e) || o.s + 2); o.sp = [0.5, 1, 1.5, 2].includes(Number(s.sp)) ? Number(s.sp) : 1; }
     return o;
   });
+  if (d.kind === "mine" && u.asr && typeof u.asr === "object" && Array.isArray(d.clips)) for (const k of Object.keys(u.asr)) { const c = d.clips[Number(k)]; if (c && Array.isArray(u.asr[k])) c.asr = cleanAsr(u.asr[k]); }
   if (u.opts && typeof u.opts === "object") d.opts = { fit: u.opts.fit === "full" ? "full" : "crop", orig: [0, 0.3, 1].includes(Number(u.opts.orig)) ? Number(u.opts.orig) : 0.3, narr: u.opts.narr !== false, subs: u.opts.subs !== false, voice: ["Cherry", "Ethan", "mine", "rec"].includes(u.opts.voice) ? u.opts.voice : "Cherry", end: u.opts.end !== false, tag: typeof u.opts.tag === "string" ? u.opts.tag.slice(0, 20) : "📍 광저우 广州", bgv: [0, 0.07, 0.12, 0.22].includes(Number(u.opts.bgv)) ? Number(u.opts.bgv) : 0.12 };
   if (b.yt) d.yt = b.yt;
   await env.KV.put(draftKey(h, id), JSON.stringify(d), { expirationTtl: 120 * 86400 });
@@ -666,3 +668,66 @@ async function render(){
 }
 home();
 </script></body></html>`;
+
+// 🗣 영상 속 말 자막 — 폰이 클립 소리만 16kHz PCM 으로 뽑아 보냄(영상 원본은 안 옴) → 百炼 실시간 인식(문장 시각 포함, 광둥어 포함) → 千问이 한국어 자막으로
+function cleanAsr(a) {
+  return (Array.isArray(a) ? a : []).slice(0, 80).map((x) => Array.isArray(x) ? [Math.max(0, +Number(x[0]).toFixed(2) || 0), Math.max(0, +Number(x[1]).toFixed(2) || 0), String(x[2] || "").slice(0, 80), String(x[3] || "").slice(0, 40)] : null).filter((x) => x && x[1] > x[0] && (x[2] || x[3]));
+}
+async function recognize(env, pcm) {
+  const up = await fetch("https://" + host(env) + "/api-ws/v1/inference", { headers: { Upgrade: "websocket", Authorization: "Bearer " + env.DASHSCOPE_API_KEY } });
+  const ws = up.webSocket;
+  if (!ws) throw serr("음성 인식 서버 연결 거부 " + up.status, 502);
+  ws.accept();
+  const task = crypto.randomUUID().replace(/-/g, "");
+  const msg = (action, payload) => JSON.stringify({ header: { action, task_id: task, streaming: "duplex" }, payload });
+  const sents = new Map();
+  return await new Promise((res, rej) => {
+    let done = false;
+    const fin = (e, v) => { if (done) return; done = true; clearTimeout(to); try { ws.close(); } catch {} e ? rej(e) : res(v); };
+    const to = setTimeout(() => fin(serr("음성 인식 시간 초과", 504)), 90000);
+    ws.addEventListener("message", async (ev) => {
+      if (typeof ev.data !== "string") return;
+      let m; try { m = JSON.parse(ev.data); } catch { return; }
+      const e = m.header && m.header.event;
+      if (e === "task-started") {
+        try {
+          for (let o = 0; o < pcm.length; o += 3200) { ws.send(pcm.subarray(o, Math.min(pcm.length, o + 3200))); if ((o / 3200) % 5 === 4) await new Promise((ok) => setTimeout(ok, 60)); }
+          ws.send(msg("finish-task", { input: {} }));
+        } catch (x) { fin(serr("음성 전송 실패: " + (x.message || x), 502)); }
+      } else if (e === "result-generated") {
+        const st = m.payload && m.payload.output && m.payload.output.sentence;
+        if (st && st.text != null && st.begin_time != null) sents.set(st.begin_time, { t0: st.begin_time / 1000, t1: st.end_time ? st.end_time / 1000 : 0, zh: String(st.text).trim() });
+      } else if (e === "task-finished") {
+        const l = [...sents.values()].filter((x) => x.zh).sort((a, b) => a.t0 - b.t0);
+        l.forEach((x, i) => { if (!x.t1 || x.t1 <= x.t0) x.t1 = l[i + 1] ? l[i + 1].t0 : x.t0 + 2.5; });
+        fin(null, l);
+      } else if (e === "task-failed") fin(serr("음성 인식 실패: " + (m.header.error_message || m.header.error_code || "unknown"), 502));
+    });
+    ws.addEventListener("close", () => fin(serr("음성 인식 연결이 끊겼어요", 502)));
+    ws.send(msg("run-task", { task_group: "audio", task: "asr", function: "recognition", model: env.SHORTS_ASR_MODEL || "paraformer-realtime-v2",
+      parameters: { format: "pcm", sample_rate: 16000, language_hints: ["zh", "yue"], disfluency_removal_enabled: true }, input: {} }));
+  });
+}
+async function asr(env, b, h) {
+  const id = String(b.id || ""), ci = Math.round(Number(b.clip));
+  const d = await env.KV.get(draftKey(h, id), "json");
+  if (!d || d.kind !== "mine" || !Array.isArray(d.clips) || !d.clips[ci]) throw serr("초안이나 클립을 찾지 못했어요.", 404);
+  const b64 = String(b.pcm || "");
+  if (!b64 || b64.length > 2700000) throw serr("소리가 없거나 너무 길어요(클립당 60초까지).");
+  const bin = atob(b64), pcm = new Uint8Array(bin.length & ~1);
+  for (let i = 0; i < pcm.length; i++) pcm[i] = bin.charCodeAt(i);
+  const day = "shorts:asr:" + cnDay(), used = Number(await env.KV.get(day)) || 0, cap = Number(env.SHORTS_ASR_DAY || 60);
+  if (used >= cap) throw serr("오늘 영상 속 말 자막은 " + cap + "번까지예요.", 429);
+  await env.KV.put(day, String(used + 1), { expirationTtl: 3 * 86400 });
+  const l = await recognize(env, pcm);
+  let rows = [];
+  if (l.length) {
+    const out = await qwen(env, [{ role: "user", content: "광저우에서 찍은 영상 속 현지인 말(표준 중국어 또는 광둥어)을 인식한 문장들이다. 한국 유튜브 숏츠 자막으로 옮겨라: 문장마다 자연스러운 한국어 구어체, 18자 이내, 상황을 모르면 직역보다 뜻 위주. 인식이 엉망인 잡음 문장은 빈 문자열.\n" +
+      l.map((x, i) => i + 1 + ". " + x.zh).join("\n") + '\nJSON만 출력: {"ko":["…"]} (순서·개수 그대로)' }], { model: env.SHORTS_MODEL || "qwen3.8-flash" });
+    const ko = Array.isArray(out.ko) ? out.ko : [];
+    rows = cleanAsr(l.map((x, i) => [x.t0, x.t1, x.zh, String(ko[i] || "")])).filter((x) => x[3]);
+  }
+  d.clips[ci].asr = rows;
+  await env.KV.put(draftKey(h, id), JSON.stringify(d), { expirationTtl: 120 * 86400 });
+  return { ok: true, asr: rows, heard: l.length };
+}

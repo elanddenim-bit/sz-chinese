@@ -47,7 +47,7 @@ video.out,video.prev{width:70%;max-width:320px;display:block;margin:10px auto;bo
 <main id="main"></main><div id="stash"></div>
 <script>
 var CODE='';try{CODE=localStorage.getItem('pb-code')||'';}catch(e){}
-var CLIPS=[],D=null,SEC=45,ANG='mix',NARR={},RECING=null,MIC=null,MREC=null,AC=null,BUS=null,BGM=null,CH=null,RUN=null;try{ANG=localStorage.getItem('sh-ang')||'mix';}catch(e){}
+var CLIPS=[],D=null,SEC=45,ANG='mix',NARR={},RECING=null,MIC=null,MREC=null,AC=null,BUS=null,BGM=null,CH=null,RUN=null,SECMAN=false;try{ANG=localStorage.getItem('sh-ang')||'mix';}catch(e){}
 var ANGS=[['mix','골고루'],['compare','🇰🇷 한국이랑 비교'],['price','💰 원화로 얼마?'],['tip','✈️ 여행 꿀팁'],['shock','😮 문화 충격'],['food','🍜 한국인 입맛'],['life','🏠 주재원 현실']];
 function $(i){return document.getElementById(i);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -65,13 +65,13 @@ function start(){
   h+='<div class="card"><label class="pick"><input type="file" id="files" accept="video/*" multiple><b>📂 영상 클립 고르기</b>여러 개 한 번에 · 5~15초짜리가 좋아요<br>원본은 서버로 올라가지 않아요</label><div class="clips" id="clips"></div></div>';
   if(!QID){
     h+='<div class="card"><h2>어떤 영상인가요?</h2><input type="text" id="topic" placeholder="예: 永庆坊 산책, 早茶 집 첫 방문 (짧게)"><p class="lbl">한국 시청자 각도</p><div class="chips">'+ANGS.map(function(a){return '<button class="chip'+(a[0]===ANG?' on':'')+'" data-ang="'+a[0]+'">'+a[1]+'</button>';}).join('')+'</div>'
-      +'<p class="lbl">길이</p><div class="chips">'+[30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div>'
+      +'<p class="lbl">길이</p><div class="chips">'+[15,20,30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div><p class="note" id="secNote"></p>'
       +'<button class="big" id="planBtn" disabled>🤖 AI 편집 계획 받기</button><div class="prog" id="pp"></div><div class="err" id="pe"></div></div>';
   }else h+='<button class="big" id="resumeBtn" disabled>이 클립으로 편집 이어가기</button><div class="err" id="pe"></div>';
   $('main').innerHTML=h;
   $('files').onchange=function(){addFiles(this.files);this.value='';};
   document.querySelectorAll('[data-ang]').forEach(function(b){b.onclick=function(){ANG=b.getAttribute('data-ang');try{localStorage.setItem('sh-ang',ANG);}catch(e){}document.querySelectorAll('[data-ang]').forEach(function(x){x.classList.toggle('on',x===b);});};});
-  document.querySelectorAll('[data-sec]').forEach(function(b){b.onclick=function(){SEC=+b.getAttribute('data-sec');document.querySelectorAll('[data-sec]').forEach(function(x){x.classList.toggle('on',x===b);});};});
+  document.querySelectorAll('[data-sec]').forEach(function(b){b.onclick=function(){SEC=+b.getAttribute('data-sec');SECMAN=true;document.querySelectorAll('[data-sec]').forEach(function(x){x.classList.toggle('on',x===b);});};});
   if($('planBtn'))$('planBtn').onclick=makePlan;
   if($('resumeBtn'))$('resumeBtn').onclick=resume;
 }
@@ -89,6 +89,10 @@ async function addFiles(fl){
     await seekTo(v,Math.min(0.5,c.dur/2));c.thumb=grab(v,240,0.6);renderClips();
   }
   var ok=CLIPS.length&&CLIPS.every(function(c){return c.dur>0;});
+  // 재료(클립 합계)에 맞는 길이 추천 — 모자란데 길게 잡으면 같은 장면이 반복됨
+  var tot=CLIPS.reduce(function(a,c){return a+c.dur;},0),rec=tot<18?15:tot<26?20:tot<40?30:tot<55?45:60;
+  if(ok&&$('secNote')){if(!SECMAN){SEC=rec;document.querySelectorAll('[data-sec]').forEach(function(x){x.classList.toggle('on',+x.getAttribute('data-sec')===SEC);});}
+    $('secNote').textContent='클립 합계 '+Math.round(tot)+'초 → '+rec+'초 추천'+(SEC>rec?' (지금 고른 길이는 같은 장면이 반복될 수 있어요)':'');}
   if($('planBtn'))$('planBtn').disabled=!ok;if($('resumeBtn'))$('resumeBtn').disabled=!ok;
 }
 function renderClips(){$('clips').innerHTML=CLIPS.map(function(c,i){return '<div>'+(c.thumb?'<img src="'+c.thumb+'">':'<img>')+'<span>#'+(i+1)+' · '+(c.dur?fmt(c.dur)+'초':'…')+'</span></div>';}).join('');}
@@ -141,6 +145,7 @@ function editor(){
    +'<p class="lbl">내레이션 목소리</p>'+chipRow('voice',[['Cherry','👩 AI 여성'],['Ethan','👨 AI 남성'],['mine','🗣 내 목소리(AI 복제)'],['rec','🎙 직접 녹음']],o.voice||'Cherry')
    +((o.voice==='rec')?'<p class="note">구간마다 🎙 녹음을 눌러 직접 말하세요. 녹음은 이 화면을 닫으면 사라져요.</p>':(o.voice==='mine')?'<p class="note">실전 중국어 발음 탭에서 등록한 목소리로 한국어를 읽어요. 등록 전이면 AI 여성 목소리로 나와요.</p>':'')
    +'<p class="lbl">내레이션 · 자막 · 끝 화면</p><div class="chips"><button class="chip'+(o.narr?' on':'')+'" data-o="narr">🔊 내레이션</button><button class="chip'+(o.subs?' on':'')+'" data-o="subs">💬 자막</button><button class="chip'+(o.end?' on':'')+'" data-o="end">🔔 끝에 구독 카드(2초)</button></div>'
+   +'<p class="lbl">영상 속 말 자막 <span style="font-weight:400">(현지인 중국어·광둥어 → 한국어)</span></p><div class="chips"><button class="chip'+(o.osub?' on':'')+'" data-o="osub">🗣 영상 속 말 자막</button></div>'+(o.osub?osubHtml():'')
    +'<p class="lbl">배경음악</p><label class="pick" style="padding:12px"><input type="file" id="bgmIn" accept=".mp3,.m4a,.aac,.wav,audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,audio/aac"><b style="font-size:14.5px">🎵 '+(BGM?esc(BGM.name):'폰에 있는 음악 고르기')+'</b>'+(BGM?'눌러서 다른 곡으로':'유튜브 오디오 보관함처럼 저작권 걱정 없는 곡만')+'</label>'
    +(BGM?'<div style="margin-top:6px">'+chipRow('bgv',[[0,'끄기'],[0.07,'아주 작게'],[0.12,'작게'],[0.22,'보통']],o.bgv)+'</div><p class="note">내레이션 나올 땐 자동으로 줄고 끝에서 서서히 꺼져요. 곡은 이 화면을 닫으면 다시 골라야 해요.</p>':'')
    +'<p class="lbl">왼쪽 위 위치 표시 (비우면 없음)</p><input type="text" id="tagIn" maxlength="20" value="'+esc(o.tag)+'"></div>';
@@ -148,14 +153,26 @@ function editor(){
   h+='<a class="big ghost" href="/shorts">← 숏츠 공방</a>';
   $('main').innerHTML=h;window.scrollTo(0,0);bind();
 }
+function usedClips(){var u=[];D.scenes.forEach(function(s){if(CLIPS[s.clip]&&u.indexOf(s.clip)<0)u.push(s.clip);});return u.sort(function(a,b){return a-b;});}
+function clipAsr(i){return D.clips&&D.clips[i]&&D.clips[i].asr;}
+function osubHtml(){
+  var u=usedClips(),miss=u.filter(function(i){return !clipAsr(i);});
+  var h='<p class="note">클립 소리만 서버로 보내 받아 적어요(영상은 안 보내요). 내레이션이 나오는 동안은 내레이션 자막이 우선이에요.</p>';
+  h+='<button class="big ghost" id="asrBtn">'+(miss.length?'🗣 자막 만들기 (클립 '+miss.length+'개)':'🔁 다시 받아 적기')+'</button><div class="prog" id="asrP"></div>';
+  u.forEach(function(i){var a=clipAsr(i);if(!a)return;
+    h+='<details style="margin-top:6px"><summary class="note" style="margin:0">클립 '+(i+1)+' · '+(a.length?a.length+'문장 (눌러서 고치기)':'알아들은 말 없음')+'</summary>'
+     +a.map(function(r,k){return '<div style="margin:6px 0"><span class="note" style="margin:0">'+fmt(r[0])+'초 · '+esc(r[2])+'</span><input type="text" data-asr="'+i+':'+k+'" value="'+esc(r[3])+'" style="padding:6px 8px;font-size:14.5px"></div>';}).join('')+'</details>';});
+  return h;
+}
 function readForm(){
   D.title=$('tt').value.trim()||D.title;D.description=$('ds').value;D.tags=$('tg').value.split(/[,，]/).map(function(x){return x.trim();}).filter(Boolean);
   if($('tagIn'))D.opts.tag=$('tagIn').value.trim().slice(0,20);
+  document.querySelectorAll('[data-asr]').forEach(function(x){var q=x.getAttribute('data-asr').split(':'),a=clipAsr(+q[0]);if(a&&a[+q[1]])a[+q[1]][3]=x.value.trim();});
   document.querySelectorAll('.seg').forEach(function(el){var i=+el.getAttribute('data-i'),s=D.scenes[i];if(!s)return;
     el.querySelectorAll('[data-f]').forEach(function(f){var k=f.getAttribute('data-f'),v=f.value;if(k==='clip')s.clip=+v;else if(k==='sp')s.sp=+v||1;else if(k==='s'||k==='e')s[k]=Math.max(0,parseFloat(v)||0);else s[k]=v;});
     var c=CLIPS[s.clip];if(c){s.e=Math.min(s.e,c.dur);s.s=Math.min(s.s,Math.max(0,s.e-0.3));}if(s.e-s.s<0.3)s.e=s.s+0.3;});
 }
-function draftBody(){return {title:D.title,description:D.description,tags:D.tags,scenes:D.scenes.map(function(s){return {clip:s.clip,s:s.s,e:s.e,sp:s.sp||1,cap:s.cap,say:s.say};}),opts:D.opts};}
+function draftBody(){var asr={};(D.clips||[]).forEach(function(c,i){if(c&&c.asr)asr[i]=c.asr;});return {title:D.title,description:D.description,tags:D.tags,scenes:D.scenes.map(function(s){return {clip:s.clip,s:s.s,e:s.e,sp:s.sp||1,cap:s.cap,say:s.say};}),opts:D.opts,asr:asr};}
 var saveT=null;function saveSoon(){clearTimeout(saveT);saveT=setTimeout(function(){readForm();api('/shorts/update',{id:D.id,draft:draftBody()});},1200);}
 function bind(){
   document.querySelectorAll('#main input,#main textarea,#main select').forEach(function(x){if(x.type==='file')return;x.oninput=saveSoon;x.onchange=saveSoon;});
@@ -172,6 +189,7 @@ function bind(){
   document.querySelectorAll('[data-o]').forEach(function(b){b.onclick=function(){var k=b.getAttribute('data-o'),v=b.getAttribute('data-v');
     if(k==='fit'||k==='voice')D.opts[k]=v;else if(k==='orig'||k==='bgv')D.opts[k]=+v;else D.opts[k]=!D.opts[k];readForm();editor();saveSoon();};});
   $('bgmIn').onchange=function(){var f=this.files&&this.files[0];this.value='';if(!f)return;readForm();BGM={file:f,name:f.name.replace(/\.[^.]+$/,'').slice(0,30),buf:null};if(!D.opts.bgv)D.opts.bgv=0.12;editor();saveSoon();};
+  if($('asrBtn'))$('asrBtn').onclick=makeAsr;
   $('renderBtn').onclick=function(){render(false);};
   $('pvAll').onclick=function(){render(true);};
   segThumbs();
@@ -181,6 +199,32 @@ var pvT=null;
 async function preview(i){var s=D.scenes[i],c=CLIPS[s.clip],pv=$('pv');if(!c)return;pv.style.display='block';pv.src=c.url;pv.muted=false;clearInterval(pvT);
   await waitEv(pv,'loadedmetadata',5000);pv.currentTime=s.s;pv.playbackRate=s.sp||1;try{await pv.play();}catch(e){}pv.scrollIntoView({block:'center',behavior:'smooth'});
   pvT=setInterval(function(){if(pv.currentTime>=s.e){pv.pause();clearInterval(pvT);}},100);}
+
+// ---------- 영상 속 말 자막: 클립 소리 → 16kHz 모노 PCM → /shorts/asr ----------
+async function clipPcm(c){
+  if(c.file.size>300*1048576)throw new Error('파일이 너무 커요');
+  var ab=await c.file.arrayBuffer(),ac=getAC(),buf=await decode(ac,ab);ab=null;
+  var dur=Math.min(buf.duration,60),O=window.OfflineAudioContext||window.webkitOfflineAudioContext,oc=new O(1,Math.ceil(dur*16000),16000),src=oc.createBufferSource();
+  src.buffer=buf;src.connect(oc.destination);src.start(0);
+  var r=await new Promise(function(ok,no){oc.oncomplete=function(e){ok(e.renderedBuffer);};var p=oc.startRendering();if(p&&p.then)p.then(ok,no);});
+  var f=r.getChannelData(0),out=new Uint8Array(f.length*2);
+  for(var i=0;i<f.length;i++){var v=Math.max(-1,Math.min(1,f[i]))*32767|0;out[i*2]=v&255;out[i*2+1]=(v>>8)&255;}
+  var bin='';for(var j=0;j<out.length;j+=32768)bin+=String.fromCharCode.apply(null,out.subarray(j,j+32768));
+  return btoa(bin);
+}
+async function makeAsr(){
+  readForm();var b=$('asrBtn'),p=$('asrP'),u=usedClips(),miss=u.filter(function(i){return !clipAsr(i);}),todo=miss.length?miss:u;b.disabled=true;
+  if(!D.clips)D.clips=CLIPS.map(function(c){return {dur:c.dur,name:c.name};});
+  for(var k=0;k<todo.length;k++){var i=todo[k],c=CLIPS[i];
+    p.innerHTML='<span class="spin">🗣</span> 클립 '+(i+1)+' 소리 뽑는 중… ('+(k+1)+'/'+todo.length+')';
+    try{var pcm=await clipPcm(c);}catch(e){toast('클립 '+(i+1)+' 소리를 뽑지 못했어요: '+(e.message||e));continue;}
+    p.innerHTML='<span class="spin">🗣</span> 클립 '+(i+1)+' 받아 적고 번역하는 중…';
+    var r=await api('/shorts/asr',{id:D.id,clip:i,pcm:pcm});
+    if(!r.ok){toast('클립 '+(i+1)+': '+(r.detail||r.error));continue;}
+    if(!D.clips[i])D.clips[i]={dur:c.dur,name:c.name};D.clips[i].asr=r.asr;
+  }
+  editor();var t=$('asrBtn');if(t)t.scrollIntoView({block:'center'});
+}
 
 // ---------- 직접 녹음 ----------
 async function recToggle(s){
@@ -227,8 +271,14 @@ function firstFrame(v){return new Promise(function(ok){var done=false;function f
   if(v.requestVideoFrameCallback){v.requestVideoFrameCallback(function(){fin();});}
   else{(function chk(n){if(v.readyState>=3||n>20)return setTimeout(fin,40);setTimeout(function(){chk(n+1);},30);})(0);}
   setTimeout(fin,900);});}
+// 내레이션을 자막 토막으로: 문장부호 뒤에서 끊고, 긴 토막은 띄어쓰기 기준으로 반씩
+function sayChunks(t){t=String(t||'').trim();if(!t)return [];var parts=t.replace(/([,.!?…，。！？~]+)(?![0-9])\s*/g,'$1\n').split('\n').map(function(x){return x.trim();}).filter(Boolean),out=[];
+  parts.forEach(function(x){while(x.length>18){var m=x.lastIndexOf(' ',Math.ceil(x.length/2)+3);if(m<6)m=x.indexOf(' ',6);if(m<0)break;out.push(x.slice(0,m));x=x.slice(m+1).trim();}if(x)out.push(x);});
+  var tot=out.reduce(function(a,x){return a+x.length+2;},0);return out.map(function(x){return {t:x,w:(x.length+2)/tot};});}
 function wrap(g,t,max){var out=[],cur='';for(var i=0;i<t.length;i++){var n=cur+t[i];if(g.measureText(n).width>max&&cur){out.push(cur);cur=t[i];}else cur=n;}if(cur)out.push(cur);return out;}
-async function render(dry){
+// 렌더 중 오류가 나도 버튼이 '멈추기'로 묶이지 않게
+function render(dry){return render0(dry).catch(function(e){RUN=null;var b=$('renderBtn'),p=$('pvAll');if(b){b.disabled=false;b.textContent='🎬 영상 만들기';}if(p){p.disabled=false;p.textContent='▶ 전체 미리보기 (녹화 안 함)';}var o=$('out');if(o)o.insertAdjacentHTML('beforeend','<p class="err">오류: '+esc(e&&e.message||e)+'</p>');});}
+async function render0(dry){
   readForm();
   if(RUN){RUN.stop=true;return;}
   var ac=getAC();
@@ -259,7 +309,7 @@ async function render(dry){
   out.innerHTML='<p class="prog" id="rp">'+(dry?'미리보기 중…':'녹화 중… 화면을 켜 두세요')+'</p><div class="bar"><i id="rb"></i></div>';out.appendChild(cv);cv.className='pv';
   if(dry)cv.scrollIntoView({block:'center',behavior:'smooth'});
   var END=D.opts.end?2:0;
-  var plan=D.scenes.map(function(s,i){var nd=narr[i]?narr[i].duration+0.25:0;return {s:s,i:i,sp:s.sp||1,seg:segLen(s),len:Math.max(segLen(s),nd,0.8)};}),total=plan.reduce(function(a,p){return a+p.len;},0)+END,doneT=0,bgmPos=0;
+  var plan=D.scenes.map(function(s,i){var nd=narr[i]?narr[i].duration+0.25:0;return {s:s,i:i,sp:s.sp||1,seg:segLen(s),nd:narr[i]?narr[i].duration:0,ck:sayChunks(s.say),len:Math.max(segLen(s),nd,0.8)};}),total=plan.reduce(function(a,p){return a+p.len;},0)+END,doneT=0,bgmPos=0;
   // 배경음악: 구간마다 이어지는 위치부터 짧게 페이드 인·아웃(녹화 일시정지 사이 끊김 없이 이어 붙음), 내레이션 땐 낮춤
   function bgm(at,len,duck,fadeOut){var lv=D.opts.bgv;if(!BGM||!BGM.buf||!lv)return;var s=ac.createBufferSource(),gn=ac.createGain();s.buffer=BGM.buf;s.loop=true;s.connect(gn);gn.connect(BUS.comp);
     var l=lv*(duck?0.4:1),fo=Math.min(len,fadeOut||0.04);gn.gain.setValueAtTime(0,at);gn.gain.linearRampToValueAtTime(l,at+0.03);gn.gain.setValueAtTime(l,at+Math.max(0.03,len-fo));gn.gain.linearRampToValueAtTime(0,at+len);
@@ -277,7 +327,17 @@ async function render(dry){
     if(hasSnap&&ready&&el<0.25){g.globalAlpha=1-el/0.25;g.drawImage(sn,0,0);g.globalAlpha=1;}
     var gr=g.createLinearGradient(0,H*0.5,0,H);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,.55)');g.fillStyle=gr;g.fillRect(0,H*0.5,W,H*0.5);
     if(sc.cap){var pop=Math.min(1,el/0.18),fs=Math.round(66*(0.85+0.15*pop)),fnt='900 '+fs+'px -apple-system,"Apple SD Gothic Neo",sans-serif';g.font=fnt;wrap(g,sc.cap,W-140).forEach(function(l,k){stroke(l,W/2,H*0.20+k*(fs+12),fnt,idx===0&&k===0?'#FFD84D':'#FFFFFF',14);});}
-    if(D.opts.subs&&sc.say){var f2='700 36px -apple-system,"Apple SD Gothic Neo",sans-serif';g.font=f2;var sl=wrap(g,sc.say,W-170).slice(0,4);sl.forEach(function(l,k){stroke(l,W/2-20,H*0.66+k*48-(sl.length-1)*24,f2,'#FFFFFF',9);});}
+    // 내레이션 자막: 말하는 속도에 맞춰 한 토막씩(글자 수 비례로 시간 배분)
+    var P=CUR,talking=P&&P.nd&&el>=0.05&&el<=P.nd+0.15,shown=false;
+    if(D.opts.subs&&P&&P.ck.length){var span=P.nd||len,tt=(P.nd?el-0.05:el)/span,ci=-1,acc=0;
+      if(tt>=0&&tt<=1.03){for(var q=0;q<P.ck.length;q++){acc+=P.ck[q].w;if(tt<=acc+1e-6){ci=q;break;}}if(ci<0)ci=P.ck.length-1;}
+      if(ci>=0){var f2='800 44px -apple-system,"Apple SD Gothic Neo",sans-serif';g.font=f2;var sl=wrap(g,P.ck[ci].t,W-150).slice(0,2);sl.forEach(function(l,k){stroke(l,W/2-20,H*0.67+k*56-(sl.length-1)*28,f2,'#FFFFFF',10);});shown=true;}}
+    // 영상 속 말 자막: 내레이션이 안 나올 때 그 순간 말한 문장(한국어 크게 + 원문 작게)
+    var A=D.opts.osub&&clipAsr(sc.clip);
+    if(A&&!talking&&!(shown&&!P.nd)){var mt=v.currentTime,row=null;for(var r=0;r<A.length;r++){if(A[r][3]&&mt>=A[r][0]-0.1&&mt<=A[r][1]+0.3){row=A[r];break;}}
+      if(row){var f3='800 42px -apple-system,"Apple SD Gothic Neo",sans-serif';g.font=f3;var kl=wrap(g,row[3],W-150).slice(0,2),y0=H*0.70-(kl.length-1)*27;
+        if(row[2]){var f4='600 26px -apple-system,"PingFang SC",sans-serif';g.font=f4;stroke(wrap(g,row[2],W-160)[0],W/2-20,y0-52,f4,'#FFD84D',7);}
+        kl.forEach(function(l,k){stroke(l,W/2-20,y0+k*54,f3,'#FFFFFF',10);});}}
     if(D.opts.tag){g.font='600 22px -apple-system,sans-serif';g.textAlign='left';g.fillStyle='rgba(255,255,255,.75)';g.fillText(D.opts.tag,30,60);}
     bar(el,len);
   }
@@ -291,10 +351,10 @@ async function render(dry){
     g.font='800 44px -apple-system,"Apple SD Gothic Neo",sans-serif';g.textAlign='center';g.fillStyle='#FFFFFF';g.fillText('🔔 구독',W/2,by+bh/2+15);
     g.globalAlpha=1;bar(el,END);
   }
-  var started=false,stopped=false;
+  var started=false,stopped=false,CUR=null;
   for(var k=0;k<plan.length;k++){
     if(run.stop){stopped=true;break;}
-    var p=plan[k],sc=p.s,c=CLIPS[sc.clip];if(!c)continue;
+    var p=plan[k],sc=p.s,c=CLIPS[sc.clip];if(!c)continue;CUR=p;
     $('rp').textContent=(dry?'미리보기 ':'녹화 중… ')+(k+1)+' / '+plan.length+' 구간';
     c.v.pause();await seekTo(c.v,sc.s);
     var v=c.v;v.playbackRate=p.sp;try{v.preservesPitch=true;v.webkitPreservesPitch=true;}catch(e){}
