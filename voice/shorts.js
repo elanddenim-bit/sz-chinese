@@ -91,6 +91,11 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
   if (path === "/shorts/update") return update(env, b, h);
   if (path === "/shorts/asset") return asset(env, b, h, synth);
   if (path === "/shorts/poll") return poll(env, b, h);
+  if (path === "/shorts/avatar/state") return avaView(env, await avaDoc(env, h));
+  if (path === "/shorts/avatar/face") return avaFace(env, b, h);
+  if (path === "/shorts/avatar/make") return avaMake(env, b, h, synth);
+  if (path === "/shorts/avatar/poll") return avaPoll(env, b, h);
+  if (path === "/shorts/avatar/del") return avaDel(env, b, h);
   if (path === "/shorts/yt/start") return ytStart(env, h);
   if (path === "/shorts/yt/status") return ytStatus(env, h);
   if (path === "/shorts/yt/stats") return ytStats(env, h, b);
@@ -333,6 +338,132 @@ async function poll(env, b, h) {
   return { ok: true, status: "done", url: await fileUrl(env, key) };
 }
 
+// ---------------- 🗣 캐릭터가 말하기 (wan2.2-s2v 시험) ----------------
+// 그림 한 장 + 내레이션 음성 → 입 움직이는 영상. 입력은 URL 만 받으므로 百炼 임시 저장소(oss://)에 올려 넘김.
+// 비용: 480P 0.5위안/초 · 720P 0.9위안/초(실패는 무료). 하루 상한 SHORTS_AVA_SEC(기본 60초).
+const AVA = "savatar";
+const avaKey = (h) => "shorts:ava:" + h;
+const avaCap = (env) => Number(env.SHORTS_AVA_SEC) || 60;
+async function dsRaw(env, path, body, extra) {
+  const r = await fetch("https://" + host(env) + "/api/v1" + path, { method: body ? "POST" : "GET", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json", ...(extra || {}) }, body: body ? JSON.stringify(body) : undefined });
+  const t = await r.text();
+  let j = {};
+  try { j = JSON.parse(t); } catch {}
+  if (!r.ok) throw serr("百炼 " + r.status + ": " + (j.message || j.code || t.slice(0, 160)), 502);
+  return j;
+}
+async function ossUp(env, model, bytes, name, mime) {
+  const p = (await dsRaw(env, "/uploads?action=getPolicy&model=" + encodeURIComponent(model))).data || {};
+  if (!p.upload_host || !p.upload_dir) throw serr("임시 저장소 정책을 받지 못했어요.", 502);
+  const key = p.upload_dir + "/" + name, f = new FormData();
+  f.append("OSSAccessKeyId", p.oss_access_key_id); f.append("Signature", p.signature); f.append("policy", p.policy);
+  f.append("x-oss-object-acl", p.x_oss_object_acl); f.append("x-oss-forbid-overwrite", p.x_oss_forbid_overwrite);
+  f.append("key", key); f.append("success_action_status", "200"); f.append("file", new Blob([bytes], { type: mime }), name);
+  const r = await fetch(p.upload_host, { method: "POST", body: f });
+  if (!r.ok) throw serr("임시 저장소 업로드 실패 " + r.status, 502);
+  return "oss://" + key;
+}
+const OSSR = { "X-DashScope-OssResourceResolve": "enable" };
+function wavSec(u8) {
+  try {
+    const v = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+    const rate = v.getUint32(28, true);
+    for (let i = 12; i + 8 <= u8.length;) { const id = String.fromCharCode(u8[i], u8[i + 1], u8[i + 2], u8[i + 3]), sz = v.getUint32(i + 4, true); if (id === "data") return Math.min(sz, u8.length - i - 8) / rate; i += 8 + sz + (sz & 1); }
+  } catch {}
+  return 0;
+}
+async function avaDoc(env, h) {
+  const d = (await env.KV.get(avaKey(h), "json")) || { list: [] };
+  if (d.day !== cnDay()) { d.day = cnDay(); d.sec = 0; }
+  return d;
+}
+async function avaView(env, d) {
+  return { ok: true, face: d.face ? await fileUrl(env, d.face) : "", check: d.check || null, pend: d.pend || null, used: d.sec || 0, cap: avaCap(env),
+    list: await Promise.all((d.list || []).map(async (x) => ({ ...x, url: await fileUrl(env, x.k) }))) };
+}
+async function avaFace(env, b, h) {
+  const m = String(b.image || "").match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
+  if (!m) throw serr("그림을 다시 골라 주세요.");
+  const bin = atob(m[2]), u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  if (u8.length > 10 * 1048576) throw serr("그림이 너무 커요(10MB 초과).");
+  const ext = m[1] === "image/png" ? "png" : m[1] === "image/webp" ? "webp" : "jpg";
+  const pre = "shorts/" + h + "/" + AVA + "/face.";
+  await env.R2.delete(["jpg", "png", "webp"].map((e) => pre + e)).catch(() => {});
+  await env.R2.put(pre + ext, u8, { httpMetadata: { contentType: m[1] } });
+  const d = await avaDoc(env, h);
+  d.face = pre + ext; d.faceMime = m[1]; d.check = null;
+  // 사전 점검(0.004위안) — 통과 못 해도 만들기는 시도할 수 있게 결과만 보여 줌
+  try {
+    const oss = await ossUp(env, "wan2.2-s2v-detect", u8, "face-" + Date.now() + "." + ext, m[1]);
+    const j = await dsRaw(env, "/services/aigc/image2video/face-detect", { model: "wan2.2-s2v-detect", input: { image_url: oss } }, OSSR);
+    const o = j.output || {};
+    d.check = { pass: !!o.check_pass, humanoid: !!o.humanoid, msg: String(o.message || o.code || "").slice(0, 160) };
+  } catch (e) { d.check = { err: String(e.message || e).slice(0, 160) }; }
+  await env.KV.put(avaKey(h), JSON.stringify(d));
+  return avaView(env, d);
+}
+async function avaMake(env, b, h, synth) {
+  const text = String(b.text || "").trim();
+  if (!text) throw serr("대사를 적어 주세요.");
+  if (text.length > 90) throw serr("한 번에 90자까지예요(영상 20초 미만 제한).");
+  const d = await avaDoc(env, h);
+  if (!d.face) throw serr("먼저 캐릭터 그림을 올려 주세요.");
+  if ((d.sec || 0) >= avaCap(env)) throw serr("오늘 캐릭터 영상 한도(" + avaCap(env) + "초)를 다 썼어요.", 429);
+  const say = await asset(env, { id: AVA, n: 0, kind: "say", text, voice: b.voice }, h, synth);
+  const ak = "shorts/" + h + "/" + AVA + "/0." + (say.url.includes(".mp3") ? "mp3" : "wav");
+  const ao = await env.R2.get(ak);
+  if (!ao) throw serr("음성을 만들지 못했어요.", 502);
+  const au = new Uint8Array(await ao.arrayBuffer());
+  const mp3 = ak.endsWith(".mp3");
+  const dur = mp3 ? au.length / 16000 : wavSec(au);
+  if (dur >= 19.5) throw serr("음성이 " + dur.toFixed(1) + "초라 20초 제한을 넘어요. 대사를 줄여 주세요.");
+  const fo = await env.R2.get(d.face);
+  if (!fo) throw serr("캐릭터 그림을 다시 올려 주세요.");
+  const t = Date.now();
+  const img = await ossUp(env, "wan2.2-s2v", new Uint8Array(await fo.arrayBuffer()), "face-" + t + "." + d.face.split(".").pop(), d.faceMime || "image/jpeg");
+  const aud = await ossUp(env, "wan2.2-s2v", au, "say-" + t + (mp3 ? ".mp3" : ".wav"), mp3 ? "audio/mpeg" : "audio/wav");
+  const res = b.res === "720P" ? "720P" : "480P";
+  const j = await dsRaw(env, "/services/aigc/image2video/video-synthesis", { model: env.SHORTS_S2V_MODEL || "wan2.2-s2v", input: { image_url: img, audio_url: aud }, parameters: { resolution: res } }, { "X-DashScope-Async": "enable", ...OSSR });
+  const task = j.output && j.output.task_id;
+  if (!task) throw serr("작업 번호를 받지 못했어요.", 502);
+  const sec = Math.ceil(dur);
+  d.sec = (d.sec || 0) + sec;
+  d.pend = { task, text, voice: b.voice || "Cherry", res, sec, at: t };
+  await env.KV.put(avaKey(h), JSON.stringify(d));
+  return { ok: true, task, sec, won: Math.round(sec * (res === "720P" ? 0.9 : 0.5) * 10) / 10, say: say.url };
+}
+async function avaPoll(env, b, h) {
+  const d = await avaDoc(env, h);
+  const p = d.pend;
+  if (!p || p.task !== String(b.task || "")) return { ok: true, status: "none" };
+  const r = await fetch("https://" + host(env) + "/api/v1/tasks/" + p.task, { headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY } });
+  const j = await r.json().catch(() => ({}));
+  const o = j.output || {}, st = o.task_status || "UNKNOWN";
+  if (st === "FAILED" || st === "CANCELED" || (st === "UNKNOWN" && !r.ok)) {
+    d.pend = null; d.sec = Math.max(0, (d.sec || 0) - p.sec); // 실패는 과금 안 됨
+    await env.KV.put(avaKey(h), JSON.stringify(d));
+    return { ok: true, status: "failed", detail: String(o.message || o.code || st).slice(0, 200) };
+  }
+  if (st !== "SUCCEEDED") return { ok: true, status: st, el: Math.round((Date.now() - p.at) / 1000) };
+  const url = (o.results && o.results.video_url) || o.video_url;
+  if (!url) return { ok: true, status: "failed", detail: "결과 주소 없음" };
+  const f = await fetch(url);
+  if (!f.ok) return { ok: true, status: "failed", detail: "결과 내려받기 실패 " + f.status };
+  const k = "shorts/" + h + "/" + AVA + "/v" + p.at + ".mp4";
+  await env.R2.put(k, await f.arrayBuffer(), { httpMetadata: { contentType: "video/mp4" } });
+  d.list = [{ k, text: p.text, voice: p.voice, res: p.res, sec: p.sec, at: p.at }].concat(d.list || []).slice(0, 20);
+  d.pend = null;
+  await env.KV.put(avaKey(h), JSON.stringify(d));
+  return { ok: true, status: "done", url: await fileUrl(env, k) };
+}
+async function avaDel(env, b, h) {
+  const d = await avaDoc(env, h);
+  const x = (d.list || []).find((y) => y.k === b.k);
+  if (x) { await env.R2.delete(x.k).catch(() => {}); d.list = d.list.filter((y) => y !== x); await env.KV.put(avaKey(h), JSON.stringify(d)); }
+  return avaView(env, d);
+}
+
 // 완성 영상 저장(본문 그대로)
 export async function shortsSave(req, env, url, hashFn, allowed) {
   const code = req.headers.get("x-code") || "";
@@ -562,7 +693,7 @@ function home(){
       +'<button class="big" id="scriptBtn">✍️ 대본 쓰기</button><div class="err" id="e1"></div></div>';
     h+='<div class="card" id="ytCard"><h2>유튜브 연결</h2><div id="ytBox" class="note">확인 중…</div></div>';
     if(j.yt)h+='<div class="card"><h2>📈 내 채널 성적 <button class="chip" id="stRe" style="float:right;font-size:12px;padding:3px 9px">새로고침</button></h2><div id="stBox" class="note">불러오는 중…</div></div>';
-    h='<a class="big" href="/edit" style="text-align:center;text-decoration:none;background:var(--red);margin:0 0 12px">🎥 내가 찍은 영상으로 만들기 (편집실)</a>'+h;
+    h='<button class="big" id="avOpen" style="margin:0 0 12px;background:var(--ink)">🗣 캐릭터가 말하기 (시험)</button>'+h;h='<a class="big" href="/edit" style="text-align:center;text-decoration:none;background:var(--red);margin:0 0 12px">🎥 내가 찍은 영상으로 만들기 (편집실)</a>'+h;
     if(j.list&&j.list.length)h+='<div class="card"><h2>내 숏츠</h2><div class="list">'+j.list.map(function(x){return '<a href="'+(x.kind==='mine'?'/edit?id='+x.id:'#')+'"'+(x.kind==='mine'?'':' data-open="'+x.id+'"')+'>'+(x.kind==='mine'?'🎥 ':'')+'<span>'+esc(x.title)+'</span><small>'+(x.yt?'▶ '+(x.yt.privacy==='public'?'공개':x.yt.privacy==='unlisted'?'일부공개':'비공개'):new Date(x.made).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}))+'</small></a>';}).join('')+'</div></div>';
     $('main').innerHTML=h;
     document.querySelectorAll('[data-ang]').forEach(function(b){b.onclick=function(){ANG=b.getAttribute('data-ang');try{localStorage.setItem('sh-ang',ANG);}catch(e){}document.querySelectorAll('[data-ang]').forEach(function(x){x.classList.toggle('on',x===b);});};});
@@ -581,10 +712,47 @@ function home(){
           SER='cnet';SEC=30;document.querySelectorAll('[data-sec]').forEach(function(y){y.classList.toggle('on',+y.getAttribute('data-sec')===30);});serNote();$('topic').scrollIntoView({block:'center'});toast('대본 쓰기를 누르세요');};});});};
     $('scriptBtn').onclick=function(){var t=$('topic').value.trim();if(!t){$('e1').textContent='주제를 적거나 추천에서 골라 주세요';return;}var b=this;b.disabled=true;b.innerHTML='<span class="spin">✍️</span> 대본 쓰는 중… (15초쯤)';
       api('/shorts/script',{topic:t,sec:SEC,angle:ANG,series:SER}).then(function(r){b.disabled=false;b.textContent='✍️ 대본 쓰기';if(!r.ok){$('e1').textContent=r.detail||r.error;return;}D=r.draft;F=r.files||{};editor();});};
+    $('avOpen').onclick=ava;
     ytBox();
     if(j.yt){stats(false);$('stRe').onclick=function(){stats(true);};}
   }).catch(function(){gate('서버에 연결하지 못했어요');});
 }
+var AV={voice:'Cherry',res:'480P'};try{AV.voice=localStorage.getItem('av-voice')||'Cherry';}catch(e){}
+function ava(){
+  $('main').innerHTML='<a href="#" id="avBack" class="note">← 숏츠 공방</a><div class="card"><h2>🗣 캐릭터가 말하기 <small style="font-weight:400;color:var(--ink2)">시험</small></h2><p class="note">그림 한 장 + 대사 → 입이 움직이는 영상. 얼굴 대신 캐릭터가 말하게. 한 번에 20초 미만, 만드는 데 5~10분.</p><div id="avFace"></div><p class="lbl">대사 (90자까지, 한국어)</p><textarea id="avText" maxlength="90" placeholder="예: 광저우에서 아메리카노 한 잔, 얼마일까요? 한국 돈으로 3천 원이 안 돼요."></textarea><p class="note" id="avLen"></p>'
+    +'<p class="lbl">목소리</p><div class="chips">'+[['Cherry','AI 여성'],['Ethan','AI 남성'],['mine','내 목소리']].map(function(v){return '<button class="chip'+(v[0]===AV.voice?' on':'')+'" data-av="'+v[0]+'">'+v[1]+'</button>';}).join('')+'</div>'
+    +'<p class="lbl">화질</p><div class="chips">'+[['480P','480P · 0.5위안/초'],['720P','720P · 0.9위안/초']].map(function(v){return '<button class="chip'+(v[0]===AV.res?' on':'')+'" data-ar="'+v[0]+'">'+v[1]+'</button>';}).join('')+'</div>'
+    +'<button class="big" id="avGo">🎬 말하는 영상 만들기</button><div class="err" id="avErr"></div><div id="avProg" class="note"></div><div id="avOut"></div></div><div class="card"><h2>만든 영상</h2><div id="avList" class="note">불러오는 중…</div></div>';
+  window.scrollTo(0,0);
+  $('avBack').onclick=function(e){e.preventDefault();home();};
+  var est=function(){var n=$('avText').value.trim().length;var s=Math.max(1,Math.round(n/5.5));$('avLen').textContent=n?n+'자 · 약 '+s+'초 · 약 '+(s*(AV.res==='720P'?0.9:0.5)).toFixed(1)+'위안':'';};
+  $('avText').oninput=est;
+  document.querySelectorAll('[data-av]').forEach(function(b){b.onclick=function(){AV.voice=b.getAttribute('data-av');try{localStorage.setItem('av-voice',AV.voice);}catch(e){}document.querySelectorAll('[data-av]').forEach(function(x){x.classList.toggle('on',x===b);});};});
+  document.querySelectorAll('[data-ar]').forEach(function(b){b.onclick=function(){AV.res=b.getAttribute('data-ar');document.querySelectorAll('[data-ar]').forEach(function(x){x.classList.toggle('on',x===b);});est();};});
+  $('avGo').onclick=avMake;
+  api('/shorts/avatar/state').then(function(r){if(!r.ok){$('avErr').textContent=r.detail||r.error;return;}avShow(r);if(r.pend)avWait(r.pend.task);});
+}
+function avShow(r){
+  var c=r.check,ck='';
+  if(c)ck=c.err?'점검 못 함: '+esc(c.err):c.pass?'✅ 점검 통과':'⚠️ 점검 불통과'+(c.humanoid?'':' (사람 모습 인식 안 됨)')+(c.msg?' — '+esc(c.msg):'')+' · 그래도 만들어 볼 수는 있어요';
+  $('avFace').innerHTML=(r.face?'<div style="display:flex;gap:10px;align-items:center"><img src="'+r.face+'" style="width:96px;height:96px;object-fit:cover;border-radius:10px"><div class="note" style="margin:0">'+ck+'<br><label class="chip" style="display:inline-block;margin-top:6px">그림 바꾸기<input type="file" accept="image/*" id="avPick" hidden></label></div></div>':'<label class="big" style="text-align:center;background:var(--ink)">🖼 캐릭터 그림 고르기<input type="file" accept="image/*" id="avPick" hidden></label><p class="note">정면 얼굴, 입이 보이게, 머리~가슴. 실제 사진 말고 일러스트.</p>')
+    +'<p class="note">오늘 '+r.used+'/'+r.cap+'초 사용</p>';
+  $('avPick').onchange=avPick;
+  $('avList').innerHTML=r.list&&r.list.length?r.list.map(function(x){return '<div style="margin:8px 0"><video src="'+x.url+'" controls playsinline preload="metadata" style="width:100%;max-height:420px;border-radius:10px;background:#000"></video><small>'+esc(x.text)+' · '+x.sec+'초 '+esc(x.res)+'</small> <a href="'+x.url+'" download="character.mp4">저장</a> · <a href="#" data-avdel="'+esc(x.k)+'">삭제</a></div>';}).join(''):'아직 없어요.';
+  document.querySelectorAll('[data-avdel]').forEach(function(a){a.onclick=function(e){e.preventDefault();if(!confirm('이 영상을 지울까요?'))return;api('/shorts/avatar/del',{k:a.getAttribute('data-avdel')}).then(function(r){if(r.ok)avShow(r);});};});
+}
+function avPick(){var f=this.files&&this.files[0];if(!f)return;$('avErr').textContent='';$('avFace').innerHTML='<p class="note"><span class="spin">🖼</span> 올리고 점검하는 중…</p>';
+  var u=URL.createObjectURL(f),im=new Image();im.onload=function(){var w=im.naturalWidth,h=im.naturalHeight,s=Math.min(1,1600/Math.max(w,h));if(Math.min(w,h)*s<400)s=400/Math.min(w,h);
+    var cv=document.createElement('canvas');cv.width=Math.round(w*s);cv.height=Math.round(h*s);cv.getContext('2d').drawImage(im,0,0,cv.width,cv.height);URL.revokeObjectURL(u);
+    api('/shorts/avatar/face',{image:cv.toDataURL('image/jpeg',0.92)}).then(function(r){if(!r.ok){$('avErr').textContent=r.detail||r.error;return;}avShow(r);});};
+  im.onerror=function(){$('avErr').textContent='그림을 열지 못했어요';};im.src=u;}
+function avMake(){var t=$('avText').value.trim();if(!t){$('avErr').textContent='대사를 적어 주세요';return;}var b=$('avGo');b.disabled=true;$('avErr').textContent='';$('avProg').textContent='음성 만들고 올리는 중…';
+  api('/shorts/avatar/make',{text:t,voice:AV.voice,res:AV.res}).then(function(r){if(!r.ok){b.disabled=false;$('avProg').textContent='';$('avErr').textContent=r.detail||r.error;return;}
+    $('avOut').innerHTML='<p class="note">먼저 들어 보기: <audio src="'+r.say+'" controls style="height:32px;vertical-align:middle"></audio></p>';$('avProg').textContent='접수됨 · '+r.sec+'초 · 약 '+r.won+'위안';avWait(r.task);});}
+function avWait(task){var b=$('avGo');if(b)b.disabled=true;var tick=function(){api('/shorts/avatar/poll',{task:task}).then(function(p){if(!$('avProg'))return;
+  if(p.status==='done'){$('avProg').textContent='완성!';if(b)b.disabled=false;api('/shorts/avatar/state').then(function(r){if(r.ok)avShow(r);});return;}
+  if(p.status==='failed'||p.status==='none'){if(b)b.disabled=false;$('avProg').textContent='';if(p.status==='failed')$('avErr').textContent='실패(과금 안 됨): '+(p.detail||'');return;}
+  $('avProg').innerHTML='<span class="spin">⏳</span> '+(p.status==='PENDING'?'차례 기다리는 중':'그리는 중')+(p.el?' · '+Math.floor(p.el/60)+'분 '+(p.el%60)+'초':'')+' — 화면을 닫아도 나중에 이어져요';setTimeout(tick,15000);}).catch(function(){setTimeout(tick,20000);});};tick();}
 function ago(t){var hh=(Date.now()-t)/3600e3;return hh<1?'방금':hh<48?Math.round(hh)+'시간 전':Math.round(hh/24)+'일 전';}
 function stats(fresh){var b=$('stBox');if(!b)return;b.textContent='불러오는 중…';
   api('/shorts/yt/stats',{fresh:fresh}).then(function(r){if(!r.ok){b.textContent=r.detail||r.error;return;}
