@@ -9,7 +9,7 @@ export const EDIT_HTML = String.raw`<!doctype html>
 <meta name="theme-color" content="#1664B0">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="편집실">
-<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="apple-touch-icon" href="/shorts-180.png"><link rel="icon" href="/shorts-192.png">
 <title>편집실</title>
 <style>
 :root{--sky:#1664B0;--bg:#EFE8DE;--card:#F7F2EA;--ink:#1A2330;--ink2:#5E6672;--line:#D9CEBD;--red:#D21624;--soft:#E6DCCB;--ok:#1F7A4D}

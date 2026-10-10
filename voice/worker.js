@@ -28,9 +28,12 @@ import { EDIT_HTML } from "./edit.js";
 import ICON180 from "./icon-180.png";
 import ICON192 from "./icon-192.png";
 import ICON512 from "./icon-512.png";
+import SH180 from "./shorts-180.png";
+import SH192 from "./shorts-192.png";
+import SH512 from "./shorts-512.png";
 
 // 박비서 홈 화면 아이콘(소유자 지정 일러스트) · PWA manifest
-const ICONS = { "/icon-180.png": ICON180, "/apple-touch-icon.png": ICON180, "/icon-192.png": ICON192, "/icon-512.png": ICON512 };
+const ICONS = { "/icon-180.png": ICON180, "/apple-touch-icon.png": ICON180, "/icon-192.png": ICON192, "/icon-512.png": ICON512, "/shorts-180.png": SH180, "/shorts-192.png": SH192, "/shorts-512.png": SH512 };
 const MANIFEST = JSON.stringify({
   name: "박비서", short_name: "박비서", start_url: "/", scope: "/", display: "standalone",
   background_color: "#EFE8DE", theme_color: "#1664B0",
