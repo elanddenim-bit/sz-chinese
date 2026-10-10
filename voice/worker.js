@@ -7,6 +7,7 @@
 //  POST /voice/tts            {code, text} → audio/mpeg (내 목소리로 읽기, R2 캐시)
 //  GET  /ping                 상태 확인
 //  POST /u · GET /usage · POST /usage/data   앱 사용량 기록·사용량판(주인 전용) (usage.js)
+//  GET /quest · POST /quest/state|new|check|honor · GET /quest/img|map|photo   🧭 주말 탐험 퀘스트 (quest.js)
 //  GET  /  ·  GET /agent      박비서(음성 비서) 화면 · 그 WebSocket — 서버가 도구 호출을 실행 (agent.js)
 // 시크릿: DASHSCOPE_API_KEY, DASHSCOPE_WS_HOST, ALLOWED_CODES
 // [필수] Anthropic 호출 없음 — 百炼(알리바바)만 사용
@@ -14,6 +15,7 @@
 
 import { AGENT_TOOLS, AGENT_PROMPT, AGENT_HTML, runTool } from "./agent.js";
 import { beacon, logUse, usageData, USAGE_HTML } from "./usage.js";
+import { questApi, questGet, QUEST_HTML } from "./quest.js";
 import ICON180 from "./icon-180.png";
 import ICON192 from "./icon-192.png";
 import ICON512 from "./icon-512.png";
@@ -63,6 +65,8 @@ export default {
       if (ICONS[url.pathname]) return new Response(ICONS[url.pathname], { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (url.pathname === "/manifest.webmanifest") return new Response(MANIFEST, { headers: { "content-type": "application/manifest+json; charset=utf-8", "cache-control": "public, max-age=3600" } });
       if (url.pathname === "/u" && req.method === "POST") return await beacon(req, env, ctx);
+      if (url.pathname === "/quest" && req.method === "GET") return new Response(QUEST_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
+      if (url.pathname.startsWith("/quest/") && req.method === "GET") return await questGet(req, env, url);
       if (url.pathname === "/usage" && req.method === "GET") return new Response(USAGE_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/" && req.method === "GET") return new Response(AGENT_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (req.method !== "POST") return json(req, { error: "not_found" }, 404);
@@ -72,6 +76,7 @@ export default {
       if (url.pathname === "/usage/data") return json(req, await usageData(env, b));
       if (!env.DASHSCOPE_API_KEY) return json(req, { error: "config", detail: "DASHSCOPE_API_KEY 시크릿 없음" }, 500);
       const h = await hash(String(b.code).trim());
+      if (url.pathname.startsWith("/quest/")) return json(req, await questApi(env, ctx, url.pathname, b, h));
       if (url.pathname === "/voice/enroll") return json(req, await enroll(env, h, b));
       if (url.pathname === "/voice/status") return json(req, await vstatus(env, h));
       if (url.pathname === "/voice/tts") return await tts(req, env, h, b);

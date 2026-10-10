@@ -14,8 +14,9 @@ export const APPS = {
   didi: { name: "디디 주소록", icon: "🚕", f: { copy_name: "이름 복사·디디 열기", copy_addr: "주소 복사", driver: "기사님 화면", route: "방문 동선", map: "지도 열기", save: "저장·편집", search: "검색" } },
   threepark: { name: "삼박네", icon: "🏡", f: { pg_home: "홈", pg_plan: "일정표", pg_photos: "사진 기록", pg_movie: "다큐", paint: "그림엽서", movie_make: "다큐 만들기", upload: "사진 올리기" } },
   spain: { name: "스페인 일정", icon: "🇪🇸", f: { pg_home: "일정 보기" } },
+  quest: { name: "주말 탐험", icon: "🧭", f: { new: "퀘스트 받기", done: "사진 인증 성공", fail: "인증 실패", honor: "그래도 인정" } },
 };
-const OWNER_SCOPED = new Set(["szcn", "rt", "pb"]); // 초대 코드별 앱 — 주인 것만 따로 보여 줌
+const OWNER_SCOPED = new Set(["szcn", "rt", "pb", "quest"]); // 초대 코드별 앱 — 주인 것만 따로 보여 줌
 
 const cnDay = (t = Date.now()) => new Date(t + 8 * 3600e3).toISOString().slice(0, 10);
 const ipHits = new Map();
@@ -182,7 +183,7 @@ function render(){
   h+='<div class="card"><h2>앱별 사용 <small>최근 7일 · 막대는 '+j.days+'일</small></h2>';
   Object.keys(j.apps).map(function(a){return [a,per[a]];}).sort(function(x,y){return y[1].cnt7-x[1].cnt7;}).forEach(function(e){
     var a=e[0],p=e[1],A=j.apps[a],d=p.cnt7-p.cntP,dt=p.cntP||p.cnt7?(d>0?'<span class="up">▲'+d+'</span>':d<0?'<span class="dn">▼'+(-d)+'</span>':'–'):'';
-    var unit=(a==='rt'||a==='pb')?'번 통화':'번 열기';
+    var unit=(a==='rt'||a==='pb')?'번 통화':a==='quest'?'번 활동':'번 열기';
     h+='<div class="app"><div class="nm">'+A.icon+' '+esc(A.name)+'</div><div class="num">'+p.cnt7+unit.replace('번',' 번')+' '+dt+'</div>'
      +'<div class="sub">'+(p.sec7?fmtMin(p.sec7)+' 사용':'')+'</div><div class="sub num">'+(p.cntP?'지난주 '+p.cntP:'')+'</div>'
      +spark(days.map(function(d){return p.byDay[d]||0;}))+'</div>';});
