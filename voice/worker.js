@@ -228,11 +228,12 @@ const TOOL_LABEL = { get_weather: "날씨 조회", convert_currency: "환율 계
 
 // ---------------- 내 목소리 (CosyVoice 음성 복제) ----------------
 const ttsModel = (env) => env.TTS_MODEL || "cosyvoice-v3.5-plus";
-async function ds(env, path, body, extra = {}) {
+async function ds(env, path, body, extra = {}, ms = 0) {
   const r = await fetch("https://" + host(env) + "/api/v1" + path, {
     method: body ? "POST" : "GET",
     headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json", ...extra },
     body: body ? JSON.stringify(body) : undefined,
+    ...(ms ? { signal: AbortSignal.timeout(ms) } : {}),
   });
   const t = await r.text();
   let j = {};
@@ -242,7 +243,7 @@ async function ds(env, path, body, extra = {}) {
 }
 // 百炼 임시 저장소(48시간)에 올리고 oss:// 주소를 받는다 — 베이징 서버가 외부 주소를 못 가져오는 문제를 피함
 async function tempUpload(env, model, bytes, name, mime) {
-  const p = (await ds(env, "/uploads?action=getPolicy&model=" + encodeURIComponent(model))).data || {};
+  const p = (await ds(env, "/uploads?action=getPolicy&model=" + encodeURIComponent(model), null, {}, 15000)).data || {};
   if (!p.upload_host || !p.upload_dir) throw err("upload", "임시 저장소 정책을 받지 못했습니다.");
   const key = p.upload_dir + "/" + name;
   const f = new FormData();
@@ -254,7 +255,7 @@ async function tempUpload(env, model, bytes, name, mime) {
   f.append("key", key);
   f.append("success_action_status", "200");
   f.append("file", new Blob([bytes], { type: mime }), name);
-  const r = await fetch(p.upload_host, { method: "POST", body: f });
+  const r = await fetch(p.upload_host, { method: "POST", body: f, signal: AbortSignal.timeout(30000) });
   if (!r.ok) throw err("upload", "임시 저장소 업로드 실패 " + r.status + ": " + (await r.text()).slice(0, 160));
   return "oss://" + key;
 }
@@ -265,29 +266,46 @@ function b64bytes(b64) {
   return u;
 }
 async function enroll(env, h, b) {
-  const bytes = b64bytes(b.audio);
-  if (bytes.length < 20000) throw err("too_short", "녹음이 너무 짧습니다(10초 이상).", 400);
-  if (bytes.length > 9 * 1024 * 1024) throw err("too_big", "녹음 파일이 너무 큽니다.", 400);
-  const mime = /mp4|m4a|aac/.test(b.mime || "") ? "audio/mp4" : /wav/.test(b.mime || "") ? "audio/wav" : /mpeg|mp3/.test(b.mime || "") ? "audio/mpeg" : "audio/mp4";
-  const ext = mime === "audio/wav" ? "wav" : mime === "audio/mpeg" ? "mp3" : "m4a";
-  const ossUrl = await tempUpload(env, "voice-enrollment", bytes, "myvoice-" + h + "-" + Date.now() + "." + ext, mime);
-  // 이전 목소리는 지운다(계정당 개수 제한)
-  const old = await env.KV.get("voice:" + h);
-  if (old) { try { await ds(env, "/services/audio/tts/customization", { model: "voice-enrollment", input: { action: "delete_voice", voice_id: old } }); } catch {} }
-  const j = await ds(env, "/services/audio/tts/customization",
-    { model: "voice-enrollment", input: { action: "create_voice", target_model: ttsModel(env), prefix: "sz" + h.slice(0, 6), url: ossUrl } },
-    { "X-DashScope-OssResourceResolve": "enable" });
-  const voice = j.output && j.output.voice_id;
-  if (!voice) throw err("enroll", "목소리 ID를 받지 못했습니다: " + JSON.stringify(j).slice(0, 160));
-  await env.KV.put("voice:" + h, voice);
-  return { ok: true, voice, model: ttsModel(env) };
+  // 단계별 시간 기록 — 실패하면 어느 단계에서 멈췄는지 KV voice:last:<해시> 에 남겨 /voice/status 로 보여 줌
+  const t0 = Date.now(), trail = [];
+  const mark = async (step, extra) => { trail.push(step + " " + ((Date.now() - t0) / 1000).toFixed(1) + "s"); await env.KV.put("voice:last:" + h, JSON.stringify({ at: t0, trail, ...(extra || {}) }), { expirationTtl: 7 * 86400 }).catch(() => {}); };
+  await mark("받음");
+  try {
+    const bytes = b64bytes(b.audio);
+    if (bytes.length < 20000) throw err("too_short", "녹음이 너무 짧습니다(10초 이상).", 400);
+    if (bytes.length > 9 * 1024 * 1024) throw err("too_big", "녹음 파일이 너무 큽니다.", 400);
+    const mime = /mp4|m4a|aac/.test(b.mime || "") ? "audio/mp4" : /wav/.test(b.mime || "") ? "audio/wav" : /mpeg|mp3/.test(b.mime || "") ? "audio/mpeg" : "audio/mp4";
+    const ext = mime === "audio/wav" ? "wav" : mime === "audio/mpeg" ? "mp3" : "m4a";
+    let ossUrl = "";
+    for (let k = 0; ; k++) {
+      try { ossUrl = await tempUpload(env, "voice-enrollment", bytes, "myvoice-" + h + "-" + Date.now() + "." + ext, mime); break; }
+      catch (e) { await mark("업로드 실패(" + (e.name === "TimeoutError" ? "시간 초과" : String(e.message || e).slice(0, 60)) + ")"); if (k >= 1) throw err("upload", "알리바바 임시 저장소로 녹음을 올리지 못했어요: " + (e.name === "TimeoutError" ? "시간 초과" : e.message)); }
+    }
+    await mark("업로드");
+    // 이전 목소리는 지운다(계정당 개수 제한)
+    const old = await env.KV.get("voice:" + h);
+    if (old) { try { await ds(env, "/services/audio/tts/customization", { model: "voice-enrollment", input: { action: "delete_voice", voice_id: old } }, {}, 15000); } catch {} await mark("이전 목소리 정리"); }
+    const j = await ds(env, "/services/audio/tts/customization",
+      { model: "voice-enrollment", input: { action: "create_voice", target_model: ttsModel(env), prefix: "sz" + h.slice(0, 6), url: ossUrl } },
+      { "X-DashScope-OssResourceResolve": "enable" }, 45000);
+    const voice = j.output && j.output.voice_id;
+    if (!voice) throw err("enroll", "목소리 ID를 받지 못했습니다: " + JSON.stringify(j).slice(0, 160));
+    await env.KV.put("voice:" + h, voice);
+    await mark("등록 완료", { ok: true, voice });
+    return { ok: true, voice, model: ttsModel(env) };
+  } catch (e) {
+    const msg = e.name === "TimeoutError" ? "알리바바 응답 시간 초과" : String(e.message || e);
+    await mark("실패", { ok: false, msg: msg.slice(0, 200) });
+    throw e.name === "TimeoutError" ? err("timeout", msg + " (" + trail.join(" → ") + ")", 504) : e;
+  }
 }
 async function vstatus(env, h) {
   const voice = await env.KV.get("voice:" + h);
-  if (!voice) return { voice: null };
+  const last = await env.KV.get("voice:last:" + h, "json");
+  if (!voice) return { voice: null, last };
   try {
     const j = await ds(env, "/services/audio/tts/customization", { model: "voice-enrollment", input: { action: "query_voice", voice_id: voice } });
-    return { voice, status: (j.output && j.output.status) || "UNKNOWN" };
+    return { voice, status: (j.output && j.output.status) || "UNKNOWN", last };
   } catch (e) { return { voice, status: "UNKNOWN", detail: String(e.message).slice(0, 120) }; }
 }
 

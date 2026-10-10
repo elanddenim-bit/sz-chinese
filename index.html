@@ -8141,9 +8141,16 @@ async function mvRecord(){
     if(btn){btn.disabled=true;btn.textContent='목소리 등록 중…';}
     var b64=await new Promise(function(ok){var fr=new FileReader();fr.onload=function(){ok(String(fr.result).split(',')[1]);};fr.readAsDataURL(blob);});
     try{
-      var r=await vPost('/voice/enroll',{audio:b64,mime:blob.type},60000);
+      if(btn)btn.textContent='목소리 등록 중… (최대 2~3분)';
+      var r=await vPost('/voice/enroll',{audio:b64,mime:blob.type},170000);
       var m=mvSt();m.voice=r.voice;m.st='';saveState();renderPron();setTimeout(mvCheck,8000);
-    }catch(e){mvMsg('등록 실패: '+e.message);if(btn){btn.disabled=false;btn.textContent='● 다시 녹음';}}
+    }catch(e){
+      var why=e.name==='AbortError'||/abort/i.test(e.message||'')?'응답이 너무 늦어 끊겼습니다':e.message;
+      // 서버가 남긴 단계 기록을 확인 — 끊긴 뒤에 서버에선 성공했을 수도 있음
+      var st=null;try{st=await vPost('/voice/status',{},15000);}catch(x){}
+      if(st&&st.voice&&st.last&&st.last.ok){var m2=mvSt();m2.voice=st.voice;m2.st='';saveState();renderPron();setTimeout(mvCheck,3000);mvMsg('응답은 늦었지만 등록은 됐어요. 상태 확인 중…');return;}
+      var tr=st&&st.last&&st.last.trail&&(Date.now()-st.last.at<300000)?' · 서버 기록: '+st.last.trail.join(' → ')+(st.last.msg?' ('+st.last.msg+')':''):' · 서버까지 녹음이 도착하지 않았습니다(폰→서버 업로드가 느림)';
+      mvMsg('등록 실패: '+why+tr);if(btn){btn.disabled=false;btn.textContent='● 다시 녹음';}}
   };
   rec.start(500);
   if(btn)btn.textContent='■ 녹음 끝내기';
