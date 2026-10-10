@@ -215,10 +215,10 @@ export async function questGet(req, env, url, synth) {
     const head = { "content-type": "audio/mpeg", "cache-control": "private, max-age=31536000" };
     const hit = await env.R2.get(key);
     if (hit) return new Response(hit.body, { headers: head });
-    let mp3 = null;
-    try { mp3 = await synth(env, env.QUEST_VOICE || "longxiaochun_v2", t, env.QUEST_TTS_MODEL || "cosyvoice-v2"); } catch {}
-    if (!mp3) { const mine = await env.KV.get("voice:" + h); if (mine) try { mp3 = await synth(env, mine, t); } catch {} }
-    if (!mp3) return new Response("tts failed", { status: 502 });
+    let mp3 = null, why = [];
+    try { mp3 = await synth(env, env.QUEST_VOICE || "longxiaochun_v2", t, env.QUEST_TTS_MODEL || "cosyvoice-v2"); } catch (e) { why.push("기본음성: " + String(e.message || e).slice(0, 120)); }
+    if (!mp3) { const mine = await env.KV.get("voice:" + h); if (!mine) why.push("내 목소리 미등록"); else try { mp3 = await synth(env, mine, t); } catch (e) { why.push("내 목소리: " + String(e.message || e).slice(0, 120)); } }
+    if (!mp3) return new Response(why.join(" / ") || "tts failed", { status: 502, headers: { "content-type": "text/plain; charset=utf-8" } });
     await env.R2.put(key, mp3, { httpMetadata: { contentType: "audio/mpeg" } });
     return new Response(mp3, { headers: head });
   }
@@ -353,6 +353,7 @@ function render(){
   h+='<div class="card"><p class="lbl">배지 '+Object.keys(have).length+' / '+S.all.length+'</p><div class="badges">'+S.all.map(function(b){return '<div class="bd'+(have[b.k]?' on':'')+'" title="'+esc(b.desc)+'"><i>'+b.icon+'</i>'+esc(b.name)+'</div>';}).join('')+'</div></div>';
   if(S.hist&&S.hist.length){h+='<div class="card"><p class="lbl">탐험 기록 '+S.hist.length+'곳</p><div class="hist">'+S.hist.map(function(x){return '<figure>'+(x.imgUrl?'<img loading="lazy" src="'+esc(x.imgUrl)+'" alt="" onerror="this.style.visibility=\'hidden\'">':'<div class="noimg">'+(CATI[x.cat]||'📍')+'</div>')+esc(x.name)+'<br>'+esc(x.date.slice(5))+' · +'+x.pts+'</figure>';}).join('')+'</div></div>';}
   $('main').innerHTML=h;bind();
+  document.querySelectorAll('[data-say]').forEach(function(b){prefetchSay(b.getAttribute('data-say'),b.getAttribute('data-url'));});
 }
 function bind(){
   document.querySelectorAll('[data-mood]').forEach(function(b){b.onclick=function(){MOOD=b.getAttribute('data-mood');try{localStorage.setItem('qs-mood',MOOD);}catch(e){}document.querySelectorAll('[data-mood]').forEach(function(x){x.classList.toggle('on',x===b||x.getAttribute('data-mood')===MOOD);});};});
@@ -363,18 +364,35 @@ function bind(){
   document.querySelectorAll('[data-copy]').forEach(function(b){b.onclick=function(){var t=b.getAttribute('data-copy');(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){toast('복사됨 · 디디 목적지에 붙여넣기');},function(){prompt('복사해 주세요',t);});};});
   document.querySelectorAll('input[data-q]').forEach(function(inp){inp.onchange=function(){if(inp.files&&inp.files[0])shoot(inp.getAttribute('data-q'),inp.files[0]);inp.value='';};});
 }
-// 듣기: 탭 순간 바로 Audio.play (iOS 는 탭 안에서 시작해야 소리가 남) → 서버 음성 실패 시 브라우저 중국어 음성
+// 듣기: 화면이 뜰 때 음성을 미리 받아 둔다(iOS 는 탭 안에서 바로 play 해야 소리가 남)
+// 순서: ① 서버 CosyVoice(/quest/say) ② 실전 중국어와 같은 Azure 음성(Supabase tts) ③ 브라우저 음성
+var SB_TTS='https://qmxcfsozzrcdakkiozts.supabase.co/functions/v1/tts',VC={},VWHY={};
+function blobOk(r,tag){if(!r.ok)return r.text().then(function(x){throw new Error(tag+' '+r.status+(x?': '+x.slice(0,80):''));});return r.blob().then(function(b){if(!b||b.size<400)throw new Error(tag+' 빈 음성');return URL.createObjectURL(b);});}
+function prefetchSay(t,url){
+  if(VC[t])return VC[t];
+  VC[t]=(url?fetch(url).then(function(r){return blobOk(r,'서버');}):Promise.reject(new Error('서버 주소 없음')))
+   .catch(function(e1){VWHY[t]=e1.message;return fetch(SB_TTS,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:CODE,text:t})}).then(function(r){return blobOk(r,'Azure');}).catch(function(e2){VWHY[t]+=' · '+e2.message;return null;});})
+   .then(function(u){VC[t]=u||'none';return u;});
+  return VC[t];
+}
 var AUD=null;
 function webSay(t){try{if(!window.speechSynthesis)return false;var u=new SpeechSynthesisUtterance(t);u.lang='zh-CN';u.rate=.85;var vs=speechSynthesis.getVoices()||[];for(var i=0;i<vs.length;i++){if(/^zh[-_](CN|Hans)/i.test(vs[i].lang)){u.voice=vs[i];break;}}if(speechSynthesis.speaking)speechSynthesis.cancel();setTimeout(function(){speechSynthesis.speak(u);},60);return true;}catch(e){return false;}}
-function sayIt(b){
-  var t=b.getAttribute('data-say'),url=b.getAttribute('data-url');
-  if(!url){if(!webSay(t))toast('이 기기에서 음성을 낼 수 없어요');return;}
-  b.textContent='⏳';
-  try{if(AUD){AUD.pause();}AUD=new Audio(url);AUD.setAttribute('playsinline','');
-    AUD.onended=function(){b.textContent='🔊';};
-    AUD.onerror=function(){b.textContent='🔊';if(!webSay(t))toast('음성을 불러오지 못했어요');};
-    var p=AUD.play();if(p&&p.then)p.then(function(){b.textContent='🔈';},function(){b.textContent='🔊';if(!webSay(t))toast('음성을 재생하지 못했어요. 무음 모드인지 확인해 주세요');});
+function playUrl(u,b,t){
+  try{if(AUD)AUD.pause();AUD=new Audio(u);AUD.setAttribute('playsinline','');AUD.onended=function(){b.textContent='🔊';};
+    var p=AUD.play();b.textContent='🔈';
+    if(p&&p.then)p.then(null,function(e){b.textContent='🔊';webSay(t);toast('재생이 막혔어요('+(e&&e.name||'')+'). 무음 스위치를 확인하고 다시 눌러 주세요');});
   }catch(e){b.textContent='🔊';webSay(t);}
+}
+function sayIt(b){
+  var t=b.getAttribute('data-say'),url=b.getAttribute('data-url'),v=VC[t];
+  if(typeof v==='string'){if(v!=='none')return playUrl(v,b,t);webSay(t);toast('음성 서버 실패 → 기기 음성으로: '+(VWHY[t]||''));return;}
+  // 아직 준비 중: 탭 안에서 오디오를 먼저 깨워 두고, 받는 대로 같은 요소로 재생
+  try{if(AUD)AUD.pause();AUD=new Audio('data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA');AUD.setAttribute('playsinline','');var p0=AUD.play();if(p0&&p0.catch)p0.catch(function(){});}catch(e){}
+  b.textContent='⏳';
+  prefetchSay(t,url).then(function(u){
+    if(!u){b.textContent='🔊';webSay(t);toast('음성 서버 실패 → 기기 음성으로: '+(VWHY[t]||''));return;}
+    try{AUD.src=u;AUD.onended=function(){b.textContent='🔊';};var p=AUD.play();b.textContent='🔈';if(p&&p.then)p.then(null,function(){b.textContent='🔊';toast('준비됐어요. 🔊 를 한 번 더 눌러 주세요');});}catch(e){b.textContent='🔊';}
+  });
 }
 function gen(){
   if(BUSY)return;var btns=document.querySelectorAll('#gen'),er=document.querySelectorAll('#gerr');
