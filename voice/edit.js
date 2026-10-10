@@ -55,7 +55,10 @@ var ANGS=[['mix','골고루'],['compare','🇰🇷 한국이랑 비교'],['price
 function $(i){return document.getElementById(i);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function toast(t){var d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(function(){d.remove();},3200);}
-function api(p,b){b=b||{};b.code=CODE;return fetch(p,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json().catch(function(){return {error:'서버 응답 오류 '+r.status};});});}
+// 네트워크가 잠깐 끊기면(iOS 'Load failed') 두 번까지 다시 시도하고, 그래도 안 되면 throw 대신 오류 객체로 — 렌더 전체가 멈추지 않게
+function api(p,b,tries){b=b||{};b.code=CODE;tries=tries==null?2:tries;
+  return fetch(p,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json().catch(function(){return {error:'서버 응답 오류 '+r.status};});},
+    function(e){if(tries>0)return sleep(1500*(3-tries)).then(function(){return api(p,b,tries-1);});return {error:'network',detail:'네트워크가 끊겼어요('+(e&&e.message||e)+'). 와이파이·데이터를 확인하고 다시 눌러 주세요.'};});}
 function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
 function fmt(s){return (Math.round(s*10)/10).toFixed(1);}
 var QID=(location.search.match(/[?&]id=([^&]+)/)||[])[1]||'';
