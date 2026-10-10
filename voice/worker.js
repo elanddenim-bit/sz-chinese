@@ -22,6 +22,7 @@ import { beacon, logUse, usageData, USAGE_HTML } from "./usage.js";
 import { questApi, questGet, QUEST_HTML } from "./quest.js";
 import { mysteryApi, mysteryGet, MYSTERY_HTML } from "./mystery.js";
 import { timecamApi, timecamGet, TIMECAM_HTML } from "./timecam.js";
+import { HUB_HTML } from "./hub.js";
 import { shortsApi, shortsSave, shortsFile, ytCallback, legalPage, SHORTS_HTML } from "./shorts.js";
 import { EDIT_HTML } from "./edit.js";
 import ICON180 from "./icon-180.png";
@@ -83,6 +84,7 @@ export default {
       if (url.pathname.startsWith("/quest/") && req.method === "GET") return await questGet(req, env, url, synth);
       if (url.pathname === "/mystery" && req.method === "GET") return new Response(MYSTERY_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname.startsWith("/mystery/") && req.method === "GET") return await mysteryGet(req, env, url);
+      if (url.pathname === "/hub" && req.method === "GET") return new Response(HUB_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/timecam" && req.method === "GET") return new Response(TIMECAM_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname.startsWith("/timecam/") && req.method === "GET") return await timecamGet(req, env, url);
       if (url.pathname === "/usage" && req.method === "GET") return new Response(USAGE_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
