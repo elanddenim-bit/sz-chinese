@@ -798,8 +798,15 @@ function krCard(){var b=$('krBox');if(!b)return;b.innerHTML='<p class="note">확
       +'<div class="mini" style="margin-top:8px"><button id="krRec">'+(r.voice?'● 다시 녹음':'● 녹음 시작')+'</button>'+(r.voice&&r.status==='OK'?'<button id="krTry">▶ 들어보기</button>':'')+'</div><div class="err" id="krErr"></div>';
     $('krRec').onclick=krRecord;if($('krTry'))$('krTry').onclick=krTry;
     if(r.voice&&r.status!=='OK'&&r.status!=='UNDEPLOYED')setTimeout(krCard,8000);});}
-function krTry(){var b=this;b.disabled=true;b.textContent='만드는 중…';
-  api('/shorts/voice/try',{text:($('avText')&&$('avText').value.trim())||''}).then(function(r){b.disabled=false;b.textContent='▶ 들어보기';if(!r.ok){$('krErr').textContent=r.detail||r.error;return;}var a=new Audio(r.url);a.play().catch(function(){});});}
+function krTry(){var b=this,t0=Date.now();b.disabled=true;
+  // iOS: 서버 응답을 기다린 뒤 새 Audio 를 재생하면 막힘 → 탭 순간 같은 요소를 무음으로 깨워 둠
+  var a=new Audio();a.setAttribute('playsinline','');try{a.src='data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA';var p0=a.play();if(p0&&p0.catch)p0.catch(function(){});}catch(e){}
+  var tk=setInterval(function(){b.textContent='만드는 중… '+Math.round((Date.now()-t0)/1000)+'초';},500);
+  api('/shorts/voice/try',{text:($('avText')&&$('avText').value.trim())||''}).then(function(r){clearInterval(tk);b.disabled=false;b.textContent='▶ 들어보기';
+    if(!r.ok){$('krErr').textContent=r.detail||r.error;return;}
+    $('krErr').innerHTML='<audio src="'+r.url+'" controls playsinline style="width:100%;margin-top:6px"></audio><span class="note">'+(r.which==='kr'?'한국어 목소리':'공부용 목소리')+' · '+Math.round((Date.now()-t0)/1000)+'초</span>';
+    a.src=r.url;var p=a.play();if(p&&p.catch)p.catch(function(){toast('▶ 재생 버튼을 눌러 주세요');});
+  }).catch(function(e){clearInterval(tk);b.disabled=false;b.textContent='▶ 들어보기';$('krErr').textContent='연결 실패: '+(e.message||e);});}
 async function krRecord(){var btn=$('krRec');if(KREC){KREC.stop();return;}
   if(!window.MediaRecorder){$('krErr').textContent='이 브라우저는 녹음을 못 해요';return;}
   var stream;try{stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});}catch(e){$('krErr').textContent='마이크 권한이 필요해요';return;}
