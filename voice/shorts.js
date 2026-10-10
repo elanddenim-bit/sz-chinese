@@ -391,7 +391,7 @@ async function avaDoc(env, h) {
   return d;
 }
 async function avaView(env, d) {
-  return { ok: true, face: d.face ? await fileUrl(env, d.face) : "", check: d.check || null, pend: d.pend || null, used: d.sec || 0, cap: avaCap(env),
+  return { ok: true, face: d.face ? (await fileUrl(env, d.face)) + "&v=" + (d.faceAt || 0) : "", // v: 같은 이름(face.jpg)이라 브라우저 캐시에 옛 그림이 남는 것 방지 check: d.check || null, pend: d.pend || null, used: d.sec || 0, cap: avaCap(env),
     list: await Promise.all((d.list || []).map(async (x) => ({ ...x, url: await fileUrl(env, x.k) }))) };
 }
 async function avaFace(env, b, h) {
@@ -405,7 +405,7 @@ async function avaFace(env, b, h) {
   await env.R2.delete(["jpg", "png", "webp"].map((e) => pre + e)).catch(() => {});
   await env.R2.put(pre + ext, u8, { httpMetadata: { contentType: m[1] } });
   const d = await avaDoc(env, h);
-  d.face = pre + ext; d.faceMime = m[1]; d.check = null;
+  d.face = pre + ext; d.faceMime = m[1]; d.check = null; d.faceAt = Date.now();
   // 사전 점검(0.004위안) — 통과 못 해도 만들기는 시도할 수 있게 결과만 보여 줌
   try {
     const oss = await ossUp(env, "wan2.2-s2v-detect", u8, "face-" + Date.now() + "." + ext, m[1]);
