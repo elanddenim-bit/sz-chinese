@@ -9,6 +9,7 @@
 //  POST /u · GET /usage · POST /usage/data   앱 사용량 기록·사용량판(주인 전용) (usage.js)
 //  GET /quest · POST /quest/state|new|check|honor · GET /quest/img|map|photo   🧭 주말 탐험 퀘스트 (quest.js)
 //  GET /mystery · POST /mystery/state|new|check|skip|hint|accuse · GET /mystery/img   🕵️ 광저우 미스터리 (mystery.js)
+//  GET /timecam · POST /timecam/list|make|poll · GET /timecam/img   🕰 타임머신 카메라 (timecam.js)
 //  GET /shorts · POST /shorts/* · GET /shorts/file · GET /shorts/yt/cb   🎬 숏츠 공방 (shorts.js, 주인 전용)
 //  GET /edit   🎥 편집실 — 내가 찍은 클립으로 숏츠 (edit.js, 계획은 POST /shorts/plan)
 //  GET  /  ·  GET /agent      박비서(음성 비서) 화면 · 그 WebSocket — 서버가 도구 호출을 실행 (agent.js)
@@ -20,6 +21,7 @@ import { AGENT_TOOLS, AGENT_PROMPT, AGENT_HTML, runTool } from "./agent.js";
 import { beacon, logUse, usageData, USAGE_HTML } from "./usage.js";
 import { questApi, questGet, QUEST_HTML } from "./quest.js";
 import { mysteryApi, mysteryGet, MYSTERY_HTML } from "./mystery.js";
+import { timecamApi, timecamGet, TIMECAM_HTML } from "./timecam.js";
 import { shortsApi, shortsSave, shortsFile, ytCallback, legalPage, SHORTS_HTML } from "./shorts.js";
 import { EDIT_HTML } from "./edit.js";
 import ICON180 from "./icon-180.png";
@@ -81,6 +83,8 @@ export default {
       if (url.pathname.startsWith("/quest/") && req.method === "GET") return await questGet(req, env, url, synth);
       if (url.pathname === "/mystery" && req.method === "GET") return new Response(MYSTERY_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname.startsWith("/mystery/") && req.method === "GET") return await mysteryGet(req, env, url);
+      if (url.pathname === "/timecam" && req.method === "GET") return new Response(TIMECAM_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
+      if (url.pathname.startsWith("/timecam/") && req.method === "GET") return await timecamGet(req, env, url);
       if (url.pathname === "/usage" && req.method === "GET") return new Response(USAGE_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/" && req.method === "GET") return new Response(AGENT_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (req.method !== "POST") return json(req, { error: "not_found" }, 404);
@@ -92,6 +96,7 @@ export default {
       const h = await hash(String(b.code).trim());
       if (url.pathname.startsWith("/quest/")) return json(req, await questApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/mystery/")) return json(req, await mysteryApi(env, ctx, url.pathname, b, h));
+      if (url.pathname.startsWith("/timecam/")) return json(req, await timecamApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/shorts/")) {
         const out = await shortsApi(env, ctx, url.pathname, b, h, synth);
         const ev = { "/shorts/script": "script", "/shorts/yt/upload": "upload", "/shorts/ideas": "ideas", "/shorts/plan": "plan", "/shorts/asr": "asr" }[url.pathname];
