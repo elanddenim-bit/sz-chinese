@@ -305,10 +305,20 @@ export async function ytCallback(env, url) {
   const r = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ code, client_id: env.YT_CLIENT_ID, client_secret: env.YT_CLIENT_SECRET, redirect_uri: ORIGIN + "/shorts/yt/cb", grant_type: "authorization_code" }) });
   const j = await r.json().catch(() => ({}));
   if (!j.refresh_token) return page("토큰을 받지 못했어요: " + String(j.error_description || j.error || r.status).replace(/[<>&]/g, ""));
-  let channel = "";
-  try { const c = await (await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", { headers: { authorization: "Bearer " + j.access_token } })).json(); channel = (c.items && c.items[0] && c.items[0].snippet.title) || ""; } catch {}
-  await env.KV.put("yt:" + h, JSON.stringify({ refresh: j.refresh_token, channel, at: Date.now() }));
-  return page("✅ 유튜브 채널 <b>" + channel.replace(/[<>&]/g, "") + "</b> 연결됐어요.");
+  const ch = await ytChannel(j.access_token);
+  await env.KV.put("yt:" + h, JSON.stringify({ refresh: j.refresh_token, channel: ch.title || "", chId: ch.id || "", scope: j.scope || "", at: Date.now() }));
+  if (ch.title) return page("✅ 유튜브 채널 <b>" + ch.title.replace(/[<>&]/g, "") + "</b> 연결됐어요.");
+  return page("⚠️ 로그인은 됐지만 채널을 찾지 못했어요.<br><small>" + ch.why.replace(/[<>&]/g, "") + "</small><br><br>로그인할 때 <b>채널 이름이 적힌 계정</b>을 고르고, 권한 체크박스를 <b>전부</b> 체크한 뒤 다시 연결해 주세요.");
+}
+async function ytChannel(token) {
+  try {
+    const r = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", { headers: { authorization: "Bearer " + token } });
+    const c = await r.json().catch(() => ({}));
+    if (!r.ok) return { why: "채널 조회 " + r.status + ": " + ((c.error && c.error.message) || "").slice(0, 160) };
+    const it = c.items && c.items[0];
+    if (!it) return { why: "이 구글 계정에는 유튜브 채널이 없어요(브랜드 계정 채널이면 로그인 때 그 계정을 골라야 해요)." };
+    return { title: it.snippet.title, id: it.id };
+  } catch (e) { return { why: String(e.message || e).slice(0, 160) }; }
 }
 async function ytToken(env, h) {
   ytCfg(env);
@@ -322,7 +332,15 @@ async function ytToken(env, h) {
 async function ytStatus(env, h) {
   if (!env.YT_CLIENT_ID || !env.YT_CLIENT_SECRET) return { ok: true, config: false };
   const y = await env.KV.get("yt:" + h, "json");
-  return { ok: true, config: true, connected: !!y, channel: y && y.channel };
+  if (!y) return { ok: true, config: true, connected: false };
+  if (y.channel) return { ok: true, config: true, connected: true, channel: y.channel };
+  // 이름이 비어 있으면 지금 다시 확인
+  try {
+    const { token } = await ytToken(env, h);
+    const ch = await ytChannel(token);
+    if (ch.title) { y.channel = ch.title; y.chId = ch.id; await env.KV.put("yt:" + h, JSON.stringify(y)); return { ok: true, config: true, connected: true, channel: ch.title }; }
+    return { ok: true, config: true, connected: true, channel: "", why: ch.why };
+  } catch (e) { return { ok: true, config: true, connected: false, why: String(e.message || e) }; }
 }
 async function ytUpload(env, b, h) {
   const id = String(b.id || "");
@@ -447,7 +465,8 @@ function home(){
 function ytBox(){
   api('/shorts/yt/status').then(function(y){var b=$('ytBox');if(!b)return;
     if(!y.config){b.innerHTML='아직 유튜브 앱 설정(시크릿 2개)이 없어요. 설정하면 여기서 바로 연결돼요.';return;}
-    if(y.connected){b.innerHTML='✅ <b>'+esc(y.channel||'채널')+'</b> 연결됨 <button class="chip" id="ytRe" style="margin-left:6px">다시 연결</button>';}
+    if(y.connected&&y.channel){b.innerHTML='✅ <b>'+esc(y.channel)+'</b> 연결됨 <button class="chip" id="ytRe" style="margin-left:6px">다시 연결</button>';}
+    else if(y.connected){b.innerHTML='⚠️ 로그인은 됐지만 채널을 못 찾았어요.<br><small>'+esc(y.why||'')+'</small><button class="big" id="ytRe">▶ 다시 연결 (채널 계정 고르기·권한 전부 체크)</button>';}
     else b.innerHTML='<button class="big" id="ytRe">▶ 유튜브 채널 연결</button>';
     $('ytRe').onclick=function(){api('/shorts/yt/start').then(function(r){if(r.url)location.href=r.url;else toast(r.detail||r.error);});};
   });
