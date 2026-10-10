@@ -209,10 +209,10 @@ async function update(env, b, h) {
   if (Array.isArray(u.tags)) d.tags = u.tags.map((t) => String(t).slice(0, 30)).slice(0, 10);
   if (Array.isArray(u.scenes)) d.scenes = u.scenes.slice(0, 15).map((s, i) => {
     const o = { ...(d.scenes[i] || {}), cap: String(s.cap || "").slice(0, 30), say: String(s.say || "").slice(0, 160), img: String(s.img || "").slice(0, 400), move: String(s.move || "").slice(0, 160) };
-    if (d.kind === "mine") { o.clip = Math.max(0, Math.min(19, Math.round(Number(s.clip) || 0))); o.s = Math.max(0, Number(s.s) || 0); o.e = Math.max(o.s + 0.3, Number(s.e) || o.s + 2); }
+    if (d.kind === "mine") { o.clip = Math.max(0, Math.min(19, Math.round(Number(s.clip) || 0))); o.s = Math.max(0, Number(s.s) || 0); o.e = Math.max(o.s + 0.3, Number(s.e) || o.s + 2); o.sp = [0.5, 1, 1.5, 2].includes(Number(s.sp)) ? Number(s.sp) : 1; }
     return o;
   });
-  if (u.opts && typeof u.opts === "object") d.opts = { fit: u.opts.fit === "full" ? "full" : "crop", orig: [0, 0.3, 1].includes(Number(u.opts.orig)) ? Number(u.opts.orig) : 0.3, narr: u.opts.narr !== false, subs: u.opts.subs !== false, voice: ["Cherry", "Ethan", "mine", "rec"].includes(u.opts.voice) ? u.opts.voice : "Cherry" };
+  if (u.opts && typeof u.opts === "object") d.opts = { fit: u.opts.fit === "full" ? "full" : "crop", orig: [0, 0.3, 1].includes(Number(u.opts.orig)) ? Number(u.opts.orig) : 0.3, narr: u.opts.narr !== false, subs: u.opts.subs !== false, voice: ["Cherry", "Ethan", "mine", "rec"].includes(u.opts.voice) ? u.opts.voice : "Cherry", end: u.opts.end !== false, tag: typeof u.opts.tag === "string" ? u.opts.tag.slice(0, 20) : "📍 광저우 广州", bgv: [0, 0.07, 0.12, 0.22].includes(Number(u.opts.bgv)) ? Number(u.opts.bgv) : 0.12 };
   if (b.yt) d.yt = b.yt;
   await env.KV.put(draftKey(h, id), JSON.stringify(d), { expirationTtl: 120 * 86400 });
   if (u.title || b.yt) {
