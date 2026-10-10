@@ -286,22 +286,26 @@ async function render0(dry){
   readForm();
   if(RUN){RUN.stop=true;return;}
   var ac=getAC();
-  CLIPS.forEach(function(c){try{c.v.muted=false;var p0=c.v.play();if(p0&&p0.then)p0.then(function(){c.v.pause();},function(){});}catch(e){}});
+  // 구간마다 쓸 영상 요소: 같은 클립이 연달아 나오면 두 번째 요소(v2)를 번갈아 써서, 다음 구간을 미리 찾아 둘 수 있게
+  var EL=[];D.scenes.forEach(function(sc,k){var c=CLIPS[sc.clip];if(!c){EL[k]=null;return;}var prev=k>0&&D.scenes[k-1].clip===sc.clip?EL[k-1]:null;
+    if(prev===c.v){if(!c.v2)c.v2=mkVideo(c.url);EL[k]=c.v2;}else EL[k]=c.v;});
+  CLIPS.forEach(function(c){[c.v,c.v2].forEach(function(v){if(!v)return;try{v.muted=false;var p0=v.play();if(p0&&p0.then)p0.then(function(){v.pause();},function(){});}catch(e){}});});
   if(!dry)api('/shorts/update',{id:D.id,draft:draftBody()});
   var out=$('out'),btn=$('renderBtn'),pb=$('pvAll'),me=dry?pb:btn,other=dry?btn:pb;
   var run=RUN={stop:false};other.disabled=true;me.textContent='■ 멈추기';
   var pv=$('pv');if(pv){pv.pause();pv.style.display='none';}
   var lock=null;try{if(navigator.wakeLock)lock=await navigator.wakeLock.request('screen');}catch(e){}
   function prog(t){out.innerHTML='<p class="prog">'+t+'</p>';}
-  function finish(){RUN=null;try{if(lock)lock.release();}catch(e){}btn.disabled=false;pb.disabled=false;pb.textContent='▶ 전체 미리보기 (녹화 안 함)';btn.textContent=dry||!btn.getAttribute('data-done')?'🎬 영상 만들기':'🎬 다시 만들기';CLIPS.forEach(function(c){c.v.pause();c.v.playbackRate=1;});}
+  function finish(){RUN=null;try{if(lock)lock.release();}catch(e){}btn.disabled=false;pb.disabled=false;pb.textContent='▶ 전체 미리보기 (녹화 안 함)';btn.textContent=dry||!btn.getAttribute('data-done')?'🎬 영상 만들기':'🎬 다시 만들기';CLIPS.forEach(function(c){[c.v,c.v2].forEach(function(v){if(v){v.pause();v.playbackRate=1;}});});}
   var narr=await ensureNarr(ac,prog);await ensureBgm(ac);
   var tiny=document.createElement('canvas');tiny.width=24;tiny.height=42;var tg=tiny.getContext('2d');
   var sn=document.createElement('canvas');sn.width=720;sn.height=1280;var sgx=sn.getContext('2d'),hasSnap=false;
   var W=720,H=1280,cv=document.createElement('canvas');cv.width=W;cv.height=H;var g=cv.getContext('2d');
   if(!dry&&(!cv.captureStream||!window.MediaRecorder)){out.innerHTML='<p class="err">이 브라우저는 영상 녹화를 못 해요(iOS 최신 Safari 필요).</p>';finish();return;}
   var clipBus=ac.createGain();clipBus.connect(BUS.comp);
-  CLIPS.forEach(function(c){if(!c.src){try{c.src=ac.createMediaElementSource(c.v);c.gain=ac.createGain();c.src.connect(c.gain);}catch(e){c.src=null;}}
-    if(c.gain){try{c.gain.disconnect();}catch(e){}c.gain.connect(clipBus);c.gain.gain.value=0;}c.v.muted=!c.src||D.opts.orig===0;c.v.pause();});
+  CLIPS.forEach(function(c){[c.v,c.v2].forEach(function(v){if(!v)return;
+    if(!v._src){try{v._src=ac.createMediaElementSource(v);v._gain=ac.createGain();v._src.connect(v._gain);}catch(e){v._src=null;v._gain=null;}}
+    if(v._gain){try{v._gain.disconnect();}catch(e){}v._gain.connect(clipBus);v._gain.gain.value=0;}v.muted=!v._src||D.opts.orig===0;v.pause();});});
   var dest=null,rec=null,chunks=[],mime='';
   if(!dry){
     dest=ac.createMediaStreamDestination();BUS.master.connect(dest);
@@ -313,7 +317,7 @@ async function render0(dry){
   out.innerHTML='<p class="prog" id="rp">'+(dry?'미리보기 중…':'녹화 중… 화면을 켜 두세요')+'</p><div class="bar"><i id="rb"></i></div>';out.appendChild(cv);cv.className='pv';
   if(dry)cv.scrollIntoView({block:'center',behavior:'smooth'});
   var END=D.opts.end?2:0;
-  var plan=D.scenes.map(function(s,i){var nd=narr[i]?narr[i].duration+0.25:0;return {s:s,i:i,sp:s.sp||1,seg:segLen(s),nd:narr[i]?narr[i].duration:0,ck:sayChunks(s.say),len:Math.max(segLen(s),nd,0.8)};}),total=plan.reduce(function(a,p){return a+p.len;},0)+END,doneT=0,bgmPos=0;
+  var plan=D.scenes.map(function(s,i){var nd=narr[i]?narr[i].duration+0.4:0;return {s:s,i:i,sp:s.sp||1,seg:segLen(s),nd:narr[i]?narr[i].duration:0,ck:sayChunks(s.say),len:Math.max(segLen(s),nd,0.8)};}),total=plan.reduce(function(a,p){return a+p.len;},0)+END,doneT=0,bgmPos=0;
   // 배경음악: 구간마다 이어지는 위치부터 짧게 페이드 인·아웃(녹화 일시정지 사이 끊김 없이 이어 붙음), 내레이션 땐 낮춤
   function bgm(at,len,duck,fadeOut){var lv=D.opts.bgv;if(!BGM||!BGM.buf||!lv)return;var s=ac.createBufferSource(),gn=ac.createGain();s.buffer=BGM.buf;s.loop=true;s.connect(gn);gn.connect(BUS.comp);
     var l=lv*(duck?0.4:1),fo=Math.min(len,fadeOut||0.04);gn.gain.setValueAtTime(0,at);gn.gain.linearRampToValueAtTime(l,at+0.03);gn.gain.setValueAtTime(l,at+Math.max(0.03,len-fo));gn.gain.linearRampToValueAtTime(0,at+len);
@@ -356,25 +360,32 @@ async function render0(dry){
     g.globalAlpha=1;bar(el,END);
   }
   var started=false,stopped=false,CUR=null;
+  // 녹화는 처음부터 끝까지 멈추지 않음(iOS 는 pause/resume 때 소리 앞뒤가 잘려 단어가 씹혔음).
+  // 다음 구간 영상은 지금 구간이 나오는 동안 미리 찾아 두어 컷 사이 멈춤을 최소로.
+  function preseek(j){var v2=EL[j],sj=D.scenes[j];if(!v2||!sj)return;v2._pre=-1;v2.pause();seekTo(v2,sj.s).then(function(){v2._pre=j;});}
+  if(EL[0])preseek(0);
   for(var k=0;k<plan.length;k++){
     if(run.stop){stopped=true;break;}
-    var p=plan[k],sc=p.s,c=CLIPS[sc.clip];if(!c)continue;CUR=p;
+    var p=plan[k],sc=p.s,c=CLIPS[sc.clip],v=EL[k];if(!c||!v)continue;CUR=p;
     $('rp').textContent=(dry?'미리보기 ':'녹화 중… ')+(k+1)+' / '+plan.length+' 구간';
-    c.v.pause();await seekTo(c.v,sc.s);
-    var v=c.v;v.playbackRate=p.sp;try{v.preservesPitch=true;v.webkitPreservesPitch=true;}catch(e){}
+    if(v._pre!==k){v.pause();await seekTo(v,sc.s);}
+    v.playbackRate=p.sp;try{v.preservesPitch=true;v.webkitPreservesPitch=true;}catch(e){}
     try{var pr=v.play();if(pr&&pr.catch)pr.catch(function(){v.muted=true;var p2=v.play();if(p2&&p2.catch)p2.catch(function(){});});}catch(e){}
     await firstFrame(v);
     draw(v,sc,0,p.len,k);
-    if(rec){if(!started){rec.start(500);started=true;}else{try{rec.resume();}catch(e){}}}
+    if(rec&&!started){rec.start(500);started=true;await sleep(120);}
     var t0=ac.currentTime,hasN=!!narr[p.i],last=k===plan.length-1;
+    // 내레이션이 구간보다 길면 화면을 멈추지 않고 영상을 이어서 재생(클립 끝까지)
+    var stopAt=Math.min(c.dur-0.05,sc.s+p.len*p.sp),aud=Math.max(0.1,Math.min(p.len,(c.dur-sc.s)/p.sp));
+    if(EL[k+1]&&EL[k+1]!==v)preseek(k+1);
     // 원본 소리: 컷마다 60ms 페이드(툭 소리 방지), 내레이션 나올 땐 40%로 낮춤
-    if(c.gain){var lv=D.opts.orig*(hasN?0.4:1),gg=c.gain.gain,se=Math.min(p.seg,p.len);gg.cancelScheduledValues(t0);gg.setValueAtTime(0,t0);gg.linearRampToValueAtTime(lv,t0+0.06);gg.setValueAtTime(lv,t0+Math.max(0.06,se-0.06));gg.linearRampToValueAtTime(0,t0+se);}
-    if(hasN){var bs=ac.createBufferSource();bs.buffer=narr[p.i];bs.connect(BUS.comp);bs.start(t0+0.05);}
+    if(v._gain){var lv=D.opts.orig*(hasN?0.4:1),gg=v._gain.gain;gg.cancelScheduledValues(t0);gg.setValueAtTime(0,t0);gg.linearRampToValueAtTime(lv,t0+0.06);gg.setValueAtTime(lv,t0+Math.max(0.06,aud-0.06));gg.linearRampToValueAtTime(0,t0+aud);}
+    if(hasN){var bs=ac.createBufferSource();bs.buffer=narr[p.i];bs.connect(BUS.comp);bs.start(t0+0.1);}
     bgm(t0,p.len,hasN,last&&!END?1.2:0.04);
-    await new Promise(function(done){(function loop(){var el=ac.currentTime-t0;if(el>=p.len||run.stop){done();return;}if(v.currentTime>=sc.e-0.02&&!v.paused)v.pause();draw(v,sc,el,p.len,k);requestAnimationFrame(loop);})();});
-    v.pause();v.playbackRate=1;if(c.gain){c.gain.gain.cancelScheduledValues(ac.currentTime);c.gain.gain.setValueAtTime(0,ac.currentTime);}
+    await new Promise(function(done){(function loop(){var el=ac.currentTime-t0;if(el>=p.len||run.stop){done();return;}if(v.currentTime>=stopAt&&!v.paused)v.pause();draw(v,sc,el,p.len,k);requestAnimationFrame(loop);})();});
+    v.pause();v.playbackRate=1;if(v._gain){v._gain.gain.cancelScheduledValues(ac.currentTime);v._gain.gain.setValueAtTime(0,ac.currentTime);}
     doneT+=p.len;sgx.drawImage(cv,0,0);hasSnap=true;
-    if(rec&&!last&&!run.stop){try{rec.pause();}catch(e){}}
+    if(EL[k+1]===v)preseek(k+1);
   }
   if(!run.stop&&END&&hasSnap){var t1=ac.currentTime;bgm(t1,END,false,END);
     await new Promise(function(done){(function loop(){var el=ac.currentTime-t1;if(el>=END||run.stop){done();return;}drawEnd(el);requestAnimationFrame(loop);})();});}
