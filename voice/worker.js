@@ -349,6 +349,7 @@ async function synth(env, voice, text, model) {
   });
   const ws = up.webSocket;
   if (!ws) throw err("tts", "합성 서버 연결 거부 " + up.status);
+  try { ws.binaryType = "arraybuffer"; } catch {}
   ws.accept();
   const task = crypto.randomUUID().replace(/-/g, "");
   const chunks = [];
@@ -356,7 +357,8 @@ async function synth(env, voice, text, model) {
   return await new Promise((res, rej) => {
     const to = setTimeout(() => { try { ws.close(); } catch {} rej(err("tts", "합성 시간 초과")); }, 25000);
     ws.addEventListener("message", (ev) => {
-      if (typeof ev.data !== "string") { chunks.push(new Uint8Array(ev.data)); return; }
+      // compatibility_date 2026 부터 바이너리 메시지가 Blob 으로 올 수 있음 → 그대로 모았다가 끝에 변환
+      if (typeof ev.data !== "string") { chunks.push(ev.data); return; }
       let m; try { m = JSON.parse(ev.data); } catch { return; }
       const e = m.header && m.header.event;
       if (e === "task-started") {
@@ -364,9 +366,11 @@ async function synth(env, voice, text, model) {
         ws.send(msg("finish-task", { input: {} }));
       } else if (e === "task-finished") {
         clearTimeout(to); try { ws.close(); } catch {}
-        const n = chunks.reduce((a, c) => a + c.length, 0), out = new Uint8Array(n);
-        let o = 0; for (const c of chunks) { out.set(c, o); o += c.length; }
-        n ? res(out) : rej(err("tts", "합성 결과가 비었습니다"));
+        Promise.all(chunks.map(async (c) => new Uint8Array(c instanceof ArrayBuffer ? c : ArrayBuffer.isView(c) ? c.buffer.slice(c.byteOffset, c.byteOffset + c.byteLength) : await c.arrayBuffer()))).then((parts) => {
+          const n = parts.reduce((a, c) => a + c.length, 0), out = new Uint8Array(n);
+          let o = 0; for (const c of parts) { out.set(c, o); o += c.length; }
+          n ? res(out) : rej(err("tts", "합성 결과가 비었습니다(조각 " + chunks.length + "개)"));
+        }, (e) => rej(err("tts", "합성 결과 읽기 실패: " + e.message)));
       } else if (e === "task-failed") {
         clearTimeout(to); try { ws.close(); } catch {}
         rej(err("tts", "합성 실패: " + (m.header.error_message || m.header.error_code || "unknown")));
