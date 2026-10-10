@@ -307,22 +307,19 @@ async function asset(env, b, h, synth) {
     if (!text) throw serr("내레이션이 비었어요.");
     let bytes = null, why = "", ext = "wav", ct = "audio/wav";
     const want = ["Cherry", "Ethan", "mine"].includes(b.voice) ? b.voice : (env.SHORTS_VOICE || "Cherry");
-    // 내 목소리(CosyVoice 복제)를 고르면 먼저 시도, 안 되면 AI 성우로
+    // 목소리는 고른 그대로만 — 실패했다고 다른 목소리로 바꾸면 한 영상 안에서 목소리가 섞임(2026-10-11 소유자 지적)
+    let useAi = want !== "mine";
     if (want === "mine") {
       const mine = (await env.KV.get("voice:kr:" + h)) || (await env.KV.get("voice:" + h));
-      if (!mine) why = "내 목소리 미등록(실전 중국어 발음 탭에서 등록)";
+      if (!mine) { useAi = true; why = "내 목소리 미등록 → AI 여성"; }
       else try { bytes = await synth(env, mine, text); ext = "mp3"; ct = "audio/mpeg"; } catch (e) { why = "내 목소리: " + String(e.message || e).slice(0, 100); }
     }
-    if (!bytes) try {
+    if (!bytes && useAi) try {
       const j = await dsPost(env, "/services/aigc/multimodal-generation/generation", { model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text, voice: want === "mine" ? "Cherry" : want, language_type: "Korean" } });
       const url = j.output && j.output.audio && j.output.audio.url;
       if (url) { const r = await fetch(url); if (r.ok) bytes = new Uint8Array(await r.arrayBuffer()); }
       if (!bytes) why += " / qwen-tts 결과 없음";
     } catch (e) { why += " / " + String(e.message || e).slice(0, 140); }
-    if (!bytes && want !== "mine") {
-      const mine = (await env.KV.get("voice:kr:" + h)) || (await env.KV.get("voice:" + h));
-      if (mine) try { bytes = await synth(env, mine, text); ext = "mp3"; ct = "audio/mpeg"; } catch (e) { why += " / 내 목소리: " + String(e.message || e).slice(0, 100); }
-    }
     if (!bytes) throw serr("내레이션을 만들지 못했어요: " + why, 502);
     await env.R2.delete([pre + ".wav", pre + ".mp3"]).catch(() => {});
     await env.R2.put(pre + "." + ext, bytes, { httpMetadata: { contentType: ct } });
