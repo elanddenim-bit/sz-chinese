@@ -25,6 +25,7 @@ import { timecamApi, timecamGet, TIMECAM_HTML } from "./timecam.js";
 import { HUB_HTML } from "./hub.js";
 import { signsApi, signsGet, SIGNS_HTML } from "./signs.js";
 import { novelApi, novelGet, NOVEL_HTML } from "./novel.js";
+import { trendApi, trendGet, TREND_HTML } from "./trend.js";
 import { shortsApi, shortsSave, shortsFile, ytCallback, legalPage, SHORTS_HTML } from "./shorts.js";
 import { EDIT_HTML } from "./edit.js";
 import ICON180 from "./icon-180.png";
@@ -93,6 +94,8 @@ export default {
       if (url.pathname.startsWith("/signs/") && req.method === "GET") return await signsGet(req, env, url);
       if (url.pathname === "/novel" && req.method === "GET") return new Response(NOVEL_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname.startsWith("/novel/") && req.method === "GET") return await novelGet(req, env, url);
+      if (url.pathname === "/trend" && req.method === "GET") return new Response(TREND_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
+      if (url.pathname.startsWith("/trend/") && req.method === "GET") return await trendGet(req, env, url, synth);
       if (url.pathname === "/hub" && req.method === "GET") return new Response(HUB_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/timecam" && req.method === "GET") return new Response(TIMECAM_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname.startsWith("/timecam/") && req.method === "GET") return await timecamGet(req, env, url);
@@ -110,6 +113,7 @@ export default {
       if (url.pathname.startsWith("/timecam/")) return json(req, await timecamApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/signs/")) return json(req, await signsApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/novel/")) return json(req, await novelApi(env, ctx, url.pathname, b, h));
+      if (url.pathname.startsWith("/trend/")) return json(req, await trendApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/shorts/")) {
         const out = await shortsApi(env, ctx, url.pathname, b, h, synth);
         const ev = { "/shorts/script": "script", "/shorts/yt/upload": "upload", "/shorts/ideas": "ideas", "/shorts/plan": "plan", "/shorts/asr": "asr" }[url.pathname];
