@@ -91,6 +91,9 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
   if (path === "/shorts/update") return update(env, b, h);
   if (path === "/shorts/asset") return asset(env, b, h, synth);
   if (path === "/shorts/poll") return poll(env, b, h);
+  if (path === "/shorts/voice/enroll") return krEnroll(env, b, h);
+  if (path === "/shorts/voice/status") return krStatus(env, h);
+  if (path === "/shorts/voice/try") return krTry(env, b, h, synth);
   if (path === "/shorts/avatar/state") return avaView(env, await avaDoc(env, h));
   if (path === "/shorts/avatar/face") return avaFace(env, b, h);
   if (path === "/shorts/avatar/make") return avaMake(env, b, h, synth);
@@ -298,7 +301,7 @@ async function asset(env, b, h, synth) {
     const want = ["Cherry", "Ethan", "mine"].includes(b.voice) ? b.voice : (env.SHORTS_VOICE || "Cherry");
     // 내 목소리(CosyVoice 복제)를 고르면 먼저 시도, 안 되면 AI 성우로
     if (want === "mine") {
-      const mine = await env.KV.get("voice:" + h);
+      const mine = (await env.KV.get("voice:kr:" + h)) || (await env.KV.get("voice:" + h));
       if (!mine) why = "내 목소리 미등록(실전 중국어 발음 탭에서 등록)";
       else try { bytes = await synth(env, mine, text); ext = "mp3"; ct = "audio/mpeg"; } catch (e) { why = "내 목소리: " + String(e.message || e).slice(0, 100); }
     }
@@ -309,7 +312,7 @@ async function asset(env, b, h, synth) {
       if (!bytes) why += " / qwen-tts 결과 없음";
     } catch (e) { why += " / " + String(e.message || e).slice(0, 140); }
     if (!bytes && want !== "mine") {
-      const mine = await env.KV.get("voice:" + h);
+      const mine = (await env.KV.get("voice:kr:" + h)) || (await env.KV.get("voice:" + h));
       if (mine) try { bytes = await synth(env, mine, text); ext = "mp3"; ct = "audio/mpeg"; } catch (e) { why += " / 내 목소리: " + String(e.message || e).slice(0, 100); }
     }
     if (!bytes) throw serr("내레이션을 만들지 못했어요: " + why, 502);
@@ -472,6 +475,49 @@ async function avaDel(env, b, h) {
   const x = (d.list || []).find((y) => y.k === b.k);
   if (x) { await env.R2.delete(x.k).catch(() => {}); d.list = d.list.filter((y) => y !== x); await env.KV.put(avaKey(h), JSON.stringify(d)); }
   return avaView(env, d);
+}
+
+// ---------------- 🎙 숏츠용 내 목소리(한국어) ----------------
+// 중국어 공부용 목소리(voice:<해시>)와 따로 — 한국어로 25~30초 녹음해 복제, KV voice:kr:<해시>. 숏츠의 '내 목소리'는 이걸 먼저 씀.
+const krKey = (h) => "voice:kr:" + h;
+async function krEnroll(env, b, h) {
+  const m = String(b.audio || "").match(/^(?:data:[^,]*,)?([A-Za-z0-9+/=]+)$/);
+  if (!m) throw serr("녹음을 다시 해 주세요.");
+  const bin = atob(m[1]), u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  if (u8.length < 30000) throw serr("녹음이 너무 짧아요(20초 이상).");
+  if (u8.length > 9 * 1048576) throw serr("녹음 파일이 너무 커요.");
+  const mime = /wav/.test(b.mime || "") ? "audio/wav" : /mpeg|mp3/.test(b.mime || "") ? "audio/mpeg" : "audio/mp4";
+  const ext = mime === "audio/wav" ? "wav" : mime === "audio/mpeg" ? "mp3" : "m4a";
+  let url = "";
+  for (let k = 0; ; k++) { try { url = await ossUp(env, "voice-enrollment", u8, "krvoice-" + h + "-" + Date.now() + "." + ext, mime); break; } catch (e) { if (k >= 1) throw e; } }
+  const old = await env.KV.get(krKey(h));
+  if (old) { try { await dsRaw(env, "/services/audio/tts/customization", { model: "voice-enrollment", input: { action: "delete_voice", voice_id: old } }); } catch {} }
+  const base = { action: "create_voice", target_model: env.TTS_MODEL || "cosyvoice-v3.5-plus", prefix: "kr" + h.slice(0, 6), url };
+  let j;
+  try { j = await dsRaw(env, "/services/audio/tts/customization", { model: "voice-enrollment", input: { ...base, language_hints: ["ko"], max_prompt_audio_length: 20.0 } }, OSSR); }
+  catch (e) { j = await dsRaw(env, "/services/audio/tts/customization", { model: "voice-enrollment", input: base }, OSSR); } // 옵션을 안 받으면 기본으로
+  const voice = j.output && j.output.voice_id;
+  if (!voice) throw serr("목소리 ID를 받지 못했어요.", 502);
+  await env.KV.put(krKey(h), voice);
+  return { ok: true, voice, status: "DEPLOYING" };
+}
+async function krStatus(env, h) {
+  const voice = await env.KV.get(krKey(h));
+  if (!voice) return { ok: true, voice: null };
+  try {
+    const j = await dsRaw(env, "/services/audio/tts/customization", { model: "voice-enrollment", input: { action: "query_voice", voice_id: voice } });
+    return { ok: true, voice, status: (j.output && j.output.status) || "UNKNOWN" };
+  } catch (e) { return { ok: true, voice, status: "UNKNOWN", detail: String(e.message || e).slice(0, 120) }; }
+}
+async function krTry(env, b, h, synth) {
+  const voice = (await env.KV.get(krKey(h))) || (await env.KV.get("voice:" + h));
+  if (!voice) throw serr("아직 목소리가 없어요.");
+  const text = String(b.text || "광저우에서 아메리카노 한 잔, 얼마일까요? 한국 돈으로 3천 원이 안 돼요.").slice(0, 120);
+  const bytes = await synth(env, voice, text);
+  const k = "shorts/" + h + "/" + AVA + "/try-" + (voice.slice(-6).replace(/[^\w]/g, "")) + ".mp3";
+  await env.R2.put(k, bytes, { httpMetadata: { contentType: "audio/mpeg" } });
+  return { ok: true, url: await fileUrl(env, k), which: voice === (await env.KV.get(krKey(h))) ? "kr" : "zh" };
 }
 
 // 완성 영상 저장(본문 그대로)
@@ -703,7 +749,7 @@ function home(){
       +'<button class="big" id="scriptBtn">✍️ 대본 쓰기</button><div class="err" id="e1"></div></div>';
     h+='<div class="card" id="ytCard"><h2>유튜브 연결</h2><div id="ytBox" class="note">확인 중…</div></div>';
     if(j.yt)h+='<div class="card"><h2>📈 내 채널 성적 <button class="chip" id="stRe" style="float:right;font-size:12px;padding:3px 9px">새로고침</button></h2><div id="stBox" class="note">불러오는 중…</div></div>';
-    h='<button class="big" id="avOpen" style="margin:0 0 12px;background:var(--ink)">🗣 캐릭터가 말하기 (시험)</button>'+h;h='<a class="big" href="/edit" style="text-align:center;text-decoration:none;background:var(--red);margin:0 0 12px">🎥 내가 찍은 영상으로 만들기 (편집실)</a>'+h;
+    h='<button class="big" id="avOpen" style="margin:0 0 12px;background:var(--ink)">🎙 숏츠용 내 목소리 · 🗣 캐릭터가 말하기</button>'+h;h='<a class="big" href="/edit" style="text-align:center;text-decoration:none;background:var(--red);margin:0 0 12px">🎥 내가 찍은 영상으로 만들기 (편집실)</a>'+h;
     if(j.list&&j.list.length)h+='<div class="card"><h2>내 숏츠</h2><div class="list">'+j.list.map(function(x){return '<a href="'+(x.kind==='mine'?'/edit?id='+x.id:'#')+'"'+(x.kind==='mine'?'':' data-open="'+x.id+'"')+'>'+(x.kind==='mine'?'🎥 ':'')+'<span>'+esc(x.title)+'</span><small>'+(x.yt?'▶ '+(x.yt.privacy==='public'?'공개':x.yt.privacy==='unlisted'?'일부공개':'비공개'):new Date(x.made).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}))+'</small></a>';}).join('')+'</div></div>';
     $('main').innerHTML=h;
     document.querySelectorAll('[data-ang]').forEach(function(b){b.onclick=function(){ANG=b.getAttribute('data-ang');try{localStorage.setItem('sh-ang',ANG);}catch(e){}document.querySelectorAll('[data-ang]').forEach(function(x){x.classList.toggle('on',x===b);});};});
@@ -729,7 +775,7 @@ function home(){
 }
 var AV={voice:'Cherry',res:'480P'};try{AV.voice=localStorage.getItem('av-voice')||'Cherry';}catch(e){}
 function ava(){
-  $('main').innerHTML='<a href="#" id="avBack" class="note">← 숏츠 공방</a><div class="card"><h2>🗣 캐릭터가 말하기 <small style="font-weight:400;color:var(--ink2)">시험</small></h2><p class="note">그림 한 장 + 대사 → 입이 움직이는 영상. 얼굴 대신 캐릭터가 말하게. 한 번에 20초 미만, 만드는 데 5~10분.</p><div id="avFace"></div><p class="lbl">대사 (90자까지, 한국어)</p><textarea id="avText" maxlength="90" placeholder="예: 광저우에서 아메리카노 한 잔, 얼마일까요? 한국 돈으로 3천 원이 안 돼요."></textarea><p class="note" id="avLen"></p>'
+  $('main').innerHTML='<a href="#" id="avBack" class="note">← 숏츠 공방</a><div class="card"><h2>🎙 숏츠용 내 목소리 (한국어)</h2><div id="krBox"></div></div><div class="card"><h2>🗣 캐릭터가 말하기 <small style="font-weight:400;color:var(--ink2)">시험</small></h2><p class="note">그림 한 장 + 대사 → 입이 움직이는 영상. 얼굴 대신 캐릭터가 말하게. 한 번에 20초 미만, 만드는 데 5~10분.</p><div id="avFace"></div><p class="lbl">대사 (90자까지, 한국어)</p><textarea id="avText" maxlength="90" placeholder="예: 광저우에서 아메리카노 한 잔, 얼마일까요? 한국 돈으로 3천 원이 안 돼요."></textarea><p class="note" id="avLen"></p>'
     +'<p class="lbl">목소리</p><div class="chips">'+[['Cherry','AI 여성'],['Ethan','AI 남성'],['mine','내 목소리']].map(function(v){return '<button class="chip'+(v[0]===AV.voice?' on':'')+'" data-av="'+v[0]+'">'+v[1]+'</button>';}).join('')+'</div>'
     +'<p class="lbl">화질</p><div class="chips">'+[['480P','480P · 0.5위안/초'],['720P','720P · 0.9위안/초']].map(function(v){return '<button class="chip'+(v[0]===AV.res?' on':'')+'" data-ar="'+v[0]+'">'+v[1]+'</button>';}).join('')+'</div>'
     +'<button class="big" id="avGo">🎬 말하는 영상 만들기</button><div class="err" id="avErr"></div><div id="avProg" class="note"></div><div id="avOut"></div></div><div class="card"><h2>만든 영상</h2><div id="avList" class="note">불러오는 중…</div></div>';
@@ -740,8 +786,33 @@ function ava(){
   document.querySelectorAll('[data-av]').forEach(function(b){b.onclick=function(){AV.voice=b.getAttribute('data-av');try{localStorage.setItem('av-voice',AV.voice);}catch(e){}document.querySelectorAll('[data-av]').forEach(function(x){x.classList.toggle('on',x===b);});};});
   document.querySelectorAll('[data-ar]').forEach(function(b){b.onclick=function(){AV.res=b.getAttribute('data-ar');document.querySelectorAll('[data-ar]').forEach(function(x){x.classList.toggle('on',x===b);});est();};});
   $('avGo').onclick=avMake;
+  krCard();
   api('/shorts/avatar/state').then(function(r){if(!r.ok){$('avErr').textContent=r.detail||r.error;return;}avShow(r);if(r.pend)avWait(r.pend.task);});
 }
+var KRS='안녕하세요. 저는 광저우에 살고 있어요. 오늘은 한국 사람들이 제일 궁금해하는 광저우 물가를 알려 드릴게요. 커피 한 잔, 지하철 한 번, 점심 한 끼가 한국 돈으로 얼마일까요? 생각보다 싼 것도 있고, 의외로 비싼 것도 있어요. 끝까지 보시면 진짜 꿀팁도 있으니까, 같이 한번 가 보시죠!';
+var KREC=null;
+function krCard(){var b=$('krBox');if(!b)return;b.innerHTML='<p class="note">확인 중…</p>';
+  api('/shorts/voice/status').then(function(r){if(!$('krBox'))return;var st=r.voice?(r.status==='OK'?'✅ 사용 중':r.status==='UNDEPLOYED'?'❌ 녹음이 불분명해 거절됨 — 다시 녹음':'⏳ 만드는 중('+esc(r.status||'')+')'):'아직 없음 — 지금은 중국어 공부용 목소리를 대신 씀';
+    b.innerHTML='<p class="note" style="margin-top:0">'+st+'</p>'
+      +(r.voice&&r.status==='OK'?'':'<details'+(r.voice?'':' open')+'><summary class="note">녹음 방법 · 읽을 글</summary><p class="note">조용한 방, 폰을 입에서 20cm쯤, 유튜브에서 말하듯 평소 톤으로 25~30초. 중간에 2초 넘게 쉬지 않기.</p><div style="background:var(--bg);border-radius:10px;padding:10px;font-size:15px;line-height:1.6">'+esc(KRS)+'</div></details>')
+      +'<div class="mini" style="margin-top:8px"><button id="krRec">'+(r.voice?'● 다시 녹음':'● 녹음 시작')+'</button>'+(r.voice&&r.status==='OK'?'<button id="krTry">▶ 들어보기</button>':'')+'</div><div class="err" id="krErr"></div>';
+    $('krRec').onclick=krRecord;if($('krTry'))$('krTry').onclick=krTry;
+    if(r.voice&&r.status!=='OK'&&r.status!=='UNDEPLOYED')setTimeout(krCard,8000);});}
+function krTry(){var b=this;b.disabled=true;b.textContent='만드는 중…';
+  api('/shorts/voice/try',{text:($('avText')&&$('avText').value.trim())||''}).then(function(r){b.disabled=false;b.textContent='▶ 들어보기';if(!r.ok){$('krErr').textContent=r.detail||r.error;return;}var a=new Audio(r.url);a.play().catch(function(){});});}
+async function krRecord(){var btn=$('krRec');if(KREC){KREC.stop();return;}
+  if(!window.MediaRecorder){$('krErr').textContent='이 브라우저는 녹음을 못 해요';return;}
+  var stream;try{stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});}catch(e){$('krErr').textContent='마이크 권한이 필요해요';return;}
+  var mime=MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported('audio/mp4')?'audio/mp4':'';
+  var rec=mime?new MediaRecorder(stream,{mimeType:mime,audioBitsPerSecond:128000}):new MediaRecorder(stream),ch=[],t0=Date.now();KREC=rec;$('krErr').textContent='';
+  rec.ondataavailable=function(e){if(e.data&&e.data.size)ch.push(e.data);};
+  var tick=setInterval(function(){var s=Math.round((Date.now()-t0)/1000);btn.textContent='■ 끝내기 · '+s+'초'+(s<20?' (20초 이상)':'');if(s>=45)rec.stop();},500);
+  rec.onstop=async function(){clearInterval(tick);KREC=null;stream.getTracks().forEach(function(t){t.stop();});
+    if((Date.now()-t0)/1000<20){$('krErr').textContent='20초 이상 녹음해 주세요';btn.textContent='● 다시 녹음';return;}
+    var blob=new Blob(ch,{type:rec.mimeType||mime||'audio/mp4'});btn.disabled=true;btn.textContent='등록 중… (1~2분)';
+    var b64=await new Promise(function(ok){var fr=new FileReader();fr.onload=function(){ok(String(fr.result).split(',')[1]);};fr.readAsDataURL(blob);});
+    api('/shorts/voice/enroll',{audio:b64,mime:blob.type}).then(function(r){if(!r.ok){btn.disabled=false;btn.textContent='● 다시 녹음';$('krErr').textContent=r.detail||r.error;return;}toast('등록 접수 — 1분쯤 뒤 사용 가능');krCard();});};
+  rec.start(500);btn.textContent='■ 끝내기';}
 function avShow(r){
   var c=r.check,ck='';
   if(c)ck=c.err?'점검 못 함: '+esc(c.err):c.pass?'✅ 점검 통과':'⚠️ 점검 불통과'+(c.humanoid?'':' (사람 모습 인식 안 됨)')+(c.msg?' — '+esc(c.msg):'')+' · 그래도 만들어 볼 수는 있어요';
