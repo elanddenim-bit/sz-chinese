@@ -93,6 +93,7 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
   if (path === "/shorts/poll") return poll(env, b, h);
   if (path === "/shorts/yt/start") return ytStart(env, h);
   if (path === "/shorts/yt/status") return ytStatus(env, h);
+  if (path === "/shorts/yt/stats") return ytStats(env, h, b);
   if (path === "/shorts/yt/upload") return ytUpload(env, b, h);
   throw serr("not_found", 404);
 }
@@ -119,12 +120,19 @@ async function ideas(env, h, b) {
   const q = (await env.KV.get("quest:" + h, "json")) || {};
   const been = (q.hist || []).slice(0, 15).map((x) => x.name + "(" + (x.area || "") + ")");
   const ang = ANGLES[b && b.angle] || ANGLES.mix;
+  // 우리 채널에서 잘된 것·안 된 것(올린 지 하루 넘은 공개 영상, 하루당 조회수 기준)을 알려 주고 잘된 쪽 패턴을 따르게
+  let perf = "";
+  const st = await env.KV.get("yt:stats:" + h, "json");
+  if (st && st.items) {
+    const pub = st.items.filter((x) => x.privacy === "public" && Date.now() - x.at > 20 * 3600e3).map((x) => ({ t: x.title, d: x.views / Math.max(1, (Date.now() - x.at) / 86400e3) })).sort((a, c) => c.d - a.d);
+    if (pub.length >= 3) perf = " 우리 채널 성적(하루당 조회수): 잘된 것 " + pub.slice(0, 3).map((x) => "'" + x.t + "' " + Math.round(x.d)).join(", ") + (pub.length >= 5 ? " / 안 된 것 " + pub.slice(-2).map((x) => "'" + x.t + "' " + Math.round(x.d)).join(", ") : "") + ". 잘된 쪽의 첫마디·주제 패턴을 따르고 안 된 쪽 패턴은 피하라.";
+  }
   const out = await qwen(env, [
     { role: "system", content: "너는 한국 시청자용 유튜브 숏츠 채널 기획자다. 채널: 광저우에 사는 한국인 40대 직장인 부부가 주말에 돌아다니며 보여주는 광저우 생활. " + KR_RULES +
       " 인터넷 검색으로 요즘 한국 뉴스·커뮤니티에서 중국·광저우와 관련해 한국인이 궁금해하는 것(예: 중국 무비자 여행, 캔톤페어, 중국 쇼핑·물가, 결제·앱 사용, 한국 브랜드·한식의 중국 반응)을 참고해, " +
       ang.d + " 30~60초 숏츠 주제 5개를 제안하라. 제목은 한국 숏츠에서 잘 먹히는 말투(숫자·반전·질문)로, 과장 낚시는 금지." +
       ' JSON만 출력: {"ideas":[{"topic":"한국어 주제","hook":"첫 2초에 할 한국어 한마디","why":"한국인이 왜 볼지 한 문장"}]}' },
-    { role: "user", content: "오늘: " + cnDay() + ". 최근 우리가 가 본 곳: " + (been.join(", ") || "(아직 없음)") + ". 1위안 ≈ " + ((await krw(env)) || 190) + "원." },
+    { role: "user", content: "오늘: " + cnDay() + ". 최근 우리가 가 본 곳: " + (been.join(", ") || "(아직 없음)") + ". 1위안 ≈ " + ((await krw(env)) || 190) + "원." + perf },
   ], { search: true });
   return { ok: true, ideas: (Array.isArray(out.ideas) ? out.ideas : []).slice(0, 6).map((x) => ({ topic: String(x.topic || "").slice(0, 80), hook: String(x.hook || "").slice(0, 80), why: String(x.why || "").slice(0, 120) })) };
 }
@@ -401,6 +409,34 @@ async function ytToken(env, h) {
   if (!j.access_token) throw serr("유튜브 연결이 끊겼어요. 다시 연결해 주세요. (" + (j.error || r.status) + ")", 400, "yt_login");
   return { token: j.access_token, channel: y.channel };
 }
+// 📈 내 채널 성적: 올린 영상들의 조회·좋아요·댓글(YouTube Data API, 기존 youtube.readonly 권한). 10분 캐시 → 주제 추천에도 씀
+function isoSec(d) { const m = String(d || "").match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/); return m ? (+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0) : 0; }
+async function ytStats(env, h, b) {
+  const ck = "yt:stats:" + h;
+  if (!(b && b.fresh)) { const c = await env.KV.get(ck, "json"); if (c && Date.now() - c.at < 10 * 60e3) return { ok: true, ...c, cached: true }; }
+  const { token } = await ytToken(env, h);
+  const H = { authorization: "Bearer " + token };
+  const get = async (u) => { const r = await fetch("https://www.googleapis.com/youtube/v3/" + u, { headers: H }); const j = await r.json().catch(() => ({})); if (!r.ok) throw serr("유튜브 조회 " + r.status + ": " + ((j.error && j.error.message) || "").slice(0, 160) + (r.status === 403 ? " — 다시 연결해 권한을 모두 체크해 주세요." : ""), 502); return j; };
+  const ch = await get("channels?part=contentDetails,statistics&mine=true");
+  const it0 = ch.items && ch.items[0];
+  if (!it0) throw serr("채널을 찾지 못했어요.", 404);
+  const up = it0.contentDetails.relatedPlaylists.uploads;
+  const pl = await get("playlistItems?part=contentDetails&maxResults=50&playlistId=" + encodeURIComponent(up));
+  const ids = (pl.items || []).map((x) => x.contentDetails.videoId).filter(Boolean);
+  let items = [];
+  if (ids.length) {
+    const v = await get("videos?part=snippet,statistics,contentDetails,status&id=" + ids.join(","));
+    const l = (await env.KV.get(listKey(h), "json")) || [];
+    const byVid = {}; for (const x of l) if (x.yt && x.yt.vid) byVid[x.yt.vid] = x;
+    items = (v.items || []).map((x) => { const st = x.statistics || {}, m = byVid[x.id] || {}; return {
+      id: x.id, title: x.snippet.title, at: Date.parse(x.snippet.publishedAt) || 0, views: +st.viewCount || 0, likes: +st.likeCount || 0, comments: +st.commentCount || 0,
+      sec: isoSec(x.contentDetails && x.contentDetails.duration), privacy: (x.status && x.status.privacyStatus) || "", kind: m.id ? (m.kind || "ai") : "", series: m.series || "" }; });
+  }
+  const subs = +((it0.statistics || {}).subscriberCount) || 0;
+  const out = { at: Date.now(), subs, items };
+  await env.KV.put(ck, JSON.stringify(out), { expirationTtl: 30 * 86400 });
+  return { ok: true, ...out };
+}
 async function ytStatus(env, h) {
   if (!env.YT_CLIENT_ID || !env.YT_CLIENT_SECRET) return { ok: true, config: false };
   const y = await env.KV.get("yt:" + h, "json");
@@ -521,6 +557,7 @@ function home(){
       +'<p class="lbl">길이</p><div class="chips">'+[30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div>'
       +'<button class="big" id="scriptBtn">✍️ 대본 쓰기</button><div class="err" id="e1"></div></div>';
     h+='<div class="card" id="ytCard"><h2>유튜브 연결</h2><div id="ytBox" class="note">확인 중…</div></div>';
+    if(j.yt)h+='<div class="card"><h2>📈 내 채널 성적 <button class="chip" id="stRe" style="float:right;font-size:12px;padding:3px 9px">새로고침</button></h2><div id="stBox" class="note">불러오는 중…</div></div>';
     h='<a class="big" href="/edit" style="text-align:center;text-decoration:none;background:var(--red);margin:0 0 12px">🎥 내가 찍은 영상으로 만들기 (편집실)</a>'+h;
     if(j.list&&j.list.length)h+='<div class="card"><h2>내 숏츠</h2><div class="list">'+j.list.map(function(x){return '<a href="'+(x.kind==='mine'?'/edit?id='+x.id:'#')+'"'+(x.kind==='mine'?'':' data-open="'+x.id+'"')+'>'+(x.kind==='mine'?'🎥 ':'')+'<span>'+esc(x.title)+'</span><small>'+(x.yt?'▶ '+(x.yt.privacy==='public'?'공개':x.yt.privacy==='unlisted'?'일부공개':'비공개'):new Date(x.made).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}))+'</small></a>';}).join('')+'</div></div>';
     $('main').innerHTML=h;
@@ -533,8 +570,22 @@ function home(){
     $('scriptBtn').onclick=function(){var t=$('topic').value.trim();if(!t){$('e1').textContent='주제를 적거나 추천에서 골라 주세요';return;}var b=this;b.disabled=true;b.innerHTML='<span class="spin">✍️</span> 대본 쓰는 중… (15초쯤)';
       api('/shorts/script',{topic:t,sec:SEC,angle:ANG}).then(function(r){b.disabled=false;b.textContent='✍️ 대본 쓰기';if(!r.ok){$('e1').textContent=r.detail||r.error;return;}D=r.draft;F=r.files||{};editor();});};
     ytBox();
+    if(j.yt){stats(false);$('stRe').onclick=function(){stats(true);};}
   }).catch(function(){gate('서버에 연결하지 못했어요');});
 }
+function ago(t){var hh=(Date.now()-t)/3600e3;return hh<1?'방금':hh<48?Math.round(hh)+'시간 전':Math.round(hh/24)+'일 전';}
+function stats(fresh){var b=$('stBox');if(!b)return;b.textContent='불러오는 중…';
+  api('/shorts/yt/stats',{fresh:fresh}).then(function(r){if(!r.ok){b.textContent=r.detail||r.error;return;}
+    var it=r.items.slice().sort(function(a,c){return c.at-a.at;});if(!it.length){b.textContent='아직 올린 영상이 없어요.';return;}
+    var pub=it.filter(function(x){return x.privacy==='public';}),tv=pub.reduce(function(a,x){return a+x.views;},0);
+    var best=pub.filter(function(x){return Date.now()-x.at>20*3600e3;}).map(function(x){return {x:x,d:x.views/Math.max(1,(Date.now()-x.at)/86400e3)};}).sort(function(a,c){return c.d-a.d;})[0];
+    var h='<div style="display:flex;gap:14px;margin:2px 0 8px;font-size:14px;color:var(--ink)"><span>구독자 <b>'+r.subs+'</b></span><span>공개 '+pub.length+'편</span><span>총 조회 <b>'+tv+'</b></span></div>';
+    if(best)h+='<p style="margin:0 0 8px;font-size:13.5px;color:var(--ink)">🏆 하루당 조회 1위: <b>'+esc(best.x.title)+'</b> ('+Math.round(best.d)+'회/일)</p>';
+    h+=it.map(function(x){var hrs=Math.max(1,(Date.now()-x.at)/3600e3);return '<a href="https://youtube.com/shorts/'+esc(x.id)+'" target="_blank" style="display:block;padding:8px 0;border-top:1px solid var(--line);color:var(--ink);text-decoration:none">'
+      +'<div style="font-size:14px;line-height:1.35">'+(x.kind==='mine'?'🎥 ':x.kind==='ai'?'🤖 ':'')+esc(x.title)+'</div>'
+      +'<div style="font-size:12.5px;color:var(--ink2);margin-top:2px">▶ <b style="color:var(--ink)">'+x.views+'</b> · 👍 '+x.likes+' · 💬 '+x.comments+' · '+ago(x.at)+(x.privacy!=='public'?' · <span style="color:var(--red)">'+(x.privacy==='private'?'비공개':'일부공개')+'</span>':' · 시간당 '+(x.views/hrs).toFixed(1))+'</div></a>';}).join('');
+    h+='<p class="note">🎥 편집실 · 🤖 AI 생성. 첫 화면에서 넘긴 비율·시청 비율은 유튜브 스튜디오 → 분석에서 봐요. 이 성적은 💡 주제 추천에 자동 반영돼요.</p>';
+    b.innerHTML=h;});}
 function ytBox(){
   api('/shorts/yt/status').then(function(y){var b=$('ytBox');if(!b)return;
     if(!y.config){b.innerHTML='아직 유튜브 앱 설정(시크릿 2개)이 없어요. 설정하면 여기서 바로 연결돼요.';return;}
