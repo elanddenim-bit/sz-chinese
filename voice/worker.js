@@ -120,7 +120,7 @@ export default {
         if (ev) ctx.waitUntil(logUse(env, "shorts", { [ev]: 1 }, 0, h).catch(() => {}));
         return json(req, out);
       }
-      if (url.pathname === "/voice/enroll") return json(req, await enroll(env, h, b));
+      if (url.pathname === "/voice/enroll") { b._colo = req.cf && req.cf.colo; return json(req, await enroll(env, h, b)); }
       if (url.pathname === "/voice/status") return json(req, await vstatus(env, h));
       if (url.pathname === "/voice/tts") return await tts(req, env, h, b);
       return json(req, { error: "not_found" }, 404);
@@ -242,9 +242,20 @@ async function ds(env, path, body, extra = {}, ms = 0) {
   return j;
 }
 // 百炼 임시 저장소(48시간)에 올리고 oss:// 주소를 받는다 — 베이징 서버가 외부 주소를 못 가져오는 문제를 피함
-async function tempUpload(env, model, bytes, name, mime) {
-  const p = (await ds(env, "/uploads?action=getPolicy&model=" + encodeURIComponent(model), null, {}, 15000)).data || {};
-  if (!p.upload_host || !p.upload_dir) throw err("upload", "임시 저장소 정책을 받지 못했습니다.");
+async function tempUpload(env, model, bytes, name, mime, mark) {
+  mark = mark || (async () => {});
+  const q = "/uploads?action=getPolicy&model=" + encodeURIComponent(model);
+  let p = null;
+  // 정책: 업무공간 주소 → 안 되면 공용 주소(같은 키)
+  for (const hst of [host(env), "dashscope.aliyuncs.com"]) {
+    try {
+      const r = await fetch("https://" + hst + "/api/v1" + q, { headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY }, signal: AbortSignal.timeout(12000) });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.data && j.data.upload_host) { p = j.data; await mark("정책(" + (hst === host(env) ? "업무공간" : "공용") + ")"); break; }
+      await mark("정책 실패(" + hst.split(".")[0].slice(0, 12) + " " + r.status + ")");
+    } catch (e) { await mark("정책 실패(" + hst.split(".")[0].slice(0, 12) + " " + (e.name === "TimeoutError" ? "시간 초과" : String(e.message || e).slice(0, 40)) + ")"); }
+  }
+  if (!p || !p.upload_dir) throw err("upload", "임시 저장소 정책을 받지 못했습니다.");
   const key = p.upload_dir + "/" + name;
   const f = new FormData();
   f.append("OSSAccessKeyId", p.oss_access_key_id);
@@ -255,8 +266,12 @@ async function tempUpload(env, model, bytes, name, mime) {
   f.append("key", key);
   f.append("success_action_status", "200");
   f.append("file", new Blob([bytes], { type: mime }), name);
-  const r = await fetch(p.upload_host, { method: "POST", body: f, signal: AbortSignal.timeout(30000) });
+  const uh = String(p.upload_host).replace(/^https?:\/\//, "").split(".").slice(0, 2).join(".");
+  let r;
+  try { r = await fetch(p.upload_host, { method: "POST", body: f, signal: AbortSignal.timeout(40000) }); }
+  catch (e) { await mark("저장소 전송 실패(" + uh + " " + (e.name === "TimeoutError" ? "시간 초과" : String(e.message || e).slice(0, 40)) + ")"); throw e; }
   if (!r.ok) throw err("upload", "임시 저장소 업로드 실패 " + r.status + ": " + (await r.text()).slice(0, 160));
+  await mark("저장소 전송(" + uh + ", " + Math.round(bytes.length / 1024) + "KB)");
   return "oss://" + key;
 }
 function b64bytes(b64) {
@@ -269,7 +284,7 @@ async function enroll(env, h, b) {
   // 단계별 시간 기록 — 실패하면 어느 단계에서 멈췄는지 KV voice:last:<해시> 에 남겨 /voice/status 로 보여 줌
   const t0 = Date.now(), trail = [];
   const mark = async (step, extra) => { trail.push(step + " " + ((Date.now() - t0) / 1000).toFixed(1) + "s"); await env.KV.put("voice:last:" + h, JSON.stringify({ at: t0, trail, ...(extra || {}) }), { expirationTtl: 7 * 86400 }).catch(() => {}); };
-  await mark("받음");
+  await mark("받음(" + (b._colo || "?") + ", " + Math.round(String(b.audio || "").length * 0.75 / 1024) + "KB)");
   try {
     const bytes = b64bytes(b.audio);
     if (bytes.length < 20000) throw err("too_short", "녹음이 너무 짧습니다(10초 이상).", 400);
@@ -278,8 +293,8 @@ async function enroll(env, h, b) {
     const ext = mime === "audio/wav" ? "wav" : mime === "audio/mpeg" ? "mp3" : "m4a";
     let ossUrl = "";
     for (let k = 0; ; k++) {
-      try { ossUrl = await tempUpload(env, "voice-enrollment", bytes, "myvoice-" + h + "-" + Date.now() + "." + ext, mime); break; }
-      catch (e) { await mark("업로드 실패(" + (e.name === "TimeoutError" ? "시간 초과" : String(e.message || e).slice(0, 60)) + ")"); if (k >= 1) throw err("upload", "알리바바 임시 저장소로 녹음을 올리지 못했어요: " + (e.name === "TimeoutError" ? "시간 초과" : e.message)); }
+      try { ossUrl = await tempUpload(env, "voice-enrollment", bytes, "myvoice-" + h + "-" + Date.now() + "." + ext, mime, mark); break; }
+      catch (e) { await mark("업로드 실패(" + (e.name === "TimeoutError" ? "시간 초과" : String(e.message || e).slice(0, 60)) + ")"); if (k >= 1 || Date.now() - t0 > 60000) throw err("upload", "알리바바 임시 저장소로 녹음을 올리지 못했어요: " + (e.name === "TimeoutError" ? "시간 초과" : e.message)); }
     }
     await mark("업로드");
     // 이전 목소리는 지운다(계정당 개수 제한)
