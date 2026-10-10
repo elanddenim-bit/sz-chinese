@@ -47,7 +47,7 @@ video.out,video.prev{width:70%;max-width:320px;display:block;margin:10px auto;bo
 <main id="main"></main><div id="stash"></div>
 <script>
 var CODE='';try{CODE=localStorage.getItem('pb-code')||'';}catch(e){}
-var CLIPS=[],D=null,SEC=45,ANG='mix',NARR={};try{ANG=localStorage.getItem('sh-ang')||'mix';}catch(e){}
+var CLIPS=[],D=null,SEC=45,ANG='mix',NARR={},RECING=null,MIC=null,MREC=null;try{ANG=localStorage.getItem('sh-ang')||'mix';}catch(e){}
 var ANGS=[['mix','골고루'],['compare','🇰🇷 한국이랑 비교'],['price','💰 원화로 얼마?'],['tip','✈️ 여행 꿀팁'],['shock','😮 문화 충격'],['food','🍜 한국인 입맛'],['life','🏠 주재원 현실']];
 function $(i){return document.getElementById(i);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -121,6 +121,7 @@ function segHtml(s,i){
     +' <input type="number" step="0.1" min="0" data-f="s" value="'+fmt(s.s)+'">~<input type="number" step="0.1" min="0" data-f="e" value="'+fmt(s.e)+'">초</div>'
     +'<input type="text" data-f="cap" value="'+esc(s.cap)+'" placeholder="화면 큰 글씨 (비워도 돼요)">'
     +'<textarea data-f="say" placeholder="내레이션 (비우면 원본 소리만)">'+esc(s.say)+'</textarea>'
+    +((D.opts&&D.opts.voice==='rec')?'<div class="mini" style="margin-bottom:6px"><button data-a="rec" style="border-color:var(--red);color:var(--red)">'+(RECING===s?'■ 정지':'🎙 녹음')+'</button>'+(s._rec?'<button data-a="hear">▶ 들어보기</button><span class="note" style="margin:0;align-self:center">'+fmt(s._rec.dur)+'초 녹음됨</span>':'')+'</div>':'')
     +'<div class="mini"><button data-a="pv">▶ 보기</button><button data-a="up">▲</button><button data-a="dn">▼</button><button data-a="dup">복제</button><button data-a="del">✕</button></div></div></div>';
 }
 function editor(){
@@ -130,7 +131,9 @@ function editor(){
   h+='<div class="card"><h2>구간 '+D.scenes.length+'개 · 약 '+Math.round(tot)+'초</h2><video class="prev" id="pv" playsinline muted controls style="display:none"></video>'+D.scenes.map(segHtml).join('')+'<button class="big ghost" id="addSeg">＋ 구간 추가</button></div>';
   h+='<div class="card"><h2>설정</h2><p class="lbl">화면</p><div class="chips"><button class="chip'+(o.fit==='crop'?' on':'')+'" data-o="fit" data-v="crop">꽉 채우기(가운데 자르기)</button><button class="chip'+(o.fit==='full'?' on':'')+'" data-o="fit" data-v="full">전체 보기(흐린 배경)</button></div>'
    +'<p class="lbl">원본 소리</p><div class="chips">'+[[0,'끄기'],[0.3,'작게'],[1,'그대로']].map(function(x){return '<button class="chip'+(o.orig===x[0]?' on':'')+'" data-o="orig" data-v="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>'
-   +'<p class="lbl">내레이션 · 자막</p><div class="chips"><button class="chip'+(o.narr?' on':'')+'" data-o="narr">🔊 AI 내레이션</button><button class="chip'+(o.subs?' on':'')+'" data-o="subs">💬 자막</button></div></div>';
+   +'<p class="lbl">내레이션 목소리</p><div class="chips">'+[['Cherry','👩 AI 여성'],['Ethan','👨 AI 남성'],['mine','🗣 내 목소리(AI 복제)'],['rec','🎙 직접 녹음']].map(function(x){return '<button class="chip'+((o.voice||'Cherry')===x[0]?' on':'')+'" data-o="voice" data-v="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>'
+   +((o.voice==='rec')?'<p class="note">구간마다 🎙 녹음을 눌러 직접 말하세요. 녹음은 이 화면을 닫으면 사라져요.</p>':(o.voice==='mine')?'<p class="note">실전 중국어 발음 탭에서 등록한 목소리로 한국어를 읽어요. 등록 전이면 AI 여성 목소리로 나와요.</p>':'')
+   +'<p class="lbl">내레이션 · 자막</p><div class="chips"><button class="chip'+(o.narr?' on':'')+'" data-o="narr">🔊 내레이션</button><button class="chip'+(o.subs?' on':'')+'" data-o="subs">💬 자막</button></div></div>';
   h+='<div class="card"><h2>영상 완성</h2><p class="note">폰에서 720×1280으로 녹화해요. 길이만큼 걸리니 화면을 켜 두세요.</p><button class="big" id="renderBtn">🎬 영상 만들기</button><div id="out"></div></div>';
   h+='<a class="big ghost" href="/shorts">← 숏츠 공방</a>';
   $('main').innerHTML=h;window.scrollTo(0,0);bind();
@@ -146,6 +149,8 @@ function bind(){
   document.querySelectorAll('#main input,#main textarea,#main select').forEach(function(x){x.oninput=saveSoon;x.onchange=saveSoon;});
   document.querySelectorAll('.seg [data-a]').forEach(function(b){b.onclick=function(){readForm();var i=+b.closest('.seg').getAttribute('data-i'),a=b.getAttribute('data-a'),L=D.scenes;
     if(a==='pv')return preview(i);
+    if(a==='rec')return recToggle(L[i]);
+    if(a==='hear'){try{new Audio(L[i]._rec.url).play();}catch(e){}return;}
     if(a==='up'&&i>0){var t=L[i];L[i]=L[i-1];L[i-1]=t;}
     if(a==='dn'&&i<L.length-1){var t2=L[i];L[i]=L[i+1];L[i+1]=t2;}
     if(a==='dup'&&L.length<15)L.splice(i+1,0,JSON.parse(JSON.stringify(L[i])));
@@ -153,7 +158,7 @@ function bind(){
     editor();saveSoon();};});
   $('addSeg').onclick=function(){readForm();if(D.scenes.length>=15)return;var c=CLIPS.length-1;D.scenes.push({clip:c,s:0,e:Math.min(3,CLIPS[c].dur),cap:'',say:''});editor();saveSoon();};
   document.querySelectorAll('[data-o]').forEach(function(b){b.onclick=function(){var k=b.getAttribute('data-o'),v=b.getAttribute('data-v');
-    if(k==='fit')D.opts.fit=v;else if(k==='orig')D.opts.orig=+v;else D.opts[k]=!D.opts[k];readForm();editor();saveSoon();};});
+    if(k==='fit')D.opts.fit=v;else if(k==='orig')D.opts.orig=+v;else if(k==='voice')D.opts.voice=v;else D.opts[k]=!D.opts[k];readForm();editor();saveSoon();};});
   $('renderBtn').onclick=render;
   segThumbs();
 }
@@ -163,14 +168,26 @@ async function preview(i){var s=D.scenes[i],c=CLIPS[s.clip],pv=$('pv');if(!c)ret
   await waitEv(pv,'loadedmetadata',5000);pv.currentTime=s.s;try{await pv.play();}catch(e){}pv.scrollIntoView({block:'center',behavior:'smooth'});
   pvT=setInterval(function(){if(pv.currentTime>=s.e){pv.pause();clearInterval(pvT);}},100);}
 
+// ---------- 직접 녹음 ----------
+async function recToggle(s){
+  if(RECING&&MREC){MREC.stop();return;}
+  try{if(!MIC)MIC=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});}catch(e){toast('마이크 권한이 필요해요');return;}
+  var mt=['audio/mp4','audio/webm;codecs=opus','audio/webm'].filter(function(m){return window.MediaRecorder&&MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(m);})[0]||'';
+  var ch=[],t0=Date.now();MREC=new MediaRecorder(MIC,mt?{mimeType:mt}:{});RECING=s;
+  MREC.ondataavailable=function(e){if(e.data&&e.data.size)ch.push(e.data);};
+  MREC.onstop=function(){var blob=new Blob(ch,{type:(mt||'audio/mp4').split(';')[0]});s._rec={blob:blob,url:URL.createObjectURL(blob),dur:(Date.now()-t0)/1000};RECING=null;MREC=null;readForm();editor();};
+  MREC.start();readForm();editor();
+}
 // ---------- 4) 내레이션 ----------
 async function ensureNarr(ac,prog){
   var out=[];
   for(var i=0;i<D.scenes.length;i++){
-    var t=(D.scenes[i].say||'').trim();out[i]=null;if(!t||!D.opts.narr)continue;
+    var t=(D.scenes[i].say||'').trim();out[i]=null;if(!D.opts.narr)continue;if(!t&&!(D.opts.voice==='rec'&&D.scenes[i]._rec))continue;
     prog('🔊 내레이션 '+(i+1)+'/'+D.scenes.length);
-    var n=NARR[i];
-    if(!n||n.text!==t){var r=await api('/shorts/asset',{id:D.id,n:i,kind:'say',text:t});if(!r.ok){toast('#'+(i+1)+' 내레이션 실패: '+(r.detail||r.error));continue;}n=NARR[i]={text:t,url:r.url,buf:null};}
+    var sc=D.scenes[i],vo=D.opts.voice||'Cherry';
+    if(vo==='rec'){if(!sc._rec)continue;try{var rb=await sc._rec.blob.arrayBuffer();out[i]=await new Promise(function(ok,no){var p=ac.decodeAudioData(rb,ok,no);if(p&&p.then)p.then(ok,no);});}catch(e){toast('#'+(i+1)+' 녹음을 읽지 못했어요');}continue;}
+    var key=vo+'|'+t,n=sc._narr;
+    if(!n||n.key!==key){var r=await api('/shorts/asset',{id:D.id,n:i,kind:'say',text:t,voice:vo});if(!r.ok){toast('#'+(i+1)+' 내레이션 실패: '+(r.detail||r.error));continue;}n=sc._narr={key:key,url:r.url,buf:null};}
     if(!n.buf){try{var ab=await (await fetch(n.url+'&v='+Date.now())).arrayBuffer();n.buf=await new Promise(function(ok,no){var p=ac.decodeAudioData(ab,ok,no);if(p&&p.then)p.then(ok,no);});}catch(e){n.buf=null;}}
     out[i]=n.buf;
   }
@@ -178,6 +195,11 @@ async function ensureNarr(ac,prog){
 }
 
 // ---------- 5) 렌더링 ----------
+// 재생 직후 실제 프레임이 나올 때까지 기다림(이전엔 준비 안 된 프레임 = 검은 화면이 녹화됨)
+function firstFrame(v){return new Promise(function(ok){var done=false;function fin(){if(!done){done=true;ok();}}
+  if(v.requestVideoFrameCallback){v.requestVideoFrameCallback(function(){fin();});}
+  else{(function chk(n){if(v.readyState>=3||n>20)return setTimeout(fin,40);setTimeout(function(){chk(n+1);},30);})(0);}
+  setTimeout(fin,900);});}
 function wrap(g,t,max){var out=[],cur='';for(var i=0;i<t.length;i++){var n=cur+t[i];if(g.measureText(n).width>max&&cur){out.push(cur);cur=t[i];}else cur=n;}if(cur)out.push(cur);return out;}
 async function render(){
   readForm();
@@ -189,6 +211,7 @@ async function render(){
   function prog(t){out.innerHTML='<p class="prog">'+t+'</p>';}
   var narr=await ensureNarr(ac,prog);
   var tiny=document.createElement('canvas');tiny.width=24;tiny.height=42;var tg=tiny.getContext('2d');
+  var sn=document.createElement('canvas');sn.width=720;sn.height=1280;var sgx=sn.getContext('2d'),hasSnap=false;
   var W=720,H=1280,cv=document.createElement('canvas');cv.width=W;cv.height=H;var g=cv.getContext('2d');
   if(!cv.captureStream||!window.MediaRecorder){out.innerHTML='<p class="err">이 브라우저는 영상 녹화를 못 해요(iOS 최신 Safari 필요).</p>';btn.disabled=false;return;}
   var dest=ac.createMediaStreamDestination(),master=ac.createGain();master.gain.value=1;master.connect(dest);master.connect(ac.destination);
@@ -201,12 +224,14 @@ async function render(){
   var plan=D.scenes.map(function(s,i){var nd=narr[i]?narr[i].duration+0.25:0;return {s:s,i:i,len:Math.max(s.e-s.s,nd,0.8)};}),total=plan.reduce(function(a,p){return a+p.len;},0),doneT=0;
   function stroke(txt,x,y,font,fill,lw){g.font=font;g.textAlign='center';g.lineJoin='round';g.lineWidth=lw;g.strokeStyle='rgba(0,0,0,.85)';g.strokeText(txt,x,y);g.fillStyle=fill;g.fillText(txt,x,y);}
   function draw(v,sc,el,len,idx){
-    g.fillStyle='#000';g.fillRect(0,0,W,H);var vw=v.videoWidth,vh=v.videoHeight;
-    if(vw&&vh){
+    var vw=v.videoWidth,vh=v.videoHeight,ready=vw&&vh&&v.readyState>=2;
+    if(!ready){if(hasSnap)g.drawImage(sn,0,0);else{g.fillStyle='#000';g.fillRect(0,0,W,H);}}
+    else{g.fillStyle='#000';g.fillRect(0,0,W,H);}
+    if(ready){
       if(D.opts.fit==='full'){var bs=Math.max(W/vw,H/vh)*1.1;tg.drawImage(v,0,0,tiny.width,tiny.height);g.imageSmoothingEnabled=true;g.drawImage(tiny,(W-vw*bs)/2,(H-vh*bs)/2,vw*bs,vh*bs);g.fillStyle='rgba(0,0,0,.45)';g.fillRect(0,0,W,H);var fs2=Math.min(W/vw,H/vh);g.drawImage(v,(W-vw*fs2)/2,(H-vh*fs2)/2,vw*fs2,vh*fs2);}
       else{var cs=Math.max(W/vw,H/vh);g.drawImage(v,(W-vw*cs)/2,(H-vh*cs)/2,vw*cs,vh*cs);}
     }
-    if(el<0.2){g.fillStyle='rgba(0,0,0,'+(1-el/0.2)*0.8+')';g.fillRect(0,0,W,H);}
+    if(hasSnap&&ready&&el<0.25){g.globalAlpha=1-el/0.25;g.drawImage(sn,0,0);g.globalAlpha=1;}
     var gr=g.createLinearGradient(0,H*0.5,0,H);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,.55)');g.fillStyle=gr;g.fillRect(0,H*0.5,W,H*0.5);
     if(sc.cap){var pop=Math.min(1,el/0.18),fs=Math.round(66*(0.85+0.15*pop)),fnt='900 '+fs+'px -apple-system,"Apple SD Gothic Neo",sans-serif';g.font=fnt;wrap(g,sc.cap,W-140).forEach(function(l,k){stroke(l,W/2,H*0.20+k*(fs+12),fnt,idx===0&&k===0?'#FFD84D':'#FFFFFF',14);});}
     if(D.opts.subs&&sc.say){var f2='700 36px -apple-system,"Apple SD Gothic Neo",sans-serif';g.font=f2;var sl=wrap(g,sc.say,W-170).slice(0,4);sl.forEach(function(l,k){stroke(l,W/2-20,H*0.66+k*48-(sl.length-1)*24,f2,'#FFFFFF',9);});}
@@ -218,13 +243,15 @@ async function render(){
     var p=plan[k],sc=p.s,c=CLIPS[sc.clip];if(!c)continue;
     $('rp').textContent='녹화 중… '+(k+1)+' / '+plan.length+' 구간';
     c.v.pause();await seekTo(c.v,sc.s);
-    var v=c.v;draw(v,sc,0,p.len,k);
-    if(!started){rec.start(500);started=true;}else{try{rec.resume();}catch(e){}}
+    var v=c.v;
     try{var pr=v.play();if(pr&&pr.catch)pr.catch(function(){v.muted=true;var p2=v.play();if(p2&&p2.catch)p2.catch(function(){});});}catch(e){}
+    await firstFrame(v);
+    draw(v,sc,0,p.len,k);
+    if(!started){rec.start(500);started=true;}else{try{rec.resume();}catch(e){}}
     var t0=ac.currentTime;
     if(narr[p.i]){var bs=ac.createBufferSource();bs.buffer=narr[p.i];bs.connect(master);bs.start(t0+0.05);}
     await new Promise(function(done){(function loop(){var el=ac.currentTime-t0;if(el>=p.len){done();return;}if(v.currentTime>=sc.e-0.02&&!v.paused)v.pause();draw(v,sc,el,p.len,k);requestAnimationFrame(loop);})();});
-    v.pause();doneT+=p.len;
+    v.pause();doneT+=p.len;sgx.drawImage(cv,0,0);hasSnap=true;
     if(k<plan.length-1){try{rec.pause();}catch(e){}}
   }
   await new Promise(function(ok){rec.onstop=ok;rec.stop();});
