@@ -34,11 +34,19 @@ async function owner(env, h) {
 }
 
 async function dsPost(env, path, body, async_) {
-  const r = await fetch("https://" + host(env) + "/api/v1" + path, {
-    method: "POST",
-    headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json", ...(async_ ? { "X-DashScope-Async": "enable" } : {}) },
-    body: JSON.stringify(body),
-  });
+  // 백련 쪽 일시 오류(520 등 5xx·429·연결 끊김)는 두 번까지 다시 시도
+  let r = null;
+  for (let k = 0; ; k++) {
+    try {
+      r = await fetch("https://" + host(env) + "/api/v1" + path, {
+        method: "POST",
+        headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json", ...(async_ ? { "X-DashScope-Async": "enable" } : {}) },
+        body: JSON.stringify(body),
+      });
+    } catch (e) { if (k >= 2) throw serr("百炼 연결 실패: " + (e.message || e), 502); r = null; }
+    if (r && (r.ok || (r.status < 500 && r.status !== 429) || k >= 2)) break;
+    await new Promise((ok) => setTimeout(ok, 1200 * (k + 1)));
+  }
   const t = await r.text();
   let j = {};
   try { j = JSON.parse(t); } catch {}
@@ -391,7 +399,7 @@ async function avaDoc(env, h) {
   return d;
 }
 async function avaView(env, d) {
-  return { ok: true, face: d.face ? (await fileUrl(env, d.face)) + "&v=" + (d.faceAt || 0) : "", // v: 같은 이름(face.jpg)이라 브라우저 캐시에 옛 그림이 남는 것 방지 check: d.check || null, pend: d.pend || null, used: d.sec || 0, cap: avaCap(env),
+  return { ok: true, face: d.face ? (await fileUrl(env, d.face)) + "&v=" + (d.faceAt || 0) : "", /* v: 같은 이름이라 브라우저 캐시에 옛 그림이 남는 것 방지 */ check: d.check || null, pend: d.pend || null, used: d.sec || 0, cap: avaCap(env),
     list: await Promise.all((d.list || []).map(async (x) => ({ ...x, url: await fileUrl(env, x.k) }))) };
 }
 async function avaFace(env, b, h) {

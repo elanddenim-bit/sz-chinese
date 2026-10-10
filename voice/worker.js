@@ -344,11 +344,15 @@ async function tts(req, env, h, b) {
   return new Response(mp3, { headers: head });
 }
 async function synth(env, voice, text, model) {
-  const up = await fetch("https://" + host(env) + "/api-ws/v1/inference", {
-    headers: { Upgrade: "websocket", Authorization: "Bearer " + env.DASHSCOPE_API_KEY },
-  });
-  const ws = up.webSocket;
-  if (!ws) throw err("tts", "합성 서버 연결 거부 " + up.status);
+  // 연결이 520 등으로 거부되면 잠깐 쉬고 두 번까지 다시
+  let up = null;
+  for (let k = 0; k < 3; k++) {
+    try { up = await fetch("https://" + host(env) + "/api-ws/v1/inference", { headers: { Upgrade: "websocket", Authorization: "Bearer " + env.DASHSCOPE_API_KEY } }); } catch { up = null; }
+    if (up && up.webSocket) break;
+    if (k < 2) await new Promise((ok) => setTimeout(ok, 1200 * (k + 1)));
+  }
+  const ws = up && up.webSocket;
+  if (!ws) throw err("tts", "합성 서버 연결 거부 " + (up ? up.status : "연결 실패") + " — 잠시 뒤 다시 눌러 주세요");
   try { ws.binaryType = "arraybuffer"; } catch {}
   ws.accept();
   const task = crypto.randomUUID().replace(/-/g, "");
