@@ -275,7 +275,11 @@ function firstFrame(v){return new Promise(function(ok){var done=false;function f
 function sayChunks(t){t=String(t||'').trim();if(!t)return [];var parts=t.replace(/([,.!?…，。！？~]+)(?![0-9])\s*/g,'$1\n').split('\n').map(function(x){return x.trim();}).filter(Boolean),out=[];
   parts.forEach(function(x){while(x.length>18){var m=x.lastIndexOf(' ',Math.ceil(x.length/2)+3);if(m<6)m=x.indexOf(' ',6);if(m<0)break;out.push(x.slice(0,m));x=x.slice(m+1).trim();}if(x)out.push(x);});
   var tot=out.reduce(function(a,x){return a+x.length+2;},0);return out.map(function(x){return {t:x,w:(x.length+2)/tot};});}
-function wrap(g,t,max){var out=[],cur='';for(var i=0;i<t.length;i++){var n=cur+t[i];if(g.measureText(n).width>max&&cur){out.push(cur);cur=t[i];}else cur=n;}if(cur)out.push(cur);return out;}
+// 줄바꿈은 띄어쓰기 단위로(숫자·단어 중간에서 안 끊김: '2.5/6만원' 같은 오독 방지), 한 단어가 너무 길 때만 글자 단위
+function wrap(g,t,max){t=String(t||'');var out=[],cur='';function fits(x){return g.measureText(x).width<=max;}
+  t.split(/ +/).forEach(function(w){if(!w)return;var n=cur?cur+' '+w:w;if(fits(n)){cur=n;return;}if(cur)out.push(cur);cur='';
+    if(fits(w)){cur=w;return;}for(var i=0;i<w.length;i++){var m=cur+w[i];if(!fits(m)&&cur){out.push(cur);cur=w[i];}else cur=m;}});
+  if(cur)out.push(cur);return out;}
 // 렌더 중 오류가 나도 버튼이 '멈추기'로 묶이지 않게
 function render(dry){return render0(dry).catch(function(e){RUN=null;var b=$('renderBtn'),p=$('pvAll');if(b){b.disabled=false;b.textContent='🎬 영상 만들기';}if(p){p.disabled=false;p.textContent='▶ 전체 미리보기 (녹화 안 함)';}var o=$('out');if(o)o.insertAdjacentHTML('beforeend','<p class="err">오류: '+esc(e&&e.message||e)+'</p>');});}
 async function render0(dry){

@@ -601,7 +601,11 @@ async function makeAll(){
 function loadImg(u){return new Promise(function(ok){if(!u)return ok(null);var im=new Image();im.onload=function(){ok(im);};im.onerror=function(){ok(null);};im.src=u;});}
 function loadVid(u){return new Promise(function(ok){if(!u)return ok(null);var v=document.createElement('video');v.muted=true;v.playsInline=true;v.setAttribute('playsinline','');v.loop=true;v.preload='auto';var done=false;v.oncanplaythrough=v.onloadeddata=function(){if(!done){done=true;ok(v);}};v.onerror=function(){if(!done){done=true;ok(null);}};v.src=u;v.load();setTimeout(function(){if(!done){done=true;ok(v.readyState>=2?v:null);}},15000);});}
 function decode(ac,ab){return new Promise(function(ok,no){try{var p=ac.decodeAudioData(ab,ok,no);if(p&&p.then)p.then(ok,no);}catch(e){no(e);}});}
-function wrap(g,t,max){var out=[],cur='';for(var i=0;i<t.length;i++){var n=cur+t[i];if(g.measureText(n).width>max&&cur){out.push(cur);cur=t[i];}else cur=n;}if(cur)out.push(cur);return out;}
+// 줄바꿈은 띄어쓰기 단위로(숫자·단어 중간에서 안 끊김: '2.5/6만원' 같은 오독 방지), 한 단어가 너무 길 때만 글자 단위
+function wrap(g,t,max){t=String(t||'');var out=[],cur='';function fits(x){return g.measureText(x).width<=max;}
+  t.split(/ +/).forEach(function(w){if(!w)return;var n=cur?cur+' '+w:w;if(fits(n)){cur=n;return;}if(cur)out.push(cur);cur='';
+    if(fits(w)){cur=w;return;}for(var i=0;i<w.length;i++){var m=cur+w[i];if(!fits(m)&&cur){out.push(cur);cur=w[i];}else cur=m;}});
+  if(cur)out.push(cur);return out;}
 async function render(){
   readForm();api('/shorts/update',{id:D.id,draft:D});
   var out=$('out'),btn=$('renderBtn');btn.disabled=true;
