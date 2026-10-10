@@ -66,7 +66,7 @@ export default {
       if (url.pathname === "/manifest.webmanifest") return new Response(MANIFEST, { headers: { "content-type": "application/manifest+json; charset=utf-8", "cache-control": "public, max-age=3600" } });
       if (url.pathname === "/u" && req.method === "POST") return await beacon(req, env, ctx);
       if (url.pathname === "/quest" && req.method === "GET") return new Response(QUEST_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
-      if (url.pathname.startsWith("/quest/") && req.method === "GET") return await questGet(req, env, url);
+      if (url.pathname.startsWith("/quest/") && req.method === "GET") return await questGet(req, env, url, synth);
       if (url.pathname === "/usage" && req.method === "GET") return new Response(USAGE_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/" && req.method === "GET") return new Response(AGENT_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (req.method !== "POST") return json(req, { error: "not_found" }, 404);
@@ -267,7 +267,7 @@ async function tts(req, env, h, b) {
   await env.R2.put(key, mp3, { httpMetadata: { contentType: "audio/mpeg" } });
   return new Response(mp3, { headers: head });
 }
-async function synth(env, voice, text) {
+async function synth(env, voice, text, model) {
   const up = await fetch("https://" + host(env) + "/api-ws/v1/inference", {
     headers: { Upgrade: "websocket", Authorization: "Bearer " + env.DASHSCOPE_API_KEY },
   });
@@ -296,9 +296,9 @@ async function synth(env, voice, text) {
         rej(err("tts", "합성 실패: " + (m.header.error_message || m.header.error_code || "unknown")));
       }
     });
-    ws.addEventListener("close", () => clearTimeout(to));
+    ws.addEventListener("close", () => { clearTimeout(to); rej(err("tts", "합성 연결이 끊겼습니다")); });
     ws.send(msg("run-task", {
-      task_group: "audio", task: "tts", function: "SpeechSynthesizer", model: ttsModel(env),
+      task_group: "audio", task: "tts", function: "SpeechSynthesizer", model: model || ttsModel(env),
       parameters: { text_type: "PlainText", voice, format: "mp3", sample_rate: 24000, volume: 50, rate: 0.95, pitch: 1 },
       input: {},
     }));

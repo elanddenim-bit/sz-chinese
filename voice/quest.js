@@ -77,18 +77,19 @@ async function weather(lat, lon) {
 }
 const wxText = (w) => !w ? "" : (w.code === 0 ? "맑음" : w.code <= 3 ? "구름" : w.code >= 95 ? "뇌우" : w.code >= 51 ? "비" : "흐림") + " " + w.lo + "~" + w.hi + "° · 비 " + w.rain + "%" + (w.uv >= 8 ? " · 자외선 강함" : "");
 
-async function signCur(env, d) {
+async function signCur(env, d, h) {
+  if (d.cur) for (const q of d.cur.items) if (q.phrase && q.phrase.z && h) q.phrase.say = "/quest/say?h=" + h + "&t=" + encodeURIComponent(q.phrase.z) + "&s=" + (await hmac16(env, "say|" + h + "|" + q.phrase.z));
   if (d.cur) for (const q of d.cur.items) if (q.img) q.imgUrl = "/quest/img?k=" + encodeURIComponent(q.img) + "&s=" + (await hmac16(env, q.img));
   for (const x of d.hist.slice(0, 40)) if (x.img) x.imgUrl = "/quest/img?k=" + encodeURIComponent(x.img) + "&s=" + (await hmac16(env, x.img));
   return d;
 }
-const view = async (env, d) => {
-  const v = await signCur(env, JSON.parse(JSON.stringify(d)));
+const view = async (env, d, h) => {
+  const v = await signCur(env, JSON.parse(JSON.stringify(d)), h);
   return { ok: true, today: cnDay(), cur: v.cur, pts: v.pts, badges: v.badges, hist: v.hist.slice(0, 40), cats: v.cats, all: BADGES, moods: Object.fromEntries(Object.entries(MOODS).map(([k, m]) => [k, m.label])) };
 };
 
 export async function questApi(env, ctx, path, b, h) {
-  if (path === "/quest/state") return view(env, await load(env, h));
+  if (path === "/quest/state") return view(env, await load(env, h), h);
   if (path === "/quest/new") return newQuest(env, ctx, b, h);
   if (path === "/quest/check") return check(env, ctx, b, h, false);
   if (path === "/quest/honor") return check(env, ctx, b, h, true);
@@ -140,7 +141,7 @@ async function newQuest(env, ctx, b, h) {
   d.gen = { [day]: (d.gen[day] || 0) + 1 };
   await save(env, h, d);
   ctx.waitUntil(logUse(env, "quest", { new: 1 }, 0, h).catch(() => {}));
-  return view(env, d);
+  return view(env, d, h);
 }
 
 function b64bytes(b64) {
@@ -155,7 +156,7 @@ async function check(env, ctx, b, h, honor) {
   const d = await load(env, h);
   const q = d.cur && d.cur.items.find((x) => x.qid === b.qid);
   if (!q) throw qerr("퀘스트를 찾지 못했어요. 새로고침해 주세요.");
-  if (q.done) return { ...(await view(env, d)), result: { ok: true, comment: "이미 완료한 퀘스트예요." } };
+  if (q.done) return { ...(await view(env, d, h)), result: { ok: true, comment: "이미 완료한 퀘스트예요." } };
   const img = String(b.image || "");
   if (img && img.length > 4_000_000) throw qerr("사진이 너무 커요.");
   let verdict;
@@ -170,7 +171,7 @@ async function check(env, ctx, b, h, honor) {
   }
   if (!verdict.ok) {
     ctx.waitUntil(logUse(env, "quest", { fail: 1 }, 0, h).catch(() => {}));
-    return { ...(await view(env, d)), result: verdict };
+    return { ...(await view(env, d, h)), result: verdict };
   }
   const day = cnDay();
   let key = "";
@@ -201,11 +202,26 @@ async function check(env, ctx, b, h, honor) {
   if (run >= 4) give("weeks4");
   await save(env, h, d);
   ctx.waitUntil(logUse(env, "quest", { [honor ? "honor" : "done"]: 1 }, 0, h).catch(() => {}));
-  return { ...(await view(env, d)), result: { ...verdict, pts, badges: got } };
+  return { ...(await view(env, d, h)), result: { ...verdict, pts, badges: got } };
 }
 
 // GET: 인증 사진·지도·장소 사진
-export async function questGet(req, env, url) {
+export async function questGet(req, env, url, synth) {
+  if (url.pathname === "/quest/say") {
+    // 현지 중국어 한 마디 — CosyVoice 기본 음성(QUEST_VOICE/QUEST_TTS_MODEL) → 안 되면 내 목소리 → 둘 다 안 되면 502(화면이 브라우저 음성으로)
+    const t = String(url.searchParams.get("t") || "").slice(0, 60), h = url.searchParams.get("h") || "";
+    if (!t || !/^[0-9a-f]{12}$/.test(h) || url.searchParams.get("s") !== (await hmac16(env, "say|" + h + "|" + t))) return new Response("forbidden", { status: 403 });
+    const key = "tts/quest/" + (await hmac16(env, "k|" + t)) + ".mp3";
+    const head = { "content-type": "audio/mpeg", "cache-control": "private, max-age=31536000" };
+    const hit = await env.R2.get(key);
+    if (hit) return new Response(hit.body, { headers: head });
+    let mp3 = null;
+    try { mp3 = await synth(env, env.QUEST_VOICE || "longxiaochun_v2", t, env.QUEST_TTS_MODEL || "cosyvoice-v2"); } catch {}
+    if (!mp3) { const mine = await env.KV.get("voice:" + h); if (mine) try { mp3 = await synth(env, mine, t); } catch {} }
+    if (!mp3) return new Response("tts failed", { status: 502 });
+    await env.R2.put(key, mp3, { httpMetadata: { contentType: "audio/mpeg" } });
+    return new Response(mp3, { headers: head });
+  }
   if (url.pathname === "/quest/img") {
     const k = url.searchParams.get("k") || "";
     if (!/^quest\/[0-9a-f]{12}\/[\w.-]+\.jpg$/.test(k) || url.searchParams.get("s") !== (await hmac16(env, k))) return new Response("forbidden", { status: 403 });
@@ -314,7 +330,7 @@ function qHtml(q,i){
     var imgs=[];if(p.photo)imgs.push(p.photo);if(p.ms)imgs.push('/quest/map?loc='+encodeURIComponent(p.loc)+'&s='+p.ms);
     if(imgs.length)h+='<div class="imgs'+(imgs.length===1?' one':'')+'">'+imgs.map(function(u){return '<img loading="lazy" src="'+esc(u)+'" alt="" onerror="this.style.display=\'none\'">';}).join('')+'</div>';
     h+='<div class="body"><div class="ms"><b>📸 사진 미션</b>'+esc(q.mission)+'</div>'+(q.why?'<p class="why">'+esc(q.why)+'</p>':'');
-    if(q.phrase)h+='<div class="ph"><div><div class="z">'+esc(q.phrase.z)+'</div><div class="p">'+esc(q.phrase.p)+' · '+esc(q.phrase.k)+'</div></div><button data-say="'+esc(q.phrase.z)+'" aria-label="듣기">🔊</button></div>';
+    if(q.phrase)h+='<div class="ph"><div><div class="z">'+esc(q.phrase.z)+'</div><div class="p">'+esc(q.phrase.p)+' · '+esc(q.phrase.k)+'</div></div><button data-say="'+esc(q.phrase.z)+'" data-url="'+esc(q.phrase.say||'')+'" aria-label="듣기">🔊</button></div>';
     var lng=p.loc.split(',')[0],lat=p.loc.split(',')[1];
     h+='<div class="acts"><a href="https://uri.amap.com/navigation?to='+lng+','+lat+','+encodeURIComponent(p.name)+'&mode=car&coordinate=gaode&callnative=1">🗺 高德 길찾기</a>'
      +'<button data-copy="'+esc(p.name)+'">🚕 이름 복사(디디)</button>'
@@ -343,9 +359,22 @@ function bind(){
   document.querySelectorAll('[data-who]').forEach(function(b){b.onclick=function(){WHO=b.getAttribute('data-who');try{localStorage.setItem('qs-who',WHO);}catch(e){}document.querySelectorAll('[data-who]').forEach(function(x){x.classList.toggle('on',x.getAttribute('data-who')===WHO);});};});
   document.querySelectorAll('[data-rad]').forEach(function(b){b.onclick=function(){RAD=+b.getAttribute('data-rad');try{localStorage.setItem('qs-rad',RAD);}catch(e){}document.querySelectorAll('[data-rad]').forEach(function(x){x.classList.toggle('on',+x.getAttribute('data-rad')===RAD);});};});
   document.querySelectorAll('#gen').forEach(function(b){b.onclick=gen;});
-  document.querySelectorAll('[data-say]').forEach(function(b){b.onclick=function(){try{var u=new SpeechSynthesisUtterance(b.getAttribute('data-say'));u.lang='zh-CN';u.rate=.85;speechSynthesis.cancel();speechSynthesis.speak(u);}catch(e){}};});
+  document.querySelectorAll('[data-say]').forEach(function(b){b.onclick=function(){sayIt(b);};});
   document.querySelectorAll('[data-copy]').forEach(function(b){b.onclick=function(){var t=b.getAttribute('data-copy');(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){toast('복사됨 · 디디 목적지에 붙여넣기');},function(){prompt('복사해 주세요',t);});};});
   document.querySelectorAll('input[data-q]').forEach(function(inp){inp.onchange=function(){if(inp.files&&inp.files[0])shoot(inp.getAttribute('data-q'),inp.files[0]);inp.value='';};});
+}
+// 듣기: 탭 순간 바로 Audio.play (iOS 는 탭 안에서 시작해야 소리가 남) → 서버 음성 실패 시 브라우저 중국어 음성
+var AUD=null;
+function webSay(t){try{if(!window.speechSynthesis)return false;var u=new SpeechSynthesisUtterance(t);u.lang='zh-CN';u.rate=.85;var vs=speechSynthesis.getVoices()||[];for(var i=0;i<vs.length;i++){if(/^zh[-_](CN|Hans)/i.test(vs[i].lang)){u.voice=vs[i];break;}}if(speechSynthesis.speaking)speechSynthesis.cancel();setTimeout(function(){speechSynthesis.speak(u);},60);return true;}catch(e){return false;}}
+function sayIt(b){
+  var t=b.getAttribute('data-say'),url=b.getAttribute('data-url');
+  if(!url){if(!webSay(t))toast('이 기기에서 음성을 낼 수 없어요');return;}
+  b.textContent='⏳';
+  try{if(AUD){AUD.pause();}AUD=new Audio(url);AUD.setAttribute('playsinline','');
+    AUD.onended=function(){b.textContent='🔊';};
+    AUD.onerror=function(){b.textContent='🔊';if(!webSay(t))toast('음성을 불러오지 못했어요');};
+    var p=AUD.play();if(p&&p.then)p.then(function(){b.textContent='🔈';},function(){b.textContent='🔊';if(!webSay(t))toast('음성을 재생하지 못했어요. 무음 모드인지 확인해 주세요');});
+  }catch(e){b.textContent='🔊';webSay(t);}
 }
 function gen(){
   if(BUSY)return;var btns=document.querySelectorAll('#gen'),er=document.querySelectorAll('#gerr');
