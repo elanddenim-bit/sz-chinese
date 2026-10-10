@@ -141,7 +141,7 @@ function editor(){
    +'<p class="lbl">내레이션 목소리</p>'+chipRow('voice',[['Cherry','👩 AI 여성'],['Ethan','👨 AI 남성'],['mine','🗣 내 목소리(AI 복제)'],['rec','🎙 직접 녹음']],o.voice||'Cherry')
    +((o.voice==='rec')?'<p class="note">구간마다 🎙 녹음을 눌러 직접 말하세요. 녹음은 이 화면을 닫으면 사라져요.</p>':(o.voice==='mine')?'<p class="note">실전 중국어 발음 탭에서 등록한 목소리로 한국어를 읽어요. 등록 전이면 AI 여성 목소리로 나와요.</p>':'')
    +'<p class="lbl">내레이션 · 자막 · 끝 화면</p><div class="chips"><button class="chip'+(o.narr?' on':'')+'" data-o="narr">🔊 내레이션</button><button class="chip'+(o.subs?' on':'')+'" data-o="subs">💬 자막</button><button class="chip'+(o.end?' on':'')+'" data-o="end">🔔 끝에 구독 카드(2초)</button></div>'
-   +'<p class="lbl">배경음악</p><label class="pick" style="padding:12px"><input type="file" id="bgmIn" accept="audio/*"><b style="font-size:14.5px">🎵 '+(BGM?esc(BGM.name):'폰에 있는 음악 고르기')+'</b>'+(BGM?'눌러서 다른 곡으로':'유튜브 오디오 보관함처럼 저작권 걱정 없는 곡만')+'</label>'
+   +'<p class="lbl">배경음악</p><label class="pick" style="padding:12px"><input type="file" id="bgmIn" accept=".mp3,.m4a,.aac,.wav,audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,audio/aac"><b style="font-size:14.5px">🎵 '+(BGM?esc(BGM.name):'폰에 있는 음악 고르기')+'</b>'+(BGM?'눌러서 다른 곡으로':'유튜브 오디오 보관함처럼 저작권 걱정 없는 곡만')+'</label>'
    +(BGM?'<div style="margin-top:6px">'+chipRow('bgv',[[0,'끄기'],[0.07,'아주 작게'],[0.12,'작게'],[0.22,'보통']],o.bgv)+'</div><p class="note">내레이션 나올 땐 자동으로 줄고 끝에서 서서히 꺼져요. 곡은 이 화면을 닫으면 다시 골라야 해요.</p>':'')
    +'<p class="lbl">왼쪽 위 위치 표시 (비우면 없음)</p><input type="text" id="tagIn" maxlength="20" value="'+esc(o.tag)+'"></div>';
   h+='<div class="card"><h2>영상 완성</h2><p class="note">폰에서 720×1280으로 녹화해요. 길이만큼 걸리니 화면을 켜 두세요.</p><button class="big ghost" id="pvAll">▶ 전체 미리보기 (녹화 안 함)</button><button class="big" id="renderBtn">🎬 영상 만들기</button><div id="out"></div></div>';
