@@ -209,7 +209,7 @@ header b{font-size:20px;font-weight:900}header span{font-size:12px;color:var(--g
 #code input{font-size:16px;padding:12px;border-radius:10px;border:1px solid var(--hair)}
 #code button{font-size:16px;padding:12px;border-radius:10px;border:0;background:var(--sky);color:#fff;font-weight:800}
 </style></head><body>
-<header><b>🎙 박비서</b><span>날씨 · 환율 · 디디 주소록 · 방문 동선 · 스페인 여행</span><a href="/shorts" aria-label="숏츠 공방" style="margin-left:auto;text-decoration:none;font-size:22px">🎬</a><a href="/quest" aria-label="주말 탐험" style="text-decoration:none;font-size:22px">🧭</a><a href="/usage" aria-label="앱 사용량" style="text-decoration:none;font-size:22px">📊</a></header>
+<header><b>🎙 박비서</b><span>날씨 · 환율 · 디디 주소록 · 방문 동선 · 스페인 여행</span><a href="/shorts" aria-label="숏츠 공방" style="margin-left:auto;text-decoration:none;font-size:22px">🎬</a><a href="/quest" aria-label="주말 탐험" style="text-decoration:none;font-size:22px">🧭</a><a href="/mystery" aria-label="광저우 미스터리" style="text-decoration:none;font-size:22px">🕵️</a><a href="/usage" aria-label="앱 사용량" style="text-decoration:none;font-size:22px">📊</a></header>
 <div id="code"><div style="font-size:14px">실전 중국어 초대 코드를 입력하세요(이 기기에 한 번만).</div><input id="ci" autocomplete="off"><button id="cs">확인</button></div>
 <div id="log"><div class="hint">버튼을 누르고 말해 보세요.<br>"내일 광저우 비 와?"<br>"500달러 위안화로 얼마야?"<br>"사무실에서 출발해서 샘플니트랑 원단시장 동선 짜줘"<br>"스페인 출발 며칠 남았어?"</div></div>
 <div id="st"></div>
