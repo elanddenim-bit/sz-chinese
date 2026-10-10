@@ -25,6 +25,31 @@ async function withSay(env, d) {
   return d;
 }
 
+const HAN = /[\uAC00-\uD7A3]/;
+// what·why 가 중국어로 나오면(시스템 지시문이 중국어라 가끔 그럼) 한국어로 한 번 번역해 채움
+async function koFix(env, d) {
+  const bad = (d.items || []).map((x, i) => ({ i, x })).filter(({ x }) => (x.what && !HAN.test(x.what)) || (x.why && !HAN.test(x.why)));
+  if (!bad.length) return false;
+  try {
+    const r = await fetch("https://" + host(env) + "/compatible-mode/v1/chat/completions", {
+      method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
+      body: JSON.stringify({ model: env.QUEST_MODEL || "qwen3.8-flash", temperature: 0.2, enable_thinking: false, response_format: { type: "json_object" },
+        messages: [{ role: "system", content: "중국어 설명을 자연스러운 한국어로 옮겨라. 고유명사는 한국 통용 표기, 숫자·단위는 그대로. 중국어 원문 유행어는 작은따옴표 안에 한자 그대로 둬도 된다. JSON 만: {\"items\":[{\"i\":0,\"what\":\"\",\"why\":\"\"}]}" },
+          { role: "user", content: JSON.stringify(bad.map(({ i, x }) => ({ i, what: x.what, why: x.why }))) }] }),
+    });
+    const j = await r.json();
+    const o = JSON.parse(String(j.choices[0].message.content).replace(/^```(?:json)?\s*|\s*```$/g, ""));
+    let n = 0;
+    for (const y of o.items || []) {
+      const x = d.items[Number(y.i)];
+      if (!x) continue;
+      if (y.what && HAN.test(y.what)) { x.what = String(y.what).slice(0, 200); n++; }
+      if (y.why && HAN.test(y.why)) { x.why = String(y.why).slice(0, 140); n++; }
+    }
+    return n > 0;
+  } catch { return false; }
+}
+
 export async function trendApi(env, ctx, path, b, h) {
   if (path !== "/trend/today") throw terr("not_found", 404);
   const day = cnDay(), key = "trend:" + day;
@@ -35,8 +60,10 @@ export async function trendApi(env, ctx, path, b, h) {
     await env.KV.put(rk, String(n + 1), { expirationTtl: 3 * 86400 });
     d = null;
   }
+  if (d && await koFix(env, d)) await env.KV.put(key, JSON.stringify(d), { expirationTtl: 3 * 86400 }); // 이미 만든 판도 고쳐 둠
   if (!d) {
     d = await make(env, day);
+    await koFix(env, d);
     await env.KV.put(key, JSON.stringify(d), { expirationTtl: 3 * 86400 });
     ctx.waitUntil(logUse(env, "trend", { make: 1 }, 0, h).catch(() => {}));
   }
@@ -47,7 +74,7 @@ export async function trendApi(env, ctx, path, b, h) {
 async function make(env, day) {
   const sys = "你是给住在广州的韩国中年上班族（公司里大多是中国同事）讲解中国网络热点的编辑。请联网搜索今天（" + day + "）微博热搜、抖音热榜、小红书、B站等平台上正在火的话题和流行语，" +
     "优先选中国网友自己在热议、在玩梗的话题（热搜榜前列、评论区刷屏、二创/表情包），只选生活、娱乐、明星综艺、影视、体育、美食、消费、新奇科技产品、网络梗、天气节气这类轻松话题；不要企业专利诉讼、财报、行业新闻这类硬新闻，不要韩国媒体报道的韩国相关新闻；不要政治、外交、军事、社会冲突、灾难伤亡、案件、敏感人物。必须基于搜索到的真实内容，不确定就不要写。" +
-    "选5条，用韩语讲解：ko(韩语标题,20字内)、what(发生了什么,2句)、why(为什么火/中国人笑点,1句)、word(从这个话题里学一个中国网友真在用的流行语或梗：z 必须是汉字(可带少量字母，如'CP')，不能只写英文缩写；p 是 z 的带声调拼音；k 韩语意思，人名按韩国通用译名，如孙悟空=손오공)、emo(一个emoji)、src(来源平台名，如微博)。" +
+    "选5条。ko、what、why、word.k、office.k 这些字段必须全部用韩语（한국어）写，不能写中文（只有 zh 和 word.z、office.z 用中文）：ko(韩语标题,20字内)、what(韩语,发生了什么,2句)、why(韩语,为什么火/中国人笑点,1句)、word(从这个话题里学一个中国网友真在用的流行语或梗：z 必须是汉字(可带少量字母，如'CP')，不能只写英文缩写；p 是 z 的带声调拼音；k 韩语意思，人名按韩国通用译名，如孙悟空=손오공)、emo(一个emoji)、src(来源平台名，如微博)。" +
     "另外给 office：明天在公司可以跟中国同事聊这个的一句中文开场白（z,p,k）。" +
     '只输出 JSON：{"items":[{"zh":"原话题(中文)","ko":"","what":"","why":"","word":{"z":"","p":"","k":""},"emo":"","src":""}],"office":{"z":"","p":"","k":""}}';
   let last = "";
