@@ -8172,10 +8172,14 @@ function mvSpeak(t,rr,my){uT('mv');
   function std(){if(my!==speakSeq)return;mvBypass=true;try{speak(t,rr);}finally{mvBypass=false;}}
   function play(url){if(my!==speakSeq)return;a.src=url;a.playbackRate=rr||1;curAudio=a;var p=a.play();if(p&&p.catch)p.catch(std);}
   if(mvCache[t]){play(mvCache[t]);return;}
-  vPost('/voice/tts',{text:t},20000).then(function(res){
-    if(!res||!res.blob)throw new Error('tts');
+  var t0=Date.now();
+  vPost('/voice/tts',{text:t},30000).then(function(res){
+    if(!res||!res.blob)throw new Error('음성 대신 다른 응답');
     return res.blob();
-  }).then(function(b){var u=URL.createObjectURL(b);mvCache[t]=u;play(u);}).catch(std);
+  }).then(function(b){var u=URL.createObjectURL(b);mvCache[t]=u;mvMsg('');play(u);}).catch(function(e){
+    // 조용히 원래 음성으로 넘어가면 원인을 알 수 없으므로 카드에 이유 표시
+    var w=e&&(e.name==='AbortError'||/abort/i.test(e.message||''))?'응답 시간 초과('+Math.round((Date.now()-t0)/1000)+'초)':(e&&e.message)||'알 수 없음';
+    mvMsg('내 목소리 재생 실패 → 원래 음성으로 재생: '+w);std();});
 }
 
 // ================= 통화 모드 (음성 롤플레이) =================
