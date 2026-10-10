@@ -958,9 +958,14 @@ async function makeAll(){
   D.scenes.forEach(function(s,i){
     if(!F[i+'.jpg']){total++;jobs.push(make(i,'img').then(function(ok){done++;tick();refreshSc(i);if(ok&&VIDON&&!F[i+'.mp4']){total++;tick();return make(i,'vid').then(function(){done++;tick();refreshSc(i);});}}));}
     else if(VIDON&&!F[i+'.mp4']){total++;jobs.push(make(i,'vid').then(function(){done++;tick();refreshSc(i);}));}
-    if(!sayKey(i)){total++;jobs.push(make(i,'say').then(function(){done++;tick();refreshSc(i);}));}
+    if(!sayKey(i)&&s.say)total++;
   });
-  tick();await Promise.all(jobs);b.disabled=false;pg.textContent=total?'✅ 다 만들었어요. 아래에서 영상 만들기!':'이미 다 있어요.';
+  // 내레이션은 한꺼번에 보내면 백련이 일부를 거절(520 등) → 하나씩, 실패하면 한 번 더
+  var sayJob=(async function(){for(var i=0;i<n;i++){if(sayKey(i)||!D.scenes[i].say)continue;var ok=await make(i,'say');if(!ok){await sleep(1500);ok=await make(i,'say');}done++;tick();refreshSc(i);}})();
+  jobs.push(sayJob);
+  tick();await Promise.all(jobs);b.disabled=false;
+  var miss=[];D.scenes.forEach(function(s,i){if(!F[i+'.jpg']||(s.say&&!sayKey(i)))miss.push(i+1);});
+  pg.textContent=miss.length?'⚠️ #'+miss.join(', #')+' 이 덜 만들어졌어요 — 다시 누르면 빠진 것만 만들어요':total?'✅ 다 만들었어요. 아래에서 영상 만들기!':'이미 다 있어요.';
   api('/shorts/list').then(function(j){if(j.ok)$('cost').innerHTML=costTxt(j.cost,j.caps);});
 }
 // ---------- 렌더링 ----------
@@ -979,11 +984,17 @@ async function render(){
   var lock=null;try{if(navigator.wakeLock)lock=await navigator.wakeLock.request('screen');}catch(e){}
   out.innerHTML='<p class="prog">소재 불러오는 중…</p>';
   var n=D.scenes.length,imgs=[],vids=[],aud=[];
-  for(var i=0;i<n;i++){imgs[i]=await loadImg(F[i+'.jpg']);vids[i]=await loadVid(F[i+'.mp4']);var sk=sayKey(i);
-    if(sk){try{aud[i]=await decode(ac,await (await fetch(F[sk])).arrayBuffer());}catch(e){aud[i]=null;}}}
+  for(var i=0;i<n;i++){imgs[i]=await loadImg(F[i+'.jpg']);vids[i]=await loadVid(F[i+'.mp4']);
+    // 내레이션이 빠진 장면은 그냥 넘어가지 않고 여기서 만들고, 읽기 실패는 한 번 더 — 그래도 없으면 멈춤
+    if(D.scenes[i].say){
+      if(!sayKey(i)){$('out').innerHTML='<p class="prog">#'+(i+1)+' 내레이션 다시 만드는 중…</p>';if(!(await make(i,'say'))){await sleep(1500);await make(i,'say');}}
+      for(var k=0;k<2&&!aud[i]&&sayKey(i);k++){try{aud[i]=await decode(ac,await (await fetch(F[sayKey(i)])).arrayBuffer());}catch(e){aud[i]=null;await sleep(800);}}
+      if(!aud[i]){out.innerHTML='<p class="err">#'+(i+1)+' 장면 내레이션을 준비하지 못했어요(백련 일시 오류일 수 있어요). 잠시 뒤 다시 눌러 주세요. 빠진 채로 만들지 않았어요.</p>';btn.disabled=false;try{ac.close();}catch(e){}try{if(lock)lock.release();}catch(e){}return;}
+    }
+    out.innerHTML='<p class="prog">소재 불러오는 중… '+(i+1)+'/'+n+'</p>';}
   var W=720,H=1280,segs=[],t=0;
   for(var j=0;j<n;j++){var d=Math.max(2.4,(aud[j]?aud[j].duration:2.6)+0.35);segs.push({t0:t,t1:t+d,i:j});t+=d;}
-  var total=Math.min(t+0.6,179);
+  var total=Math.min(t+1.2,179); // 마지막 내레이션 뒤 여유 — 녹화기 지연으로 끝이 잘리던 문제
   var cv=document.createElement('canvas');cv.width=W;cv.height=H;var g=cv.getContext('2d');
   if(!cv.captureStream||!window.MediaRecorder){out.innerHTML='<p class="err">이 브라우저는 영상 녹화를 못 해요(iOS 최신 Safari 필요).</p>';btn.disabled=false;return;}
   var vs=cv.captureStream(30),dest=ac.createMediaStreamDestination();
@@ -1014,6 +1025,7 @@ async function render(){
   }
   frame(0);rec.start(500);
   await new Promise(function(done){(function loop(){var tt=ac.currentTime-t0;if(tt>=total){done();return;}frame(Math.max(0,tt));requestAnimationFrame(loop);})();});
+  frame(total-0.01);await sleep(600); // 녹화기에 마지막 소리·화면이 다 들어갈 때까지 잠깐 더
   await new Promise(function(ok){rec.onstop=ok;rec.stop();});
   vids.forEach(function(v){if(v)try{v.pause();}catch(e){}});
   try{if(lock)lock.release();}catch(e){}try{ac.close();}catch(e){}

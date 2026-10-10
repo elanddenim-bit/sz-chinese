@@ -267,8 +267,11 @@ async function ensureNarr(ac,prog){
     var sc=D.scenes[i],vo=D.opts.voice||'Cherry';
     if(vo==='rec'){if(!sc._rec)continue;try{out[i]=await decode(ac,await sc._rec.blob.arrayBuffer());}catch(e){toast('#'+(i+1)+' 녹음을 읽지 못했어요');}continue;}
     var key=vo+'|'+t,n=sc._narr;
-    if(!n||n.key!==key){var r=await api('/shorts/asset',{id:D.id,n:i,kind:'say',text:t,voice:vo});if(!r.ok){toast('#'+(i+1)+' 내레이션 실패: '+(r.detail||r.error));continue;}n=sc._narr={key:key,url:r.url,buf:null};}
-    if(!n.buf){try{n.buf=await decode(ac,await (await fetch(n.url+'&v='+Date.now())).arrayBuffer());}catch(e){n.buf=null;}}
+    // 실패하면 한 번 더, 그래도 없으면 빠진 채로 만들지 않고 멈춤(예전엔 조용히 건너뛰어 내레이션이 날아갔음)
+    if(!n||n.key!==key){var r=await api('/shorts/asset',{id:D.id,n:i,kind:'say',text:t,voice:vo});if(!r.ok){await new Promise(function(z){setTimeout(z,1500);});r=await api('/shorts/asset',{id:D.id,n:i,kind:'say',text:t,voice:vo});}
+      if(!r.ok)throw new Error('#'+(i+1)+' 내레이션을 만들지 못했어요('+(r.detail||r.error)+'). 잠시 뒤 다시 눌러 주세요.');n=sc._narr={key:key,url:r.url,buf:null};}
+    for(var k=0;k<2&&!n.buf;k++){try{n.buf=await decode(ac,await (await fetch(n.url+'&v='+Date.now())).arrayBuffer());}catch(e){n.buf=null;await new Promise(function(z){setTimeout(z,800);});}}
+    if(!n.buf)throw new Error('#'+(i+1)+' 내레이션 파일을 읽지 못했어요. 다시 눌러 주세요.');
     out[i]=n.buf;
   }
   return out;
@@ -400,6 +403,7 @@ async function render0(dry){
   if(!run.stop&&END&&hasSnap){var t1=ac.currentTime;bgm(t1,END,false,END);
     await new Promise(function(done){(function loop(){var el=ac.currentTime-t1;if(el>=END||run.stop){done();return;}drawEnd(el);requestAnimationFrame(loop);})();});}
   stopped=stopped||run.stop;
+  if(rec&&started&&!run.stop)await new Promise(function(z){setTimeout(z,600);}); // 녹화기 지연으로 마지막 소리가 잘리지 않게
   if(rec&&started)await new Promise(function(ok){rec.onstop=ok;try{rec.stop();}catch(e){ok();}});
   if(dest){try{BUS.master.disconnect(dest);}catch(e){}}
   try{clipBus.disconnect();}catch(e){}
