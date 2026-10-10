@@ -12,9 +12,9 @@
 import { logUse } from "./usage.js";
 
 const MOODS = {
-  mix: { label: "아무거나", kw: ["公园", "博物馆", "书店", "老街", "甜品", "早茶", "创意园", "湿地公园"] },
+  mix: { label: "아무거나", kw: ["公园", "博物馆", "书店", "老街", "咖啡馆", "早茶", "创意园", "湿地公园"] },
   nature: { label: "자연·공원", kw: ["公园", "湿地公园", "绿道", "森林公园", "植物园", "江边"] },
-  food: { label: "맛집·간식", kw: ["早茶", "甜品", "小吃", "糖水", "烧腊", "面包"] },
+  food: { label: "맛집·카페", kw: ["早茶", "咖啡馆", "茶馆", "甜品", "小吃", "糖水", "烧腊", "酒吧"] },
   culture: { label: "문화·전시", kw: ["博物馆", "美术馆", "书店", "图书馆", "寺", "纪念馆"] },
   street: { label: "골목·시장", kw: ["老街", "创意园", "夜市", "骑楼", "古村", "市场"] },
 };
@@ -116,7 +116,9 @@ async function newQuest(env, ctx, b, h) {
   cands = cands.slice(0, 32);
   if (cands.length < 3) throw qerr("반경 안에 후보가 부족해요. 반경을 넓혀 보세요.");
   const list = cands.map((p, i) => ({ i, name: p.name, kw: p.kw, type: p.type, area: p.area, km: +(p.dist / 1000).toFixed(1), rating: p.rating || null, cost: p.cost || null }));
-  const sys = "你是住在广州的韩国家庭（爸爸、妈妈、孩子）的周末探险游戏设计师。从候选地点里选3个今天去的地方，做成有趣的拍照任务。" +
+  const who = b.who === "solo" ? "一个人（韩国中年男性，住在广州）" : "一对韩国中年夫妻（住在广州，两个人一起去，没有孩子同行）";
+  const sys = "你是周末探险游戏设计师，玩家是" + who + "。从候选地点里选3个今天去的地方，做成大人觉得有意思的拍照任务（不要儿童化、不要幼稚）。" +
+    "任务风格：'散步、发现小细节、尝当地味道、找有故事的老建筑或招牌'这类适合大人的；如果是夫妻，可以有一个需要两个人配合的任务（例如互相拍、找到两样东西），但不要求拍游客或陌生人。" +
     "要求：3个地点类别尽量不同，远近搭配；下雨概率≥60%时优先室内；任务必须是一张照片就能证明的具体画面（例如\"拍到园内的拱桥和水面倒影\"、\"拍到招牌上的店名和你点的那道甜品\"），不能要求拍陌生人的脸，不能危险，不能违反场所规定；" +
     "mission、title、why 用韩语，口语、轻松有趣；phrase 是在那里用得上的一句简单中文（z 汉字, p 带声调拼音, k 韩语意思）；pts 按距离和难度给 10、20 或 30。" +
     '只输出 JSON：{"intro":"韩语一句话","quests":[{"i":候选编号,"title":"","mission":"","why":"","phrase":{"z":"","p":"","k":""},"pts":10}]}';
@@ -134,7 +136,7 @@ async function newQuest(env, ctx, b, h) {
     };
   });
   if (items.length < 1) throw qerr("퀘스트를 만들지 못했어요. 다시 눌러 주세요.", 502);
-  d.cur = { date: day, made: Date.now(), mood, radius, wx, wxText: wxText(wx), intro: String(out.intro || "").slice(0, 120), items };
+  d.cur = { date: day, made: Date.now(), mood, radius, who: b.who === "solo" ? "solo" : "duo", wx, wxText: wxText(wx), intro: String(out.intro || "").slice(0, 120), items };
   d.gen = { [day]: (d.gen[day] || 0) + 1 };
   await save(env, h, d);
   ctx.waitUntil(logUse(env, "quest", { new: 1 }, 0, h).catch(() => {}));
@@ -285,7 +287,7 @@ a.back{color:#fff;text-decoration:none;font-size:20px}
 <main id="main"><div class="wait">불러오는 중…</div></main>
 <script>
 var CODE='';try{CODE=localStorage.getItem('pb-code')||'';}catch(e){}
-var S=null,MOOD='mix',RAD=5000,BUSY=false;try{MOOD=localStorage.getItem('qs-mood')||'mix';RAD=+(localStorage.getItem('qs-rad')||5000);}catch(e){}
+var S=null,MOOD='mix',RAD=5000,WHO='duo',BUSY=false;try{MOOD=localStorage.getItem('qs-mood')||'mix';RAD=+(localStorage.getItem('qs-rad')||5000);WHO=localStorage.getItem('qs-who')||'duo';}catch(e){}
 var CATN={nature:'자연',food:'맛집',culture:'문화',street:'골목'},CATI={nature:'🌳',food:'🥟',culture:'🏛',street:'🏮'};
 function $(id){return document.getElementById(id);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -296,7 +298,7 @@ function gate(msg){$('main').innerHTML='<div class="gate"><p>'+esc(msg||'초대 
 function load(){if(!CODE)return gate();api('/quest/state').then(function(j){if(j.error==='not_allowed')return gate('초대 코드가 맞지 않아요');if(!j.ok)return gate(j.detail||j.error||'불러오지 못했어요');S=j;render();}).catch(function(){gate('서버에 연결하지 못했어요');});}
 function kmT(m){return m<1000?m+'m':(m/1000).toFixed(1)+'km';}
 function pickHtml(fresh){
-  var h='<div class="card"><p class="lbl">오늘 기분</p><div class="chips">';
+  var h='<div class="card"><p class="lbl">누구랑</p><div class="chips">'+[['duo','👫 둘이'],['solo','🚶 혼자']].map(function(w){return '<button class="chip'+(w[0]===WHO?' on':'')+'" data-who="'+w[0]+'">'+w[1]+'</button>';}).join('')+'</div><p class="lbl">오늘 기분</p><div class="chips">';
   for(var k in S.moods)h+='<button class="chip'+(k===MOOD?' on':'')+'" data-mood="'+k+'">'+esc(S.moods[k])+'</button>';
   h+='</div><p class="lbl">얼마나 멀리</p><div class="chips">';
   [[3000,'3km'],[5000,'5km'],[10000,'10km'],[20000,'20km']].forEach(function(r){h+='<button class="chip'+(r[0]===RAD?' on':'')+'" data-rad="'+r[0]+'">'+r[1]+'</button>';});
@@ -338,6 +340,7 @@ function render(){
 }
 function bind(){
   document.querySelectorAll('[data-mood]').forEach(function(b){b.onclick=function(){MOOD=b.getAttribute('data-mood');try{localStorage.setItem('qs-mood',MOOD);}catch(e){}document.querySelectorAll('[data-mood]').forEach(function(x){x.classList.toggle('on',x===b||x.getAttribute('data-mood')===MOOD);});};});
+  document.querySelectorAll('[data-who]').forEach(function(b){b.onclick=function(){WHO=b.getAttribute('data-who');try{localStorage.setItem('qs-who',WHO);}catch(e){}document.querySelectorAll('[data-who]').forEach(function(x){x.classList.toggle('on',x.getAttribute('data-who')===WHO);});};});
   document.querySelectorAll('[data-rad]').forEach(function(b){b.onclick=function(){RAD=+b.getAttribute('data-rad');try{localStorage.setItem('qs-rad',RAD);}catch(e){}document.querySelectorAll('[data-rad]').forEach(function(x){x.classList.toggle('on',+x.getAttribute('data-rad')===RAD);});};});
   document.querySelectorAll('#gen').forEach(function(b){b.onclick=gen;});
   document.querySelectorAll('[data-say]').forEach(function(b){b.onclick=function(){try{var u=new SpeechSynthesisUtterance(b.getAttribute('data-say'));u.lang='zh-CN';u.rate=.85;speechSynthesis.cancel();speechSynthesis.speak(u);}catch(e){}};});
@@ -351,7 +354,7 @@ function gen(){
   navigator.geolocation.getCurrentPosition(function(pos){
     btns.forEach(function(b){b.innerHTML='<span class="spin">🧭</span> 주변을 둘러보는 중… (10초쯤)';});
     var g=pos.coords.longitude.toFixed(6)+','+pos.coords.latitude.toFixed(6);
-    api('/quest/new',{gps:g,radius:RAD,mood:MOOD}).then(function(j){BUSY=false;if(!j.ok){btns.forEach(function(b){b.disabled=false;b.textContent='📍 다시 받기';});er.forEach(function(e){e.textContent=j.detail||j.error||'실패';});return;}S=j;render();window.scrollTo(0,0);})
+    api('/quest/new',{gps:g,radius:RAD,mood:MOOD,who:WHO}).then(function(j){BUSY=false;if(!j.ok){btns.forEach(function(b){b.disabled=false;b.textContent='📍 다시 받기';});er.forEach(function(e){e.textContent=j.detail||j.error||'실패';});return;}S=j;render();window.scrollTo(0,0);})
     .catch(function(){BUSY=false;btns.forEach(function(b){b.disabled=false;b.textContent='📍 다시 받기';});er.forEach(function(e){e.textContent='서버 연결 실패';});});
   },function(){BUSY=false;btns.forEach(function(b){b.disabled=false;b.textContent='📍 다시 받기';});er.forEach(function(e){e.textContent='위치 권한을 허용해 주세요 (설정 → Safari → 위치)';});},{enableHighAccuracy:true,timeout:15000,maximumAge:60000});
 }
