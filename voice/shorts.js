@@ -102,7 +102,7 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
   if (path === "/shorts/voice/enroll") return krEnroll(env, b, h);
   if (path === "/shorts/voice/status") return krStatus(env, h);
   if (path === "/shorts/voice/try") return krTry(env, b, h, synth);
-  if (path === "/shorts/avatar/state") return avaView(env, await avaDoc(env, h));
+  if (path === "/shorts/avatar/state") return avaView(env, await avaRecover(env, h, await avaDoc(env, h)));
   if (path === "/shorts/avatar/face") return avaFace(env, b, h);
   if (path === "/shorts/avatar/make") return avaMake(env, b, h, synth);
   if (path === "/shorts/avatar/poll") return avaPoll(env, b, h);
@@ -461,6 +461,9 @@ async function avaPoll(env, b, h) {
   const r = await fetch("https://" + host(env) + "/api/v1/tasks/" + p.task, { headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY } });
   const j = await r.json().catch(() => ({}));
   const o = j.output || {}, st = o.task_status || "UNKNOWN";
+  // 조회 자체가 일시 오류(520 등)면 작업은 살아 있으니 계속 기다림 — 예전엔 실패로 처리해 결과를 잃었음
+  if (!r.ok && (r.status >= 500 || r.status === 429)) return { ok: true, status: "RETRY", el: Math.round((Date.now() - p.at) / 1000) };
+  if (st === "UNKNOWN" && r.ok) return { ok: true, status: "RUNNING", el: Math.round((Date.now() - p.at) / 1000) };
   if (st === "FAILED" || st === "CANCELED" || (st === "UNKNOWN" && !r.ok)) {
     d.pend = null; d.sec = Math.max(0, (d.sec || 0) - p.sec); // 실패는 과금 안 됨
     await env.KV.put(avaKey(h), JSON.stringify(d));
@@ -473,10 +476,39 @@ async function avaPoll(env, b, h) {
   if (!f.ok) return { ok: true, status: "failed", detail: "결과 내려받기 실패 " + f.status };
   const k = "shorts/" + h + "/" + AVA + "/v" + p.at + ".mp4";
   await env.R2.put(k, await f.arrayBuffer(), { httpMetadata: { contentType: "video/mp4" } });
-  d.list = [{ k, text: p.text, voice: p.voice, res: p.res, sec: p.sec, at: p.at }].concat(d.list || []).slice(0, 20);
+  d.list = [{ k, text: p.text, voice: p.voice, res: p.res, sec: p.sec, at: p.at, task: p.task }].concat(d.list || []).slice(0, 20);
   d.pend = null;
   await env.KV.put(avaKey(h), JSON.stringify(d));
   return { ok: true, status: "done", url: await fileUrl(env, k) };
+}
+// 기다리던 화면이 끊겨 잃어버린 결과 되찾기 — 최근 24시간 백련 작업 목록에서 성공했는데 목록에 없는 wan2.2-s2v 작업을 가져옴
+async function avaRecover(env, h, d) {
+  if (d.pend) return d;
+  try {
+    const q = "https://" + host(env) + "/api/v1/tasks?model_name=" + encodeURIComponent(env.SHORTS_S2V_MODEL || "wan2.2-s2v") + "&status=SUCCEEDED&page_size=20";
+    const r = await fetch(q, { headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY }, signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return d;
+    const j = await r.json();
+    const known = new Set((d.list || []).map((x) => x.task).concat(d.seen || []));
+    let changed = false;
+    for (const t of (j.data || []).slice(0, 5)) {
+      if (!t.task_id || known.has(t.task_id)) continue;
+      if ((d.list || []).some((x) => Math.abs((x.at || 0) - (Number(t.gmt_create) || 0)) < 180000)) { d.seen = [t.task_id].concat(d.seen || []).slice(0, 40); changed = true; continue; } // 작업 번호 없이 저장된 예전 항목
+      d.seen = [t.task_id].concat(d.seen || []).slice(0, 40); changed = true;
+      const one = await fetch("https://" + host(env) + "/api/v1/tasks/" + t.task_id, { headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY } }).then((x) => x.json()).catch(() => ({}));
+      const o = one.output || {}, url = (o.results && o.results.video_url) || o.video_url;
+      if (!url) continue;
+      const f = await fetch(url);
+      if (!f.ok) continue;
+      const at = Number(t.gmt_create) || Date.now();
+      const k = "shorts/" + h + "/" + AVA + "/v" + at + ".mp4";
+      await env.R2.put(k, await f.arrayBuffer(), { httpMetadata: { contentType: "video/mp4" } });
+      const sec = Math.ceil(Number((one.usage || {}).duration) || 0);
+      d.list = [{ k, text: "(되찾은 영상)", voice: "", res: "", sec, at, task: t.task_id }].concat(d.list || []).slice(0, 20);
+    }
+    if (changed) await env.KV.put(avaKey(h), JSON.stringify(d));
+  } catch {}
+  return d;
 }
 async function avaDel(env, b, h) {
   const d = await avaDoc(env, h);
@@ -848,7 +880,7 @@ function avMake(){var t=$('avText').value.trim();if(!t){$('avErr').textContent='
 function avWait(task){var b=$('avGo');if(b)b.disabled=true;var tick=function(){api('/shorts/avatar/poll',{task:task}).then(function(p){if(!$('avProg'))return;
   if(p.status==='done'){$('avProg').textContent='완성!';if(b)b.disabled=false;api('/shorts/avatar/state').then(function(r){if(r.ok)avShow(r);});return;}
   if(p.status==='failed'||p.status==='none'){if(b)b.disabled=false;$('avProg').textContent='';if(p.status==='failed')$('avErr').textContent='실패(과금 안 됨): '+(p.detail||'');return;}
-  $('avProg').innerHTML='<span class="spin">⏳</span> '+(p.status==='PENDING'?'차례 기다리는 중':'그리는 중')+(p.el?' · '+Math.floor(p.el/60)+'분 '+(p.el%60)+'초':'')+' — 화면을 닫아도 나중에 이어져요';setTimeout(tick,15000);}).catch(function(){setTimeout(tick,20000);});};tick();}
+  $('avProg').innerHTML='<span class="spin">⏳</span> '+(p.status==='PENDING'?'차례 기다리는 중':p.status==='RETRY'?'그리는 중(조회 재시도)':'그리는 중')+(p.el?' · '+Math.floor(p.el/60)+'분 '+(p.el%60)+'초':'')+' — 화면을 닫아도 나중에 이어져요';setTimeout(tick,15000);}).catch(function(){setTimeout(tick,20000);});};tick();}
 function ago(t){var hh=(Date.now()-t)/3600e3;return hh<1?'방금':hh<48?Math.round(hh)+'시간 전':Math.round(hh/24)+'일 전';}
 function stats(fresh){var b=$('stBox');if(!b)return;b.textContent='불러오는 중…';
   api('/shorts/yt/stats',{fresh:fresh}).then(function(r){if(!r.ok){b.textContent=r.detail||r.error;return;}
