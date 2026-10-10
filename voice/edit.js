@@ -1,0 +1,252 @@
+// =========================================================
+// 🎥 편집실 — 내가 찍은 클립으로 숏츠 만들기 (주인 전용, 숏츠 공방과 같은 초안·업로드)
+//  원본 영상은 폰 밖으로 나가지 않는다: 폰이 클립마다 작은 캡처(JPEG)만 뽑아 /shorts/plan 에 보내고,
+//  AI 가 정한 구간·자막·내레이션을 폰 캔버스에서 렌더링 → 완성본만 /shorts/save → /shorts/yt/upload
+// =========================================================
+export const EDIT_HTML = String.raw`<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1664B0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="편집실">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<title>편집실</title>
+<style>
+:root{--sky:#1664B0;--bg:#EFE8DE;--card:#F7F2EA;--ink:#1A2330;--ink2:#5E6672;--line:#D9CEBD;--red:#D21624;--soft:#E6DCCB;--ok:#1F7A4D}
+@media (prefers-color-scheme:dark){:root{--bg:#141A22;--card:#1C2430;--ink:#EDE6DA;--ink2:#9AA3AE;--line:#2C3644;--soft:#253041;--ok:#5CC08C}}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,"Apple SD Gothic Neo","PingFang SC",system-ui,sans-serif;-webkit-text-size-adjust:100%}
+header{background:var(--sky);color:#fff;padding:calc(env(safe-area-inset-top) + 14px) 16px 14px;border-bottom:3px solid var(--red);display:flex;align-items:center;gap:12px}
+header h1{margin:0;font-size:19px}a.back{color:#fff;text-decoration:none;font-size:20px}
+main{max-width:640px;margin:0 auto;padding:14px 16px 60px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.card h2{margin:0 0 8px;font-size:15.5px}.lbl{font-size:12.5px;color:var(--ink2);margin:10px 0 4px}
+input[type=text],textarea{width:100%;font:inherit;font-size:16px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+textarea{min-height:56px;resize:vertical}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:6px 12px;font:inherit;font-size:13.5px}.chip.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.big{display:block;width:100%;border:0;border-radius:12px;background:var(--sky);color:#fff;font:inherit;font-weight:700;font-size:16px;padding:14px;margin-top:10px;text-align:center;text-decoration:none}.big:disabled{opacity:.5}
+.big.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}.big.red{background:var(--red)}
+.pick{display:block;border:2px dashed var(--line);border-radius:14px;padding:22px;text-align:center;color:var(--ink2)}.pick input{display:none}.pick b{display:block;color:var(--ink);font-size:16px;margin-bottom:4px}
+.clips{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}.clips div{position:relative}.clips img{width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:8px;background:var(--soft);display:block}
+.clips span{position:absolute;left:4px;bottom:4px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:1px 5px;border-radius:5px}
+.seg{display:grid;grid-template-columns:72px 1fr;gap:10px;border-top:1px solid var(--line);padding:12px 0}.seg:first-of-type{border-top:0}
+.seg img{width:72px;height:128px;object-fit:cover;border-radius:8px;background:var(--soft);display:block}
+.seg .hd{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink2);margin-bottom:6px;flex-wrap:wrap}.seg .hd b{color:var(--sky)}
+.seg input[type=number]{width:62px;font:inherit;font-size:15px;padding:5px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+.seg input[type=text],.seg textarea{font-size:14.5px;padding:7px 9px;margin-bottom:6px}
+.mini{display:flex;gap:6px;flex-wrap:wrap}.mini button{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:8px;padding:5px 9px;font:inherit;font-size:12.5px}
+.note{font-size:12.5px;color:var(--ink2);margin:6px 0 0}.err{color:var(--red);font-size:13.5px;margin-top:8px;white-space:pre-wrap}
+.prog{font-size:14px;margin:8px 0}.bar{height:6px;background:var(--soft);border-radius:3px;overflow:hidden}.bar i{display:block;height:100%;background:var(--sky);width:0}
+canvas.pv{width:60%;max-width:300px;display:block;margin:10px auto;border-radius:10px;background:#000}
+video.out,video.prev{width:70%;max-width:320px;display:block;margin:10px auto;border-radius:10px;background:#000}
+#stash{position:fixed;left:-10px;top:0;width:2px;height:2px;overflow:hidden;opacity:.01}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;z-index:9;max-width:90vw;text-align:center}
+.spin{display:inline-block;animation:sp 1.2s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
+.gate{padding:40px 0;text-align:center}
+</style></head><body>
+<header><a class="back" href="/shorts" aria-label="숏츠 공방">‹</a><h1>🎥 편집실</h1></header>
+<main id="main"></main><div id="stash"></div>
+<script>
+var CODE='';try{CODE=localStorage.getItem('pb-code')||'';}catch(e){}
+var CLIPS=[],D=null,SEC=45,ANG='mix',NARR={};try{ANG=localStorage.getItem('sh-ang')||'mix';}catch(e){}
+var ANGS=[['mix','골고루'],['compare','🇰🇷 한국이랑 비교'],['price','💰 원화로 얼마?'],['tip','✈️ 여행 꿀팁'],['shock','😮 문화 충격'],['food','🍜 한국인 입맛'],['life','🏠 주재원 현실']];
+function $(i){return document.getElementById(i);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function toast(t){var d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(function(){d.remove();},3200);}
+function api(p,b){b=b||{};b.code=CODE;return fetch(p,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json().catch(function(){return {error:'서버 응답 오류 '+r.status};});});}
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
+function fmt(s){return (Math.round(s*10)/10).toFixed(1);}
+var QID=(location.search.match(/[?&]id=([^&]+)/)||[])[1]||'';
+
+// ---------- 1) 클립 고르기 ----------
+function start(){
+  if(!CODE){$('main').innerHTML='<div class="gate">숏츠 공방에서 초대 코드를 먼저 넣어 주세요.<br><a class="big" href="/shorts">숏츠 공방으로</a></div>';return;}
+  var h='';
+  if(QID)h+='<div class="card"><h2>이어서 편집</h2><p class="note">원본 영상은 폰에만 있어서 서버엔 없어요. 이 초안에 썼던 클립을 <b>같은 순서로</b> 다시 골라 주세요.</p></div>';
+  h+='<div class="card"><label class="pick"><input type="file" id="files" accept="video/*" multiple><b>📂 영상 클립 고르기</b>여러 개 한 번에 · 5~15초짜리가 좋아요<br>원본은 서버로 올라가지 않아요</label><div class="clips" id="clips"></div></div>';
+  if(!QID){
+    h+='<div class="card"><h2>어떤 영상인가요?</h2><input type="text" id="topic" placeholder="예: 永庆坊 산책, 早茶 집 첫 방문 (짧게)"><p class="lbl">한국 시청자 각도</p><div class="chips">'+ANGS.map(function(a){return '<button class="chip'+(a[0]===ANG?' on':'')+'" data-ang="'+a[0]+'">'+a[1]+'</button>';}).join('')+'</div>'
+      +'<p class="lbl">길이</p><div class="chips">'+[30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div>'
+      +'<button class="big" id="planBtn" disabled>🤖 AI 편집 계획 받기</button><div class="prog" id="pp"></div><div class="err" id="pe"></div></div>';
+  }else h+='<button class="big" id="resumeBtn" disabled>이 클립으로 편집 이어가기</button><div class="err" id="pe"></div>';
+  $('main').innerHTML=h;
+  $('files').onchange=function(){addFiles(this.files);this.value='';};
+  document.querySelectorAll('[data-ang]').forEach(function(b){b.onclick=function(){ANG=b.getAttribute('data-ang');try{localStorage.setItem('sh-ang',ANG);}catch(e){}document.querySelectorAll('[data-ang]').forEach(function(x){x.classList.toggle('on',x===b);});};});
+  document.querySelectorAll('[data-sec]').forEach(function(b){b.onclick=function(){SEC=+b.getAttribute('data-sec');document.querySelectorAll('[data-sec]').forEach(function(x){x.classList.toggle('on',x===b);});};});
+  if($('planBtn'))$('planBtn').onclick=makePlan;
+  if($('resumeBtn'))$('resumeBtn').onclick=resume;
+}
+function mkVideo(url){var v=document.createElement('video');v.muted=true;v.playsInline=true;v.setAttribute('playsinline','');v.setAttribute('webkit-playsinline','');v.preload='auto';v.src=url;$('stash').appendChild(v);return v;}
+function waitEv(el,ev,ms){return new Promise(function(ok){var done=false;function f(){if(done)return;done=true;el.removeEventListener(ev,f);ok(true);}el.addEventListener(ev,f);setTimeout(function(){if(!done){done=true;el.removeEventListener(ev,f);ok(false);}},ms||4000);});}
+async function seekTo(v,t){if(Math.abs(v.currentTime-t)<0.05&&v.readyState>=2)return;v.currentTime=t;await waitEv(v,'seeked',4000);}
+function grab(v,max,q){var w=v.videoWidth,h=v.videoHeight;if(!w||!h)return '';var s=Math.min(1,max/Math.max(w,h));var c=document.createElement('canvas');c.width=Math.round(w*s);c.height=Math.round(h*s);c.getContext('2d').drawImage(v,0,0,c.width,c.height);try{return c.toDataURL('image/jpeg',q||0.7);}catch(e){return '';}}
+async function addFiles(fl){
+  var arr=Array.prototype.slice.call(fl||[]);if(!arr.length)return;
+  for(var i=0;i<arr.length&&CLIPS.length<20;i++){
+    var f=arr[i],url=URL.createObjectURL(f),v=mkVideo(url);
+    var c={file:f,url:url,v:v,name:f.name,dur:0,thumb:'',src:null,gain:null};CLIPS.push(c);renderClips();
+    await waitEv(v,'loadedmetadata',8000);c.dur=v.duration&&isFinite(v.duration)?v.duration:0;
+    try{var p=v.play();if(p&&p.then)await p.catch(function(){});v.pause();}catch(e){}
+    await seekTo(v,Math.min(0.5,c.dur/2));c.thumb=grab(v,240,0.6);renderClips();
+  }
+  var ok=CLIPS.length&&CLIPS.every(function(c){return c.dur>0;});
+  if($('planBtn'))$('planBtn').disabled=!ok;if($('resumeBtn'))$('resumeBtn').disabled=!ok;
+}
+function renderClips(){$('clips').innerHTML=CLIPS.map(function(c,i){return '<div>'+(c.thumb?'<img src="'+c.thumb+'">':'<img>')+'<span>#'+(i+1)+' · '+(c.dur?fmt(c.dur)+'초':'…')+'</span></div>';}).join('');}
+
+// ---------- 2) AI 계획 ----------
+async function makePlan(){
+  var b=$('planBtn'),pp=$('pp'),pe=$('pe');b.disabled=true;pe.textContent='';
+  var tot=CLIPS.reduce(function(a,c){return a+c.dur;},0),budget=36,frames=[];
+  for(var i=0;i<CLIPS.length;i++){
+    var c=CLIPS[i],n=Math.max(2,Math.min(8,Math.round(budget*c.dur/Math.max(1,tot))));
+    for(var k=0;k<n;k++){var t=c.dur*(k+0.5)/n;pp.textContent='장면 캡처 중… 클립 '+(i+1)+'/'+CLIPS.length;await seekTo(c.v,t);var img=grab(c.v,384,0.62);if(img)frames.push({c:i,t:+t.toFixed(1),img:img});}
+  }
+  frames=frames.slice(0,40);
+  pp.innerHTML='<span class="spin">🤖</span> AI가 장면을 보고 편집 계획을 짜는 중… (20~40초)';
+  var r=await api('/shorts/plan',{topic:$('topic').value.trim(),sec:SEC,angle:ANG,clips:CLIPS.map(function(c){return {dur:c.dur,name:c.name};}),frames:frames});
+  if(!r.ok){pp.textContent='';pe.textContent=r.detail||r.error||'실패';b.disabled=false;return;}
+  D=r.draft;NARR={};editor();
+}
+async function resume(){
+  var r=await api('/shorts/load',{id:QID});if(!r.ok){$('pe').textContent=r.detail||r.error;return;}
+  D=r.draft;if(!D.clips||D.clips.length!==CLIPS.length)toast('클립 수가 처음과 달라요('+(D.clips?D.clips.length:0)+'개). 구간을 확인해 주세요.');
+  NARR={};editor();
+}
+
+// ---------- 3) 편집 ----------
+function segHtml(s,i){
+  var c=CLIPS[s.clip];
+  return '<div class="seg" data-i="'+i+'"><img id="st'+i+'" src="'+(c&&c.thumb||'')+'"><div>'
+    +'<div class="hd"><b>#'+(i+1)+'</b> 클립 <select data-f="clip">'+CLIPS.map(function(x,k){return '<option value="'+k+'"'+(k===s.clip?' selected':'')+'>'+(k+1)+'</option>';}).join('')+'</select>'
+    +' <input type="number" step="0.1" min="0" data-f="s" value="'+fmt(s.s)+'">~<input type="number" step="0.1" min="0" data-f="e" value="'+fmt(s.e)+'">초</div>'
+    +'<input type="text" data-f="cap" value="'+esc(s.cap)+'" placeholder="화면 큰 글씨 (비워도 돼요)">'
+    +'<textarea data-f="say" placeholder="내레이션 (비우면 원본 소리만)">'+esc(s.say)+'</textarea>'
+    +'<div class="mini"><button data-a="pv">▶ 보기</button><button data-a="up">▲</button><button data-a="dn">▼</button><button data-a="dup">복제</button><button data-a="del">✕</button></div></div></div>';
+}
+function editor(){
+  var o=D.opts||{fit:'crop',orig:0.3,narr:true,subs:true};D.opts=o;
+  var tot=D.scenes.reduce(function(a,s){return a+(s.e-s.s);},0);
+  var h='<div class="card"><h2>제목·설명</h2><input type="text" id="tt" value="'+esc(D.title)+'"><p class="lbl">설명</p><textarea id="ds">'+esc(D.description)+'</textarea><p class="lbl">태그(쉼표)</p><input type="text" id="tg" value="'+esc((D.tags||[]).join(', '))+'"></div>';
+  h+='<div class="card"><h2>구간 '+D.scenes.length+'개 · 약 '+Math.round(tot)+'초</h2><video class="prev" id="pv" playsinline muted controls style="display:none"></video>'+D.scenes.map(segHtml).join('')+'<button class="big ghost" id="addSeg">＋ 구간 추가</button></div>';
+  h+='<div class="card"><h2>설정</h2><p class="lbl">화면</p><div class="chips"><button class="chip'+(o.fit==='crop'?' on':'')+'" data-o="fit" data-v="crop">꽉 채우기(가운데 자르기)</button><button class="chip'+(o.fit==='full'?' on':'')+'" data-o="fit" data-v="full">전체 보기(흐린 배경)</button></div>'
+   +'<p class="lbl">원본 소리</p><div class="chips">'+[[0,'끄기'],[0.3,'작게'],[1,'그대로']].map(function(x){return '<button class="chip'+(o.orig===x[0]?' on':'')+'" data-o="orig" data-v="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>'
+   +'<p class="lbl">내레이션 · 자막</p><div class="chips"><button class="chip'+(o.narr?' on':'')+'" data-o="narr">🔊 AI 내레이션</button><button class="chip'+(o.subs?' on':'')+'" data-o="subs">💬 자막</button></div></div>';
+  h+='<div class="card"><h2>영상 완성</h2><p class="note">폰에서 720×1280으로 녹화해요. 길이만큼 걸리니 화면을 켜 두세요.</p><button class="big" id="renderBtn">🎬 영상 만들기</button><div id="out"></div></div>';
+  h+='<a class="big ghost" href="/shorts">← 숏츠 공방</a>';
+  $('main').innerHTML=h;window.scrollTo(0,0);bind();
+}
+function readForm(){
+  D.title=$('tt').value.trim()||D.title;D.description=$('ds').value;D.tags=$('tg').value.split(/[,，]/).map(function(x){return x.trim();}).filter(Boolean);
+  document.querySelectorAll('.seg').forEach(function(el){var i=+el.getAttribute('data-i'),s=D.scenes[i];if(!s)return;
+    el.querySelectorAll('[data-f]').forEach(function(f){var k=f.getAttribute('data-f'),v=f.value;if(k==='clip')s.clip=+v;else if(k==='s'||k==='e')s[k]=Math.max(0,parseFloat(v)||0);else s[k]=v;});
+    var c=CLIPS[s.clip];if(c){s.e=Math.min(s.e,c.dur);s.s=Math.min(s.s,Math.max(0,s.e-0.3));}if(s.e-s.s<0.3)s.e=s.s+0.3;});
+}
+var saveT=null;function saveSoon(){clearTimeout(saveT);saveT=setTimeout(function(){readForm();api('/shorts/update',{id:D.id,draft:{title:D.title,description:D.description,tags:D.tags,scenes:D.scenes,opts:D.opts}});},1200);}
+function bind(){
+  document.querySelectorAll('#main input,#main textarea,#main select').forEach(function(x){x.oninput=saveSoon;x.onchange=saveSoon;});
+  document.querySelectorAll('.seg [data-a]').forEach(function(b){b.onclick=function(){readForm();var i=+b.closest('.seg').getAttribute('data-i'),a=b.getAttribute('data-a'),L=D.scenes;
+    if(a==='pv')return preview(i);
+    if(a==='up'&&i>0){var t=L[i];L[i]=L[i-1];L[i-1]=t;}
+    if(a==='dn'&&i<L.length-1){var t2=L[i];L[i]=L[i+1];L[i+1]=t2;}
+    if(a==='dup'&&L.length<15)L.splice(i+1,0,JSON.parse(JSON.stringify(L[i])));
+    if(a==='del'&&L.length>1)L.splice(i,1);
+    editor();saveSoon();};});
+  $('addSeg').onclick=function(){readForm();if(D.scenes.length>=15)return;var c=CLIPS.length-1;D.scenes.push({clip:c,s:0,e:Math.min(3,CLIPS[c].dur),cap:'',say:''});editor();saveSoon();};
+  document.querySelectorAll('[data-o]').forEach(function(b){b.onclick=function(){var k=b.getAttribute('data-o'),v=b.getAttribute('data-v');
+    if(k==='fit')D.opts.fit=v;else if(k==='orig')D.opts.orig=+v;else D.opts[k]=!D.opts[k];readForm();editor();saveSoon();};});
+  $('renderBtn').onclick=render;
+  segThumbs();
+}
+async function segThumbs(){for(var i=0;i<D.scenes.length;i++){var s=D.scenes[i],c=CLIPS[s.clip];if(!c)continue;try{await seekTo(c.v,Math.min(c.dur-0.05,s.s+0.2));var g=grab(c.v,200,0.6),im=$('st'+i);if(g&&im)im.src=g;}catch(e){}}}
+var pvT=null;
+async function preview(i){var s=D.scenes[i],c=CLIPS[s.clip],pv=$('pv');if(!c)return;pv.style.display='block';pv.src=c.url;pv.muted=false;clearInterval(pvT);
+  await waitEv(pv,'loadedmetadata',5000);pv.currentTime=s.s;try{await pv.play();}catch(e){}pv.scrollIntoView({block:'center',behavior:'smooth'});
+  pvT=setInterval(function(){if(pv.currentTime>=s.e){pv.pause();clearInterval(pvT);}},100);}
+
+// ---------- 4) 내레이션 ----------
+async function ensureNarr(ac,prog){
+  var out=[];
+  for(var i=0;i<D.scenes.length;i++){
+    var t=(D.scenes[i].say||'').trim();out[i]=null;if(!t||!D.opts.narr)continue;
+    prog('🔊 내레이션 '+(i+1)+'/'+D.scenes.length);
+    var n=NARR[i];
+    if(!n||n.text!==t){var r=await api('/shorts/asset',{id:D.id,n:i,kind:'say',text:t});if(!r.ok){toast('#'+(i+1)+' 내레이션 실패: '+(r.detail||r.error));continue;}n=NARR[i]={text:t,url:r.url,buf:null};}
+    if(!n.buf){try{var ab=await (await fetch(n.url+'&v='+Date.now())).arrayBuffer();n.buf=await new Promise(function(ok,no){var p=ac.decodeAudioData(ab,ok,no);if(p&&p.then)p.then(ok,no);});}catch(e){n.buf=null;}}
+    out[i]=n.buf;
+  }
+  return out;
+}
+
+// ---------- 5) 렌더링 ----------
+function wrap(g,t,max){var out=[],cur='';for(var i=0;i<t.length;i++){var n=cur+t[i];if(g.measureText(n).width>max&&cur){out.push(cur);cur=t[i];}else cur=n;}if(cur)out.push(cur);return out;}
+async function render(){
+  readForm();
+  CLIPS.forEach(function(c){try{c.v.muted=false;var p0=c.v.play();if(p0&&p0.then)p0.then(function(){c.v.pause();},function(){});}catch(e){}});
+  api('/shorts/update',{id:D.id,draft:{title:D.title,description:D.description,tags:D.tags,scenes:D.scenes,opts:D.opts}});
+  var out=$('out'),btn=$('renderBtn');btn.disabled=true;var pv=$('pv');if(pv){pv.pause();pv.style.display='none';}
+  var Ctx=window.AudioContext||window.webkitAudioContext,ac=new Ctx();if(ac.resume)ac.resume();
+  var lock=null;try{if(navigator.wakeLock)lock=await navigator.wakeLock.request('screen');}catch(e){}
+  function prog(t){out.innerHTML='<p class="prog">'+t+'</p>';}
+  var narr=await ensureNarr(ac,prog);
+  var tiny=document.createElement('canvas');tiny.width=24;tiny.height=42;var tg=tiny.getContext('2d');
+  var W=720,H=1280,cv=document.createElement('canvas');cv.width=W;cv.height=H;var g=cv.getContext('2d');
+  if(!cv.captureStream||!window.MediaRecorder){out.innerHTML='<p class="err">이 브라우저는 영상 녹화를 못 해요(iOS 최신 Safari 필요).</p>';btn.disabled=false;return;}
+  var dest=ac.createMediaStreamDestination(),master=ac.createGain();master.gain.value=1;master.connect(dest);master.connect(ac.destination);
+  CLIPS.forEach(function(c){if(!c.src){try{c.src=ac.createMediaElementSource(c.v);c.gain=ac.createGain();c.src.connect(c.gain);c.gain.connect(master);}catch(e){c.src=null;}}if(c.gain)c.gain.gain.value=D.opts.orig;c.v.muted=!c.src||D.opts.orig===0;c.v.pause();});
+  var vs=cv.captureStream(30);
+  var mime=['video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9,opus','video/webm'].filter(function(m){return MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(m);})[0]||'';
+  var rec=new MediaRecorder(new MediaStream(vs.getVideoTracks().concat(dest.stream.getAudioTracks())),mime?{mimeType:mime,videoBitsPerSecond:6000000}:{}),chunks=[];
+  rec.ondataavailable=function(e){if(e.data&&e.data.size)chunks.push(e.data);};
+  out.innerHTML='<p class="prog" id="rp">녹화 중… 화면을 켜 두세요</p><div class="bar"><i id="rb"></i></div>';out.appendChild(cv);cv.className='pv';
+  var plan=D.scenes.map(function(s,i){var nd=narr[i]?narr[i].duration+0.25:0;return {s:s,i:i,len:Math.max(s.e-s.s,nd,0.8)};}),total=plan.reduce(function(a,p){return a+p.len;},0),doneT=0;
+  function stroke(txt,x,y,font,fill,lw){g.font=font;g.textAlign='center';g.lineJoin='round';g.lineWidth=lw;g.strokeStyle='rgba(0,0,0,.85)';g.strokeText(txt,x,y);g.fillStyle=fill;g.fillText(txt,x,y);}
+  function draw(v,sc,el,len,idx){
+    g.fillStyle='#000';g.fillRect(0,0,W,H);var vw=v.videoWidth,vh=v.videoHeight;
+    if(vw&&vh){
+      if(D.opts.fit==='full'){var bs=Math.max(W/vw,H/vh)*1.1;tg.drawImage(v,0,0,tiny.width,tiny.height);g.imageSmoothingEnabled=true;g.drawImage(tiny,(W-vw*bs)/2,(H-vh*bs)/2,vw*bs,vh*bs);g.fillStyle='rgba(0,0,0,.45)';g.fillRect(0,0,W,H);var fs2=Math.min(W/vw,H/vh);g.drawImage(v,(W-vw*fs2)/2,(H-vh*fs2)/2,vw*fs2,vh*fs2);}
+      else{var cs=Math.max(W/vw,H/vh);g.drawImage(v,(W-vw*cs)/2,(H-vh*cs)/2,vw*cs,vh*cs);}
+    }
+    if(el<0.2){g.fillStyle='rgba(0,0,0,'+(1-el/0.2)*0.8+')';g.fillRect(0,0,W,H);}
+    var gr=g.createLinearGradient(0,H*0.5,0,H);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,.55)');g.fillStyle=gr;g.fillRect(0,H*0.5,W,H*0.5);
+    if(sc.cap){var pop=Math.min(1,el/0.18),fs=Math.round(66*(0.85+0.15*pop)),fnt='900 '+fs+'px -apple-system,"Apple SD Gothic Neo",sans-serif';g.font=fnt;wrap(g,sc.cap,W-140).forEach(function(l,k){stroke(l,W/2,H*0.20+k*(fs+12),fnt,idx===0&&k===0?'#FFD84D':'#FFFFFF',14);});}
+    if(D.opts.subs&&sc.say){var f2='700 36px -apple-system,"Apple SD Gothic Neo",sans-serif';g.font=f2;var sl=wrap(g,sc.say,W-170).slice(0,4);sl.forEach(function(l,k){stroke(l,W/2-20,H*0.66+k*48-(sl.length-1)*24,f2,'#FFFFFF',9);});}
+    g.font='600 22px -apple-system,sans-serif';g.textAlign='left';g.fillStyle='rgba(255,255,255,.75)';g.fillText('📍 광저우 广州',30,60);
+    var b=$('rb');if(b)b.style.width=Math.min(100,(doneT+Math.min(el,len))/total*100)+'%';
+  }
+  var started=false;
+  for(var k=0;k<plan.length;k++){
+    var p=plan[k],sc=p.s,c=CLIPS[sc.clip];if(!c)continue;
+    $('rp').textContent='녹화 중… '+(k+1)+' / '+plan.length+' 구간';
+    c.v.pause();await seekTo(c.v,sc.s);
+    var v=c.v;draw(v,sc,0,p.len,k);
+    if(!started){rec.start(500);started=true;}else{try{rec.resume();}catch(e){}}
+    try{var pr=v.play();if(pr&&pr.catch)pr.catch(function(){v.muted=true;var p2=v.play();if(p2&&p2.catch)p2.catch(function(){});});}catch(e){}
+    var t0=ac.currentTime;
+    if(narr[p.i]){var bs=ac.createBufferSource();bs.buffer=narr[p.i];bs.connect(master);bs.start(t0+0.05);}
+    await new Promise(function(done){(function loop(){var el=ac.currentTime-t0;if(el>=p.len){done();return;}if(v.currentTime>=sc.e-0.02&&!v.paused)v.pause();draw(v,sc,el,p.len,k);requestAnimationFrame(loop);})();});
+    v.pause();doneT+=p.len;
+    if(k<plan.length-1){try{rec.pause();}catch(e){}}
+  }
+  await new Promise(function(ok){rec.onstop=ok;rec.stop();});
+  try{if(lock)lock.release();}catch(e){}
+  var type=(mime||'video/mp4').split(';')[0],blob=new Blob(chunks,{type:type}),url=URL.createObjectURL(blob),ext=type.indexOf('webm')>=0?'webm':'mp4';
+  out.innerHTML='<video class="out" controls playsinline src="'+url+'"></video>'
+   +'<div class="mini" style="justify-content:center"><button id="dl">📥 기기에 저장</button></div>'
+   +'<p class="lbl">유튜브 공개 범위</p><div class="chips">'+[['private','비공개(확인 후 공개)'],['unlisted','일부 공개'],['public','바로 공개']].map(function(x,k){return '<button class="chip'+(k===0?' on':'')+'" data-pv="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>'
+   +'<button class="big red" id="ytUp">▶ 유튜브에 올리기</button><p class="note">AI 내레이션을 썼으면 AI 합성 콘텐츠로 표시돼요. 제목에 #Shorts 가 붙어요.</p><div class="err" id="ue"></div>';
+  btn.disabled=false;btn.textContent='🎬 다시 만들기';
+  var PV='private';document.querySelectorAll('[data-pv]').forEach(function(c){c.onclick=function(){PV=c.getAttribute('data-pv');document.querySelectorAll('[data-pv]').forEach(function(x){x.classList.toggle('on',x===c);});};});
+  $('dl').onclick=function(){var f=new File([blob],(D.title||'shorts').replace(/[\\/:*?"<>|#]/g,'').slice(0,40)+'.'+ext,{type:type});
+    if(navigator.canShare&&navigator.canShare({files:[f]}))navigator.share({files:[f]}).catch(function(){});else{var a=document.createElement('a');a.href=url;a.download=f.name;a.click();}};
+  $('ytUp').onclick=async function(){var b=this,ue=$('ue');b.disabled=true;ue.textContent='';
+    try{b.innerHTML='<span class="spin">⏫</span> 서버에 저장 중… ('+(blob.size/1048576).toFixed(1)+'MB)';
+      var r=await fetch('/shorts/save?id='+D.id,{method:'POST',headers:{'content-type':type,'x-code':CODE},body:blob});var j=await r.json();if(!j.ok)throw new Error(j.detail||j.error);
+      b.innerHTML='<span class="spin">▶</span> 유튜브에 올리는 중…';readForm();
+      var y=await api('/shorts/yt/upload',{id:D.id,privacy:PV,title:D.title,description:D.description,tags:D.tags,synthetic:!!(D.opts.narr&&D.scenes.some(function(x){return (x.say||'').trim();}))});
+      if(!y.ok)throw new Error(y.detail||y.error);
+      b.textContent='✅ 올렸어요';ue.innerHTML='<a href="'+esc(y.yt.url)+'" target="_blank" style="color:var(--sky)">'+esc(y.yt.url)+'</a>';
+    }catch(e){ue.textContent=e.message;b.disabled=false;b.textContent='▶ 다시 올리기';}
+  };
+}
+start();
+</script></body></html>`;

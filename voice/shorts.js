@@ -50,12 +50,16 @@ async function qwen(env, messages, opt = {}) {
   if (opt.search) body.enable_search = true;
   let r = await fetch("https://" + host(env) + "/compatible-mode/v1/chat/completions", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" }, body: JSON.stringify(body) });
   if (!r.ok && opt.search) { delete body.enable_search; r = await fetch("https://" + host(env) + "/compatible-mode/v1/chat/completions", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" }, body: JSON.stringify(body) }); }
+  if (!r.ok && r.status === 400) { delete body.response_format; delete body.enable_thinking; r = await fetch("https://" + host(env) + "/compatible-mode/v1/chat/completions", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" }, body: JSON.stringify(body) }); }
   const t = await r.text();
   let j = {};
   try { j = JSON.parse(t); } catch {}
   if (!r.ok) throw serr("千问 " + r.status + ": " + ((j.error && j.error.message) || t.slice(0, 160)), 502);
   const c = String((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || "").replace(/^```(?:json)?\s*|\s*```$/g, "");
-  try { return JSON.parse(c); } catch { throw serr("千问 응답을 읽지 못했어요. 다시 눌러 주세요.", 502); }
+  try { return JSON.parse(c); } catch {}
+  const a = c.indexOf("{"), z = c.lastIndexOf("}");
+  if (a >= 0 && z > a) try { return JSON.parse(c.slice(a, z + 1)); } catch {}
+  throw serr("千问 응답을 읽지 못했어요. 다시 눌러 주세요.", 502);
 }
 
 async function costDay(env) { return (await env.KV.get("shorts:cost:" + cnDay(), "json")) || { img: 0, vid: 0, tts: 0 }; }
@@ -73,6 +77,7 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
   if (path === "/shorts/ideas") return ideas(env, h, b);
   if (path === "/shorts/script") return script(env, b, h);
   if (path === "/shorts/load") return load(env, b, h);
+  if (path === "/shorts/plan") return plan(env, b, h);
   if (path === "/shorts/update") return update(env, b, h);
   if (path === "/shorts/asset") return asset(env, b, h, synth);
   if (path === "/shorts/poll") return poll(env, b, h);
@@ -144,6 +149,44 @@ async function script(env, b, h) {
   return { ok: true, draft: d, files: {} };
 }
 
+// 🎥 편집실 — 내가 찍은 클립의 캡처(폰에서 뽑은 작은 JPEG)를 보고 구간·순서·자막·내레이션을 정한다. 원본 영상은 서버로 오지 않는다
+async function plan(env, b, h) {
+  const clips = (Array.isArray(b.clips) ? b.clips : []).slice(0, 20).map((c) => ({ dur: Math.max(0.5, Math.min(600, Number(c.dur) || 0)), name: String(c.name || "").slice(0, 60) }));
+  if (!clips.length) throw serr("클립을 골라 주세요.");
+  const frames = (Array.isArray(b.frames) ? b.frames : []).filter((f) => f && clips[f.c] && /^data:image\/jpeg;base64,/.test(f.img || "") && f.img.length < 120000).slice(0, 40);
+  if (frames.length < 2) throw serr("장면 캡처를 만들지 못했어요. 다른 클립으로 해 보세요.");
+  const sec = [30, 45, 60].includes(Number(b.sec)) ? Number(b.sec) : 45;
+  const ang = ANGLES[b.angle] || ANGLES.mix;
+  const topic = String(b.topic || "").slice(0, 200);
+  const rate = (await krw(env)) || 190;
+  const content = [];
+  for (const f of frames) { content.push({ type: "text", text: "[클립 " + (f.c + 1) + " · " + Number(f.t).toFixed(1) + "초]" }); content.push({ type: "image_url", image_url: { url: f.img } }); }
+  content.push({ type: "text", text: "위는 내가 광저우에서 직접 찍은 영상 클립들의 장면 캡처다(클립 번호·시각 표시). 클립 길이: " + clips.map((c, i) => "클립 " + (i + 1) + "=" + c.dur.toFixed(1) + "초").join(", ") + ". " +
+    (topic ? "내가 적은 설명: " + topic + ". " : "") +
+    "이걸로 약 " + sec + "초짜리 한국어 유튜브 숏츠 편집 계획을 짜라. " + KR_RULES + " 이번 영상은 " + ang.d + ". 가격이 보이거나 언급되면 위안과 원화(1위안≈" + rate + "원)를 같이. " +
+    "규칙: 첫 구간은 가장 눈길 끄는 장면(훅). 구간은 1.5~6초, start/end 는 그 클립 길이 안에서 캡처를 근거로 고르고, 흔들리거나 의미 없는 부분은 피한다. 같은 순간을 두 번 쓰지 않는다. 구간 합계가 약 " + sec + "초. " +
+    "cap 은 화면 큰 글씨(한국어 12자 이내, 이모지 1개까지, 필요 없으면 빈칸). say 는 그 구간에 깔 한국어 내레이션 — 구간 길이 1초당 4글자 이내로 짧게, 화면만으로 충분하면 빈칸. 사진에 없는 사실을 지어내지 말 것(모르면 느낌·질문으로). 마지막 구간은 댓글 유도 질문. " +
+    'title(한국어 40자 이내), description(2~3줄), tags(8개 이내, # 없이). JSON만 출력: {"title":"","description":"","tags":[],"segments":[{"clip":1,"start":0,"end":3,"cap":"","say":""}]}' });
+  const out = await qwen(env, [{ role: "user", content }], { model: env.SHORTS_VL_MODEL || "qwen3-vl-plus" });
+  let segs = (Array.isArray(out.segments) ? out.segments : []).map((x) => {
+    const c = Math.round(Number(x.clip)) - 1;
+    if (!clips[c]) return null;
+    let st = Math.max(0, Number(x.start) || 0), en = Number(x.end) || st + 3;
+    st = Math.min(st, Math.max(0, clips[c].dur - 0.5)); en = Math.min(Math.max(en, st + 1), clips[c].dur);
+    if (en - st < 0.5) return null;
+    return { clip: c, s: +st.toFixed(2), e: +en.toFixed(2), cap: String(x.cap || "").slice(0, 30), say: String(x.say || "").slice(0, 160), img: "", move: "" };
+  }).filter(Boolean).slice(0, 15);
+  if (!segs.length) segs = clips.slice(0, 8).map((c, i) => ({ clip: i, s: 0, e: Math.min(c.dur, 4), cap: "", say: "", img: "", move: "" }));
+  const id = "s" + Date.now().toString(36);
+  const d = { id, kind: "mine", topic: topic || "내 영상", sec, angle: b.angle || "mix", made: Date.now(), title: String(out.title || topic || "광저우 둘이서").slice(0, 90), description: String(out.description || "").slice(0, 900),
+    tags: (Array.isArray(out.tags) ? out.tags : []).map((t) => String(t).replace(/^#/, "").slice(0, 30)).slice(0, 10), clips, scenes: segs, opts: { fit: "crop", orig: 0.3, narr: true, subs: true } };
+  await env.KV.put(draftKey(h, id), JSON.stringify(d), { expirationTtl: 120 * 86400 });
+  const l = (await env.KV.get(listKey(h), "json")) || [];
+  l.unshift({ id, title: d.title, made: d.made, kind: "mine" });
+  await env.KV.put(listKey(h), JSON.stringify(l.slice(0, 40)));
+  return { ok: true, draft: d, files: {} };
+}
+
 async function load(env, b, h) {
   const id = String(b.id || "");
   const d = await env.KV.get(draftKey(h, id), "json");
@@ -164,7 +207,12 @@ async function update(env, b, h) {
   if (u.title) d.title = String(u.title).slice(0, 90);
   if (typeof u.description === "string") d.description = u.description.slice(0, 900);
   if (Array.isArray(u.tags)) d.tags = u.tags.map((t) => String(t).slice(0, 30)).slice(0, 10);
-  if (Array.isArray(u.scenes)) d.scenes = u.scenes.slice(0, 10).map((s, i) => ({ ...(d.scenes[i] || {}), cap: String(s.cap || "").slice(0, 30), say: String(s.say || "").slice(0, 160), img: String(s.img || "").slice(0, 400), move: String(s.move || "").slice(0, 160) }));
+  if (Array.isArray(u.scenes)) d.scenes = u.scenes.slice(0, 15).map((s, i) => {
+    const o = { ...(d.scenes[i] || {}), cap: String(s.cap || "").slice(0, 30), say: String(s.say || "").slice(0, 160), img: String(s.img || "").slice(0, 400), move: String(s.move || "").slice(0, 160) };
+    if (d.kind === "mine") { o.clip = Math.max(0, Math.min(19, Math.round(Number(s.clip) || 0))); o.s = Math.max(0, Number(s.s) || 0); o.e = Math.max(o.s + 0.3, Number(s.e) || o.s + 2); }
+    return o;
+  });
+  if (u.opts && typeof u.opts === "object") d.opts = { fit: u.opts.fit === "full" ? "full" : "crop", orig: [0, 0.3, 1].includes(Number(u.opts.orig)) ? Number(u.opts.orig) : 0.3, narr: u.opts.narr !== false, subs: u.opts.subs !== false };
   if (b.yt) d.yt = b.yt;
   await env.KV.put(draftKey(h, id), JSON.stringify(d), { expirationTtl: 120 * 86400 });
   if (u.title || b.yt) {
@@ -179,7 +227,7 @@ function b64(u8) { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += 
 
 async function asset(env, b, h, synth) {
   const id = String(b.id || ""), n = Number(b.n), kind = b.kind;
-  if (!/^s[0-9a-z]{6,12}$/.test(id) || !Number.isInteger(n) || n < 0 || n > 9) throw serr("bad asset");
+  if (!/^s[0-9a-z]{6,12}$/.test(id) || !Number.isInteger(n) || n < 0 || n > 14) throw serr("bad asset");
   const pre = "shorts/" + h + "/" + id + "/" + n;
   if (kind === "img") {
     const c = await costDay(env);
@@ -355,7 +403,7 @@ async function ytUpload(env, b, h) {
   if (!/#shorts/i.test(title)) title = title.slice(0, 92) + " #Shorts";
   const meta = {
     snippet: { title, description: String(b.description != null ? b.description : d.description).slice(0, 4800) + "\n\n#Shorts #광저우 #广州", tags: (b.tags || d.tags || []).slice(0, 15), categoryId: "19", defaultLanguage: "ko", defaultAudioLanguage: "ko" },
-    status: { privacyStatus: privacy, selfDeclaredMadeForKids: false, containsSyntheticMedia: true },
+    status: { privacyStatus: privacy, selfDeclaredMadeForKids: false, containsSyntheticMedia: b.synthetic !== false },
   };
   const head = await env.R2.head(obj);
   const init = await fetch("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status", {
@@ -449,7 +497,8 @@ function home(){
       +'<p class="lbl">길이</p><div class="chips">'+[30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div>'
       +'<button class="big" id="scriptBtn">✍️ 대본 쓰기</button><div class="err" id="e1"></div></div>';
     h+='<div class="card" id="ytCard"><h2>유튜브 연결</h2><div id="ytBox" class="note">확인 중…</div></div>';
-    if(j.list&&j.list.length)h+='<div class="card"><h2>내 숏츠</h2><div class="list">'+j.list.map(function(x){return '<a href="#" data-open="'+x.id+'"><span>'+esc(x.title)+'</span><small>'+(x.yt?'▶ '+(x.yt.privacy==='public'?'공개':x.yt.privacy==='unlisted'?'일부공개':'비공개'):new Date(x.made).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}))+'</small></a>';}).join('')+'</div></div>';
+    h='<a class="big" href="/edit" style="text-align:center;text-decoration:none;background:var(--red);margin:0 0 12px">🎥 내가 찍은 영상으로 만들기 (편집실)</a>'+h;
+    if(j.list&&j.list.length)h+='<div class="card"><h2>내 숏츠</h2><div class="list">'+j.list.map(function(x){return '<a href="'+(x.kind==='mine'?'/edit?id='+x.id:'#')+'"'+(x.kind==='mine'?'':' data-open="'+x.id+'"')+'>'+(x.kind==='mine'?'🎥 ':'')+'<span>'+esc(x.title)+'</span><small>'+(x.yt?'▶ '+(x.yt.privacy==='public'?'공개':x.yt.privacy==='unlisted'?'일부공개':'비공개'):new Date(x.made).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}))+'</small></a>';}).join('')+'</div></div>';
     $('main').innerHTML=h;
     document.querySelectorAll('[data-ang]').forEach(function(b){b.onclick=function(){ANG=b.getAttribute('data-ang');try{localStorage.setItem('sh-ang',ANG);}catch(e){}document.querySelectorAll('[data-ang]').forEach(function(x){x.classList.toggle('on',x===b);});};});
     document.querySelectorAll('[data-sec]').forEach(function(b){b.onclick=function(){SEC=+b.getAttribute('data-sec');document.querySelectorAll('[data-sec]').forEach(function(x){x.classList.toggle('on',x===b);});};});
