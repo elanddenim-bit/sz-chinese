@@ -46,8 +46,8 @@ export async function trendApi(env, ctx, path, b, h) {
 
 async function make(env, day) {
   const sys = "你是给住在广州的韩国中年上班族（公司里大多是中国同事）讲解中国网络热点的编辑。请联网搜索今天（" + day + "）微博热搜、抖音热榜、小红书、B站等平台上正在火的话题和流行语，" +
-    "只选生活、娱乐、明星综艺、影视、体育、美食、消费、科技产品、网络梗、天气节气这类轻松话题；不要政治、外交、军事、社会冲突、灾难伤亡、案件、敏感人物。必须基于搜索到的真实内容，不确定就不要写。" +
-    "选5条，用韩语讲解：ko(韩语标题,20字内)、what(发生了什么,2句)、why(为什么火/中国人笑点,1句)、word(从这个话题里学一个流行语或关键词：z 汉字, p 带声调拼音, k 韩语意思)、emo(一个emoji)、src(来源平台名，如微博)。" +
+    "优先选中国网友自己在热议、在玩梗的话题（热搜榜前列、评论区刷屏、二创/表情包），只选生活、娱乐、明星综艺、影视、体育、美食、消费、新奇科技产品、网络梗、天气节气这类轻松话题；不要企业专利诉讼、财报、行业新闻这类硬新闻，不要韩国媒体报道的韩国相关新闻；不要政治、外交、军事、社会冲突、灾难伤亡、案件、敏感人物。必须基于搜索到的真实内容，不确定就不要写。" +
+    "选5条，用韩语讲解：ko(韩语标题,20字内)、what(发生了什么,2句)、why(为什么火/中国人笑点,1句)、word(从这个话题里学一个中国网友真在用的流行语或梗：z 必须是汉字(可带少量字母，如'CP')，不能只写英文缩写；p 是 z 的带声调拼音；k 韩语意思，人名按韩国通用译名，如孙悟空=손오공)、emo(一个emoji)、src(来源平台名，如微博)。" +
     "另外给 office：明天在公司可以跟中国同事聊这个的一句中文开场白（z,p,k）。" +
     '只输出 JSON：{"items":[{"zh":"原话题(中文)","ko":"","what":"","why":"","word":{"z":"","p":"","k":""},"emo":"","src":""}],"office":{"z":"","p":"","k":""}}';
   let last = "";
@@ -72,6 +72,9 @@ async function make(env, day) {
     if (!o || !Array.isArray(o.items) || o.items.length < 3) { last = model + ": 결과 부족"; continue; }
     const srcs = ((j.search_info && j.search_info.search_results) || []).slice(0, 8).map((s) => ({ t: String(s.title || s.site_name || "").slice(0, 60), u: String(s.url || "") })).filter((s) => /^https?:\/\//.test(s.u));
     const w = (x) => x && x.z ? { z: String(x.z).slice(0, 40), p: String(x.p || "").slice(0, 80), k: String(x.k || "").slice(0, 60) } : null;
+    // 한국 매체 출처·한글 섞인 출처는 '중국 인터넷'이 아니므로 뺌
+    o.items = o.items.filter((x) => !/[\uAC00-\uD7A3]/.test(String(x.src || "") + String(x.zh || "")));
+    if (o.items.length < 3) { last = model + ": 중국 화제 부족"; continue; }
     return { day, made: Date.now(), model, sources: srcs,
       items: o.items.slice(0, 5).map((x) => ({ zh: String(x.zh || "").slice(0, 40), ko: String(x.ko || "").slice(0, 40), what: String(x.what || "").slice(0, 200), why: String(x.why || "").slice(0, 140), word: w(x.word), emo: String(x.emo || "🔥").slice(0, 4), src: String(x.src || "").slice(0, 12) })),
       office: w(o.office) };
