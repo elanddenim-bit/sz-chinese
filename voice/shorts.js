@@ -568,8 +568,8 @@ async function toonIdea(env, b) {
     { role: "system", content: "너는 인스타 릴스·유튜브 숏츠 'POV 공감툰' 작가다. 채널 '살다보니외국'. 주인공은 광저우에 사는 한국인 직장인(주재원 3년 차), 흰 티·검은 선글라스·갈색 곱슬머리 치비 캐릭터이고 말은 하지 않는다. 그림 1~2장 + 짧은 자막 2줄로 5~7초 안에 '아 ㅋㅋ 맞아' 하게 만든다. 해외 사는 한국인·중국 생활 해 본 사람이 공감할 구체적인 순간으로(뻔한 일반론 말고). 사실·숫자를 지어내지 말 것. " +
       "출력 필드: pov(첫 자막, 'POV: '로 시작, 공백 포함 24자 이내), punch(두 번째 자막=반전·속마음, 24자 이내), bubble(그림 속 말풍선에 넣을 아주 짧은 말 8자 이내, 필요 없으면 빈 문자열), zh(이 상황에서 실제로 듣거나 쓰는 중국어 한마디, 없으면 빈 문자열), py(zh 의 성조 병음), ko(zh 의 한국어 뜻, 짧게), " +
       "scenes(1~2개: {beat:'setup'|'punch', prompt: GPT 이미지 생성에 붙여 넣을 영어 장면 묘사. 주인공은 반드시 'Our character' 로 지칭, 표정·동작을 구체적으로, 광저우 디테일(광저우 타워·야자수·早茶·위챗·사무실 등) 하나 이상, 다른 사람은 'simple cute side character', 마지막에 'Vertical 9:16, keep the top 25% empty, no text.' 를 붙인다}), " +
-      "sfx(추천 효과음 2개, 다음 중에서: ding,pop,whoosh,thud,beep,msg,fail — 첫 번째는 시작, 두 번째는 반전 순간), title(유튜브 제목 30자 이내, 해시태그 없이), description(2줄), tags(6개, # 없이)." +
-      ' JSON 만: {"pov":"","punch":"","bubble":"","zh":"","py":"","ko":"","scenes":[{"beat":"","prompt":""}],"sfx":["",""],"title":"","description":"","tags":[]}' },
+      "extra(그림 3장째에 쓸 마무리 장면: {cap: 세 번째 자막 24자 이내 — 후일담·반전의 반전·'진짜 OK는 이렇게 옴' 같은 꿀팁, zh: 그 장면의 실제 중국어 한마디(없으면 빈 문자열), py, ko}), "+"sfx(추천 효과음 2개, 다음 중에서: ding,pop,whoosh,thud,beep,msg,fail — 첫 번째는 시작, 두 번째는 반전 순간), title(유튜브 제목 30자 이내, 해시태그 없이), description(2줄), tags(6개, # 없이)." +
+      ' JSON 만: {"pov":"","punch":"","bubble":"","zh":"","py":"","ko":"","scenes":[{"beat":"","prompt":""}],"sfx":["",""],"extra":{"cap":"","zh":"","py":"","ko":""},"title":"","description":"","tags":[]}' },
     { role: "user", content: "주제: " + topic },
   ]);
   const S = ["ding", "pop", "whoosh", "thud", "beep", "msg", "fail"];
@@ -578,6 +578,7 @@ async function toonIdea(env, b) {
     zh: String(out.zh || "").slice(0, 30), py: String(out.py || "").slice(0, 60), ko: String(out.ko || "").slice(0, 40),
     scenes: (Array.isArray(out.scenes) ? out.scenes : []).slice(0, 2).map((x) => ({ beat: String(x.beat || "").slice(0, 10), prompt: String(x.prompt || "").slice(0, 900) })).filter((x) => x.prompt),
     sfx: (Array.isArray(out.sfx) ? out.sfx : []).map(String).filter((x) => S.includes(x)).slice(0, 2),
+    extra: out.extra && out.extra.cap ? { cap: String(out.extra.cap).slice(0, 40), zh: String(out.extra.zh || "").slice(0, 30), py: String(out.extra.py || "").slice(0, 60), ko: String(out.extra.ko || "").slice(0, 40) } : null,
     title: String(out.title || topic).slice(0, 60), description: String(out.description || "").slice(0, 400), tags: (Array.isArray(out.tags) ? out.tags : []).map((t) => String(t).replace(/^#/, "").slice(0, 30)).slice(0, 8),
   } };
 }

@@ -72,7 +72,7 @@ function start(){
   $('main').innerHTML=
     '<div class="card"><h2>① 아이디어</h2><input type="text" id="topic" placeholder="예: 중국 동료의 考虑一下, 위챗 음성 메시지 폭탄" value="'+esc(T.topic)+'">'
     +'<div class="mini" style="margin-top:8px"><button id="ideaBtn">💡 자막·장면 프롬프트 받기</button><button id="setupBtn">📋 캐릭터 고정 프롬프트(GPT 처음 한 번)</button></div><div id="idea"></div><div class="err" id="e1"></div></div>'
-    +'<div class="card"><h2>② 그림 넣기 <small style="font-weight:400;color:var(--ink2)">GPT 로 뽑은 그림 1~4장</small></h2><label class="pick"><input type="file" accept="image/*" multiple id="imgs"><b>🖼 그림 고르기</b>사진 앱에서 순서대로</label><div id="cards"></div></div>'
+    +'<div class="card"><h2>② 그림 넣기 <small style="font-weight:400;color:var(--ink2)">GPT 로 뽑은 그림 1~4장</small></h2><div class="mini" style="margin-bottom:8px"><button id="refill">↻ 아이디어로 자막 다시 채우기</button></div><label class="pick"><input type="file" accept="image/*" multiple id="imgs"><b>🖼 그림 고르기</b>사진 앱에서 순서대로</label><div id="cards"></div></div>'
     +'<div class="card"><h2>③ 소리</h2><p class="lbl">효과음 미리 듣기</p><div class="chips">'+SFX.slice(1).map(function(x){return '<button class="chip" data-try="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>'
     +'<p class="lbl">배경음악 (폰 파일 · 저작권 걱정 없는 곡)</p><label class="chip" style="display:inline-block">🎵 <span id="bgmName">'+(BGM?esc(BGM.name):'고르기')+'</span><input type="file" accept=".mp3,.m4a,.aac,.wav,audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,audio/aac" id="bgm" hidden></label>'
     +'<div class="chips" style="margin-top:6px">'+[[0,'끔'],[0.07,'작게'],[0.12,'보통'],[0.22,'크게']].map(function(x){return '<button class="chip'+(x[0]===T.bgv?' on':'')+'" data-bgv="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div></div>'
@@ -82,6 +82,7 @@ function start(){
   $('setupBtn').onclick=function(){copy(SETUP);};
   $('ideaBtn').onclick=getIdea;
   $('imgs').onchange=addImages;
+  $('refill').onclick=function(){if(!T.idea){toast('먼저 ① 에서 💡 를 눌러 주세요');return;}if(!CARDS.length){toast('그림을 먼저 넣어 주세요');return;}autoFill(true);toast('그림 '+CARDS.length+'장에 맞게 채웠어요');};
   document.querySelectorAll('[data-try]').forEach(function(b){b.onclick=function(){var ac=getAC();playSfx(ac,b.getAttribute('data-try'),ac.currentTime+0.05,BUS.sfx);};});
   document.querySelectorAll('[data-bgv]').forEach(function(b){b.onclick=function(){T.bgv=+b.getAttribute('data-bgv');keep();document.querySelectorAll('[data-bgv]').forEach(function(x){x.classList.toggle('on',x===b);});};});
   $('bgm').onchange=function(){var f=this.files&&this.files[0];if(!f)return;BGM={file:f,name:f.name,buf:null};$('bgmName').textContent=f.name;if(!T.bgv){T.bgv=0.12;keep();document.querySelectorAll('[data-bgv]').forEach(function(x){x.classList.toggle('on',+x.getAttribute('data-bgv')===0.12);});}};
@@ -106,7 +107,8 @@ function addImages(){var fs=[].slice.call(this.files||[]);this.value='';if(!fs.l
 function autoFill(force){var x=T.idea;if(!x||!CARDS.length)return;var c0=CARDS[0];
   var sub=x.zh?x.zh+'  '+x.py+' · '+x.ko:'';
   if(CARDS.length===1){c0.cap1=x.pov;c0.cap2=x.punch;c0.at2=0.5;c0.sub=sub;c0.bubble=x.bubble;c0.dur=5;c0.sfx1=x.sfx[0]||'';c0.sfx2=x.sfx[1]||'';c0.zoom='punch';}
-  else{c0.cap1=x.pov;c0.cap2='';c0.sub=sub;c0.dur=2.5;c0.sfx1=x.sfx[0]||'';var c1=CARDS[1];c1.cap1=x.punch;c1.cap2='';c1.bubble=x.bubble;c1.dur=3.5;c1.sfx1=x.sfx[1]||'';c1.zoom='in';}
+  else{c0.cap1=x.pov;c0.cap2='';c0.sub=sub;c0.dur=2.5;c0.sfx1=x.sfx[0]||'';c0.zoom='in';var c1=CARDS[1];c1.cap1=x.punch;c1.cap2='';c1.sub='';c1.bubble=x.bubble;c1.dur=CARDS.length>2?3:3.5;c1.sfx1=x.sfx[1]||'';c1.zoom='in';
+    if(CARDS.length>2){var c2=CARDS[2],e=x.extra||{};c2.cap1=e.cap||'';c2.cap2='';c2.sub=e.zh?e.zh+'  '+e.py+' · '+e.ko:'';c2.bubble='';c2.dur=3.5;c2.sfx1='ding';c2.zoom='in';}}
   if(force)drawCards();}
 function chipRow(name,i,list,val){return '<div class="row"><span>'+name+'</span>'+list.map(function(x){return '<button class="chip'+(String(x[0])===String(val)?' on':'')+'" data-k="'+i+'" data-f="'+x[2]+'" data-v="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>';}
 function drawCards(){var el=$('cards');if(!el)return;
