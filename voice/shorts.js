@@ -118,6 +118,7 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
   if (path === "/shorts/yt/stats") return ytStats(env, h, b);
   if (path === "/shorts/yt/upload") return ytUpload(env, b, h);
   if (path === "/shorts/yt/queue") return ytQueueView(env, b, h);
+  if (path === "/shorts/week") return weekView(env, b, h);
   throw serr("not_found", 404);
 }
 const caps = (env) => ({ img: Number(env.SHORTS_IMG_DAY) || 40, vid: Number(env.SHORTS_VID_DAY) || 6 });
@@ -158,6 +159,53 @@ async function ideas(env, h, b) {
     { role: "user", content: "오늘: " + cnDay() + ". 최근 우리가 가 본 곳: " + (been.join(", ") || "(아직 없음)") + ". 1위안 ≈ " + ((await krw(env)) || 190) + "원." + perf },
   ], { search: true });
   return { ok: true, ideas: (Array.isArray(out.ideas) ? out.ideas : []).slice(0, 6).map((x) => ({ topic: String(x.topic || "").slice(0, 80), hook: String(x.hook || "").slice(0, 80), why: String(x.why || "").slice(0, 120) })) };
+}
+
+// 🗓 이번 주 숏츠 기획(2026-10-11): 토요일 아침(중국 8시, 크론) 내 기록(주말 탐험·간판·타임머신·이미 만든 숏츠) + 채널 성적 + 오늘의 중국 인터넷으로
+// 이번 주말에 찍을 3편 + 찍을 컷 목록. KV shorts:week:<해시> {at, items[{title,kind,where,hook,why,shots[{what,how,sec}],angle}]}, 직접 다시 만들기 하루 3번
+async function weekMake(env, h) {
+  const q = (await env.KV.get("quest:" + h, "json")) || {}, sg = (await env.KV.get("sg:" + h, "json")) || {}, tc = (await env.KV.get("tc:" + h, "json")) || {};
+  const made = ((await env.KV.get(listKey(h), "json")) || []).slice(0, 20).map((x) => x.title);
+  const been = (q.hist || []).slice(0, 12).map((x) => x.name + "(" + (x.area || "") + ", " + (x.date || "") + (x.comment ? ", " + String(x.comment).slice(0, 40) : "") + ")");
+  const signs = (sg.items || []).filter((x) => x.fun >= 3).slice(0, 8).map((x) => x.zh + "=" + x.real);
+  const tr = (await env.KV.get("trend:" + cnDay(), "json")) || (await env.KV.get("trend:" + cnDay(Date.now() - 86400e3), "json"));
+  const trend = tr && tr.items ? tr.items.slice(0, 3).map((x) => x.ko + "(" + x.what + ")") : [];
+  let perf = "";
+  const st = await env.KV.get("yt:stats:" + h, "json");
+  if (st && st.items) {
+    const pub = st.items.filter((x) => x.privacy === "public" && Date.now() - x.at > 20 * 3600e3).map((x) => ({ t: x.title, d: x.views / Math.max(1, (Date.now() - x.at) / 86400e3), k: x.kind })).sort((a, c) => c.d - a.d);
+    if (pub.length) perf = "채널 성적(하루당 조회): " + pub.slice(0, 4).map((x) => "'" + x.t + "' " + Math.round(x.d)).join(", ") + (pub.length >= 5 ? " / 저조: " + pub.slice(-2).map((x) => "'" + x.t + "' " + Math.round(x.d)).join(", ") : "") + ". 잘된 패턴을 따르라.";
+  }
+  const out = await qwen(env, [
+    { role: "system", content: "너는 한국 시청자용 유튜브 숏츠 채널 기획자 겸 촬영 감독이다. 채널: 광저우(바이윈구 거주)에 사는 한국인 40대 부부가 주말에 돌아다니며 직접 찍는 광저우 생활. 얼굴은 안 나온다(손·뒷모습·풍경·음식만). " + KR_RULES +
+      " 이번 주말에 직접 찍을 숏츠 3편을 기획하라. 3편은 서로 다른 각도로: 1편은 우리가 다녀온 곳·기록을 살린 것, 1편은 새로 가 볼 만한 광저우 장소(실제 있는 곳, 지하철로 1시간 안), 1편은 요즘 화제나 한국과의 비교. 이미 만든 영상 주제는 반복 금지. " +
+      "각 편마다 찍을 컷 5~7개: what(무엇을, 한국어 짧게), how(어떻게 — 구도·움직임·소리, 폰 하나로 가능한 것), sec(초, 3~8). 첫 컷은 훅(손으로 가격표 들기, 음식 김 나는 클로즈업, 반전 장면 등). 마지막 컷은 댓글 유도 장면. 얼굴 정면 금지. " +
+      ' JSON만 출력: {"items":[{"title":"한국어 제목 40자 이내","kind":"record|new|trend","where":"촬영 장소(중국어 이름+한국어)","hook":"첫 2초 한마디","why":"한국인이 왜 볼지 한 문장","angle":"compare|price|tip|shock|food|life","shots":[{"what":"","how":"","sec":4}]}]}' },
+    { role: "user", content: "오늘: " + cnDay() + "(이번 주말 촬영용)" + ". 우리가 가 본 곳: " + (been.join(" / ") || "(없음)") + ". 웃긴 간판 기록: " + (signs.join(" / ") || "(없음)") + ". 타임머신 사진 " + ((Array.isArray(tc) ? tc : []).length) + "장. 이미 만든 숏츠: " + (made.join(" / ") || "(없음)") + ". 오늘의 중국 인터넷: " + (trend.join(" / ") || "(없음)") + ". 1위안 ≈ " + ((await krw(env)) || 190) + "원. " + perf },
+  ], { search: true });
+  const items = (Array.isArray(out.items) ? out.items : []).slice(0, 3).map((x) => ({
+    title: String(x.title || "").slice(0, 60), kind: ["record", "new", "trend"].includes(x.kind) ? x.kind : "new", where: String(x.where || "").slice(0, 80), hook: String(x.hook || "").slice(0, 80), why: String(x.why || "").slice(0, 140),
+    angle: ANGLES[x.angle] ? x.angle : "mix", shots: (Array.isArray(x.shots) ? x.shots : []).slice(0, 8).map((s) => ({ what: String(s.what || "").slice(0, 60), how: String(s.how || "").slice(0, 120), sec: Math.max(2, Math.min(10, Math.round(Number(s.sec) || 4))) })).filter((s) => s.what),
+  })).filter((x) => x.title && x.shots.length);
+  if (!items.length) throw serr("기획이 비어서 나왔어요. 다시 눌러 주세요.", 502);
+  const doc = { at: Date.now(), day: cnDay(), items };
+  await env.KV.put("shorts:week:" + h, JSON.stringify(doc), { expirationTtl: 30 * 86400 });
+  return doc;
+}
+async function weekView(env, b, h) {
+  let doc = await env.KV.get("shorts:week:" + h, "json");
+  if (b && b.fresh) {
+    const ck = "shorts:week:re:" + h + ":" + cnDay(), n = Number(await env.KV.get(ck)) || 0;
+    if (n >= 3) throw serr("오늘은 기획을 3번 다시 만들었어요. 내일 다시 눌러 주세요.", 429);
+    await env.KV.put(ck, String(n + 1), { expirationTtl: 2 * 86400 });
+    doc = await weekMake(env, h);
+  }
+  return { ok: true, plan: doc || null };
+}
+export async function weekCron(env) {
+  const h = await env.KV.get("usage:owner");
+  if (!h || !(await env.KV.get("yt:" + h))) return;
+  await weekMake(env, h);
 }
 
 async function script(env, b, h) {
@@ -998,6 +1046,14 @@ function toast(t){var d=document.createElement('div');d.className='toast';d.text
 function api(p,b){b=b||{};b.code=CODE;return fetch(p,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json().catch(function(){return {error:'서버 응답 오류 '+r.status};});});}
 function gate(m){$('main').innerHTML='<div class="gate"><p>'+esc(m||'초대 코드를 넣어 주세요')+'</p><input type="text" id="cd" placeholder="초대 코드" style="max-width:220px"> <button class="chip on" id="go">열기</button></div>';$('go').onclick=function(){CODE=$('cd').value.trim();try{localStorage.setItem('pb-code',CODE);}catch(e){}home();};}
 function costTxt(c,caps){if(!c)return '';return '오늘 그림 '+(c.img||0)+'/'+caps.img+' · 클립 '+(c.vid||0)+'/'+caps.vid+'<br>약 '+((c.img||0)*0.2+(c.vid||0)*3+(c.tts||0)/10000*0.8).toFixed(1)+'위안';}
+function wkLoad(fresh){var bx=$('wkBox'),rb=$('wkRe');if(!bx)return;if(fresh){rb.disabled=true;bx.innerHTML='<span class="spin">🗓</span> 내 기록·채널 성적 보고 3편 기획 중… (20~40초)';}
+  api('/shorts/week',fresh?{fresh:true}:{}).then(function(r){if(rb)rb.disabled=false;if(!r.ok){bx.textContent=r.detail||r.error;return;}var p=r.plan;
+    if(!p){bx.innerHTML='매주 <b>토요일 아침 8시</b>에 이번 주말 찍을 숏츠 3편과 컷 목록이 여기 자동으로 생겨요. 지금 보려면 ‘다시 만들기’.';return;}
+    var K={record:'📍 다녀온 곳',new:'🆕 새로 가 볼 곳',trend:'🔥 화제·비교'};
+    bx.innerHTML='<small>'+esc(p.day)+' 기획</small>'+p.items.map(function(x,i){return '<details class="idea" style="margin-top:8px"'+(i===0?' open':'')+'><summary><b>'+esc(K[x.kind]||'')+' · '+esc(x.title)+'</b></summary><small>📍 '+esc(x.where)+'<br>첫마디: “'+esc(x.hook)+'”<br>'+esc(x.why)+'</small>'
+      +'<ol style="margin:8px 0 6px 18px;padding:0">'+x.shots.map(function(s){return '<li style="margin:4px 0"><b>'+esc(s.what)+'</b> <small>('+s.sec+'초)</small><br><small>'+esc(s.how)+'</small></li>';}).join('')+'</ol>'
+      +'<a class="chip" style="text-decoration:none;display:inline-block" href="/edit?topic='+encodeURIComponent(x.title+' — 첫마디: '+x.hook)+'">🎥 찍고 나서 편집실로</a> <button class="chip" data-wkt="'+i+'">✍️ AI 대본으로</button></details>';}).join('');
+    bx.querySelectorAll('[data-wkt]').forEach(function(b){b.onclick=function(){var x=p.items[+b.getAttribute('data-wkt')];$('topic').value=x.title+' — 첫마디: '+x.hook;$('topic').scrollIntoView({block:'center'});toast('대본 쓰기를 누르세요');};});});}
 function qLoad(arg){api('/shorts/yt/queue',arg||{}).then(function(r){var c=$('qCard'),bx=$('qBox');if(!c||!r.ok)return;
   if(r.tried)toast(r.tried.ok?'올렸어요 ✅':'아직 안 돼요: '+(r.tried.error||'').slice(0,60));
   if(!r.items.length&&!r.err){c.style.display='none';return;}c.style.display='block';
@@ -1016,6 +1072,7 @@ function home(){
       +'<p class="lbl">길이</p><div class="chips">'+[30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div>'
       +'<button class="big" id="scriptBtn">✍️ 대본 쓰기</button><div class="err" id="e1"></div></div>';
     h+='<div class="card" id="ytCard"><h2>유튜브 연결</h2><div id="ytBox" class="note">확인 중…</div></div>';
+    h+='<div class="card" id="wkCard"><h2>🗓 이번 주말 찍을 숏츠 <button class="chip" id="wkRe" style="float:right;font-size:12px;padding:3px 9px">다시 만들기</button></h2><div id="wkBox" class="note">불러오는 중…</div></div>';
     h+='<div class="card" id="qCard" style="display:none"><h2>📅 예약 발행</h2><div id="qBox" class="note"></div></div>';
     if(j.yt)h+='<div class="card"><h2>📈 내 채널 성적 <button class="chip" id="stRe" style="float:right;font-size:12px;padding:3px 9px">새로고침</button></h2><div id="stBox" class="note">불러오는 중…</div></div>';
     h='<button class="big" id="avOpen" style="margin:0 0 12px;background:var(--ink)">🎙 숏츠용 내 목소리 · 🗣 캐릭터가 말하기</button>'+h;h='<a class="big" href="/toon" style="text-align:center;text-decoration:none;margin:0 0 12px;background:#1F7A4D">🎨 공감툰 만들기 (그림 + 자막 + 효과음)</a>'+h;h='<a class="big" href="/edit" style="text-align:center;text-decoration:none;background:var(--red);margin:0 0 12px">🎥 내가 찍은 영상으로 만들기 (편집실)</a>'+h;
@@ -1038,7 +1095,7 @@ function home(){
     $('scriptBtn').onclick=function(){var t=$('topic').value.trim();if(!t){$('e1').textContent='주제를 적거나 추천에서 골라 주세요';return;}var b=this;b.disabled=true;b.innerHTML='<span class="spin">✍️</span> 대본 쓰는 중… (15초쯤)';
       api('/shorts/script',{topic:t,sec:SEC,angle:ANG,series:SER}).then(function(r){b.disabled=false;b.textContent='✍️ 대본 쓰기';if(!r.ok){$('e1').textContent=r.detail||r.error;return;}D=r.draft;F=r.files||{};editor();});};
     $('avOpen').onclick=ava;
-    ytBox();qLoad();
+    ytBox();qLoad();wkLoad();$('wkRe').onclick=function(){wkLoad(true);};
     if(j.yt){stats(false);$('stRe').onclick=function(){stats(true);};}
   }).catch(function(){gate('서버에 연결하지 못했어요');});
 }

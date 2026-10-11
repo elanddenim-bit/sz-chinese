@@ -27,7 +27,7 @@ import { HUB_HTML } from "./hub.js";
 import { signsApi, signsGet, SIGNS_HTML } from "./signs.js";
 import { novelApi, novelGet, NOVEL_HTML } from "./novel.js";
 import { trendApi, trendGet, TREND_HTML } from "./trend.js";
-import { shortsApi, shortsSave, shortsFile, ytCallback, legalPage, SHORTS_HTML, shortsCron } from "./shorts.js";
+import { shortsApi, shortsSave, shortsFile, ytCallback, legalPage, SHORTS_HTML, shortsCron, weekCron } from "./shorts.js";
 import { EDIT_HTML } from "./edit.js";
 import { TOON_HTML } from "./toon.js";
 import ICON180 from "./icon-180.png";
@@ -73,7 +73,11 @@ const cnDay = () => new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10)
 
 export default {
   // 📅 숏츠 예약 발행: 중국 18~21시 매시(wrangler.toml crons) 대기열에서 하루 1개 업로드
-  async scheduled(ev, env, ctx) { ctx.waitUntil(shortsCron(env).catch((e) => console.log("shortsCron", e && e.message))); },
+  // 🗓 토요일 아침 8시(UTC 토 0시) 이번 주 숏츠 기획
+  async scheduled(ev, env, ctx) {
+    if (ev.cron === "0 0 * * 6") ctx.waitUntil(weekCron(env).catch((e) => console.log("weekCron", e && e.message)));
+    else ctx.waitUntil(shortsCron(env).catch((e) => console.log("shortsCron", e && e.message)));
+  },
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
     if (req.method === "OPTIONS") return new Response(null, { headers: cors(req) });

@@ -14,7 +14,7 @@ routes = [{ pattern = "voice.zhnote.net", custom_domain = true }]
 
 # 📅 숏츠 예약 발행 — UTC 10~13시 = 중국 18~21시 매시
 [triggers]
-crons = ["0 10-13 * * *"]
+crons = ["0 10-13 * * *", "0 0 * * 6"]   # 뒤: 토요일 중국 8시 이번 주 숏츠 기획
 
 # 하루 사용량(실시간 통화 초)·내 목소리 voice_id
 [[kv_namespaces]]

@@ -62,6 +62,7 @@ function api(p,b,tries){b=b||{};b.code=CODE;tries=tries==null?2:tries;
 function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
 function fmt(s){return (Math.round(s*10)/10).toFixed(1);}
 var QID=(location.search.match(/[?&]id=([^&]+)/)||[])[1]||'';
+var QTOPIC='';try{QTOPIC=decodeURIComponent((location.search.match(/[?&]topic=([^&]+)/)||[])[1]||'');}catch(e){}
 
 // ---------- 1) 클립 고르기 ----------
 function start(){
@@ -75,7 +76,7 @@ function start(){
       +'<p class="lbl">길이</p><div class="chips">'+[15,20,30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div><p class="note" id="secNote"></p>'
       +'</div><div class="dock"><button class="big" id="planBtn" disabled>🤖 AI 편집 계획 받기</button><div class="prog" id="pp"></div><div class="err" id="pe"></div></div>';
   }else h+='<div class="dock"><button class="big" id="resumeBtn" disabled>이 클립으로 편집 이어가기</button><div class="err" id="pe"></div></div>';
-  $('main').innerHTML=h;
+  $('main').innerHTML=h;if(QTOPIC&&$('topic'))$('topic').value=QTOPIC;
   $('files').onchange=function(){addFiles(this.files);this.value='';};
   document.querySelectorAll('[data-ang]').forEach(function(b){b.onclick=function(){ANG=b.getAttribute('data-ang');try{localStorage.setItem('sh-ang',ANG);}catch(e){}document.querySelectorAll('[data-ang]').forEach(function(x){x.classList.toggle('on',x===b);});};});
   document.querySelectorAll('[data-sec]').forEach(function(b){b.onclick=function(){SEC=+b.getAttribute('data-sec');SECMAN=true;document.querySelectorAll('[data-sec]').forEach(function(x){x.classList.toggle('on',x===b);});};});
