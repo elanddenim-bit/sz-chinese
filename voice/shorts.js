@@ -117,6 +117,7 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
   if (path === "/shorts/yt/status") return ytStatus(env, h);
   if (path === "/shorts/yt/stats") return ytStats(env, h, b);
   if (path === "/shorts/yt/upload") return ytUpload(env, b, h);
+  if (path === "/shorts/yt/queue") return ytQueueView(env, b, h);
   throw serr("not_found", 404);
 }
 const caps = (env) => ({ img: Number(env.SHORTS_IMG_DAY) || 40, vid: Number(env.SHORTS_VID_DAY) || 6 });
@@ -843,7 +844,65 @@ async function ytStatus(env, h) {
     return { ok: true, config: true, connected: true, channel: "", why: ch.why };
   } catch (e) { return { ok: true, config: true, connected: false, why: String(e.message || e) }; }
 }
+// 📅 예약 발행(2026-10-11): 새 채널은 하루 업로드 개수 제한("exceeded the number of videos") → 대기열에 넣고
+// 크론(중국 18~21시 매시)이 하루 1개씩 올림. KV shorts:q:<해시> {items[{id,privacy,title,description,tags,synthetic,at,tries}], last, err}
+const qKey = (h) => "shorts:q:" + h;
+const isLimit = (e) => /exceeded the number of videos|uploadLimitExceeded/i.test(String((e && e.message) || e));
+const cnHour = () => (new Date().getUTCHours() + 8) % 24;
+function qWhen(q) {
+  const n = q.items.length, h = cnHour(), today = !q.last || Date.now() - q.last > 20 * 3600e3;
+  const first = today && h < 21 ? "오늘 저녁 6~9시" : "내일 저녁 6~9시";
+  return n <= 1 ? first : first + "부터 하루 1개씩 (" + n + "개 대기)";
+}
+async function ytQueueAdd(env, b, h, why) {
+  const id = String(b.id || "");
+  const d = await env.KV.get(draftKey(h, id), "json");
+  if (!d) throw serr("초안을 찾지 못했어요.", 404);
+  const q = (await env.KV.get(qKey(h), "json")) || { items: [], last: 0 };
+  q.items = q.items.filter((x) => x.id !== id);
+  if (q.items.length >= 14) throw serr("예약이 14개 꽉 찼어요. 먼저 올라간 뒤 다시 넣어 주세요.");
+  q.items.push({ id, privacy: ["public", "unlisted", "private"].includes(b.privacy) ? b.privacy : "public", title: String(b.title || d.title || "").slice(0, 95), description: b.description != null ? String(b.description).slice(0, 4800) : null, tags: (b.tags || d.tags || []).slice(0, 15), synthetic: b.synthetic !== false, at: Date.now(), tries: 0 });
+  if (why) q.last = Math.max(q.last || 0, Date.now() - 4 * 3600e3); // 방금 한도에 걸림 → 오늘은 쉬고 내일부터
+  await env.KV.put(qKey(h), JSON.stringify(q));
+  const msg = (why ? "오늘 유튜브 업로드 한도에 걸려서 " : "") + "예약했어요 — " + qWhen(q) + " 자동으로 올라가요. 숏츠 공방 첫 화면에서 확인·취소할 수 있어요.";
+  return { ok: true, queued: true, n: q.items.length, msg };
+}
+async function ytQueueView(env, b, h) {
+  const q = (await env.KV.get(qKey(h), "json")) || { items: [], last: 0 };
+  if (b.del) { q.items = q.items.filter((x) => x.id !== String(b.del)); await env.KV.put(qKey(h), JSON.stringify(q)); }
+  if (b.now) { const x = q.items.find((y) => y.id === String(b.now)); if (x) { const r = await ytRunOne(env, h, q, x); return { ...(await ytQueueView(env, {}, h)), tried: r }; } }
+  return { ok: true, items: q.items.map((x) => ({ id: x.id, title: x.title, at: x.at, privacy: x.privacy, err: x.err || "" })), when: q.items.length ? qWhen(q) : "", last: q.last || 0, err: q.err || "" };
+}
+async function ytRunOne(env, h, q, x) {
+  try {
+    const r = await ytUpload(env, { ...x, noQueue: true }, h);
+    q.items = q.items.filter((y) => y.id !== x.id); q.last = Date.now(); q.err = "";
+    await env.KV.put(qKey(h), JSON.stringify(q));
+    return { ok: true, url: r.yt.url };
+  } catch (e) {
+    const m = String(e.message || e).slice(0, 200);
+    if (isLimit(e)) { q.err = "유튜브 하루 한도 — 다음 시간에 다시"; }
+    else { x.tries = (x.tries || 0) + 1; x.err = m; if (x.tries >= 3 || /초안을 찾지|먼저 영상을 저장/.test(m)) { q.items = q.items.filter((y) => y.id !== x.id); q.err = "‘" + x.title + "’ 3번 실패해서 뺐어요: " + m; } }
+    await env.KV.put(qKey(h), JSON.stringify(q));
+    return { ok: false, error: m };
+  }
+}
+export async function shortsCron(env) {
+  let cur;
+  do {
+    const l = await env.KV.list({ prefix: "shorts:q:", cursor: cur });
+    for (const k of l.keys) {
+      const h = k.name.slice(9), q = await env.KV.get(k.name, "json");
+      if (!q || !q.items || !q.items.length) continue;
+      if (q.last && Date.now() - q.last < 20 * 3600e3) continue;
+      await ytRunOne(env, h, q, q.items[0]);
+    }
+    cur = l.list_complete ? null : l.cursor;
+  } while (cur);
+}
 async function ytUpload(env, b, h) {
+  if (b.privacy === "queue") return ytQueueAdd(env, { ...b, privacy: "public" }, h);
+  if (!b.noQueue) { try { return await ytUpload(env, { ...b, noQueue: true }, h); } catch (e) { if (isLimit(e)) return ytQueueAdd(env, { ...b, privacy: b.privacy === "private" ? "private" : b.privacy }, h, true); throw e; } }
   const id = String(b.id || "");
   const d = await env.KV.get(draftKey(h, id), "json");
   if (!d) throw serr("초안을 찾지 못했어요.", 404);
@@ -939,6 +998,13 @@ function toast(t){var d=document.createElement('div');d.className='toast';d.text
 function api(p,b){b=b||{};b.code=CODE;return fetch(p,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json().catch(function(){return {error:'서버 응답 오류 '+r.status};});});}
 function gate(m){$('main').innerHTML='<div class="gate"><p>'+esc(m||'초대 코드를 넣어 주세요')+'</p><input type="text" id="cd" placeholder="초대 코드" style="max-width:220px"> <button class="chip on" id="go">열기</button></div>';$('go').onclick=function(){CODE=$('cd').value.trim();try{localStorage.setItem('pb-code',CODE);}catch(e){}home();};}
 function costTxt(c,caps){if(!c)return '';return '오늘 그림 '+(c.img||0)+'/'+caps.img+' · 클립 '+(c.vid||0)+'/'+caps.vid+'<br>약 '+((c.img||0)*0.2+(c.vid||0)*3+(c.tts||0)/10000*0.8).toFixed(1)+'위안';}
+function qLoad(arg){api('/shorts/yt/queue',arg||{}).then(function(r){var c=$('qCard'),bx=$('qBox');if(!c||!r.ok)return;
+  if(r.tried)toast(r.tried.ok?'올렸어요 ✅':'아직 안 돼요: '+(r.tried.error||'').slice(0,60));
+  if(!r.items.length&&!r.err){c.style.display='none';return;}c.style.display='block';
+  bx.innerHTML=(r.items.length?'<b>'+esc(r.when)+'</b><div class="list" style="margin-top:6px">'+r.items.map(function(x,i){return '<a href="#" style="cursor:default"><span>'+(i+1)+'. '+esc(x.title)+(x.err?'<br><small style="color:var(--red)">'+esc(x.err.slice(0,80))+'</small>':'')+'</span><small><button class="chip" data-qnow="'+x.id+'" style="font-size:12px;padding:3px 8px">지금</button> <button class="chip" data-qdel="'+x.id+'" style="font-size:12px;padding:3px 8px">✕</button></small></a>';}).join('')+'</div>':'')
+    +(r.err?'<p class="note" style="color:var(--red)">'+esc(r.err)+'</p>':'')+'<p class="note">중국 시간 저녁 6~9시 사이에 하루 1개씩 자동으로 올라가요. ‘지금’은 바로 시도(한도면 실패).</p>';
+  bx.querySelectorAll('[data-qdel]').forEach(function(b){b.onclick=function(e){e.preventDefault();qLoad({del:b.getAttribute('data-qdel')});};});
+  bx.querySelectorAll('[data-qnow]').forEach(function(b){b.onclick=function(e){e.preventDefault();b.disabled=true;b.textContent='…';qLoad({now:b.getAttribute('data-qnow')});};});});}
 function home(){
   if(!CODE)return gate();
   api('/shorts/list').then(function(j){
@@ -950,6 +1016,7 @@ function home(){
       +'<p class="lbl">길이</p><div class="chips">'+[30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div>'
       +'<button class="big" id="scriptBtn">✍️ 대본 쓰기</button><div class="err" id="e1"></div></div>';
     h+='<div class="card" id="ytCard"><h2>유튜브 연결</h2><div id="ytBox" class="note">확인 중…</div></div>';
+    h+='<div class="card" id="qCard" style="display:none"><h2>📅 예약 발행</h2><div id="qBox" class="note"></div></div>';
     if(j.yt)h+='<div class="card"><h2>📈 내 채널 성적 <button class="chip" id="stRe" style="float:right;font-size:12px;padding:3px 9px">새로고침</button></h2><div id="stBox" class="note">불러오는 중…</div></div>';
     h='<button class="big" id="avOpen" style="margin:0 0 12px;background:var(--ink)">🎙 숏츠용 내 목소리 · 🗣 캐릭터가 말하기</button>'+h;h='<a class="big" href="/toon" style="text-align:center;text-decoration:none;margin:0 0 12px;background:#1F7A4D">🎨 공감툰 만들기 (그림 + 자막 + 효과음)</a>'+h;h='<a class="big" href="/edit" style="text-align:center;text-decoration:none;background:var(--red);margin:0 0 12px">🎥 내가 찍은 영상으로 만들기 (편집실)</a>'+h;
     if(j.list&&j.list.length)h+='<div class="card"><h2>내 숏츠</h2><div class="list">'+j.list.map(function(x){return '<a href="'+(x.kind==='mine'?'/edit?id='+x.id:x.kind==='toon'?'/toon':'#')+'"'+(x.kind==='mine'||x.kind==='toon'?'':' data-open="'+x.id+'"')+'>'+(x.kind==='mine'?'🎥 ':x.kind==='toon'?'🎨 ':'')+'<span>'+esc(x.title)+'</span><small>'+(x.yt?'▶ '+(x.yt.privacy==='public'?'공개':x.yt.privacy==='unlisted'?'일부공개':'비공개'):new Date(x.made).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}))+'</small></a>';}).join('')+'</div></div>';
@@ -971,7 +1038,7 @@ function home(){
     $('scriptBtn').onclick=function(){var t=$('topic').value.trim();if(!t){$('e1').textContent='주제를 적거나 추천에서 골라 주세요';return;}var b=this;b.disabled=true;b.innerHTML='<span class="spin">✍️</span> 대본 쓰는 중… (15초쯤)';
       api('/shorts/script',{topic:t,sec:SEC,angle:ANG,series:SER}).then(function(r){b.disabled=false;b.textContent='✍️ 대본 쓰기';if(!r.ok){$('e1').textContent=r.detail||r.error;return;}D=r.draft;F=r.files||{};editor();});};
     $('avOpen').onclick=ava;
-    ytBox();
+    ytBox();qLoad();
     if(j.yt){stats(false);$('stRe').onclick=function(){stats(true);};}
   }).catch(function(){gate('서버에 연결하지 못했어요');});
 }
@@ -1194,7 +1261,7 @@ async function render(){
   var type=(mime||'video/mp4').split(';')[0],blob=new Blob(chunks,{type:type}),url=URL.createObjectURL(blob),ext=type.indexOf('webm')>=0?'webm':'mp4';
   out.innerHTML='<video class="out" controls playsinline src="'+url+'"></video>'
    +'<div class="mini" style="justify-content:center"><button id="dl">📥 기기에 저장</button></div>'
-   +'<p class="lbl">유튜브 공개 범위</p><div class="chips" id="pv">'+[['private','비공개(확인 후 공개)'],['unlisted','일부 공개'],['public','바로 공개']].map(function(x,k){return '<button class="chip'+(k===0?' on':'')+'" data-pv="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>'
+   +'<p class="lbl">유튜브 공개 범위</p><div class="chips" id="pv">'+[['private','비공개(확인 후 공개)'],['unlisted','일부 공개'],['public','바로 공개'],['queue','📅 예약(하루 1개 자동)']].map(function(x,k){return '<button class="chip'+(k===0?' on':'')+'" data-pv="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>'
    +'<button class="big red" id="ytUp">▶ 유튜브에 올리기</button><p class="note">AI 생성 콘텐츠로 자동 표시돼요. 제목에 #Shorts 가 붙어요.</p><div class="err" id="ue"></div>';
   btn.disabled=false;btn.textContent='🎬 다시 만들기';
   var PV='private';document.querySelectorAll('[data-pv]').forEach(function(c){c.onclick=function(){PV=c.getAttribute('data-pv');document.querySelectorAll('[data-pv]').forEach(function(x){x.classList.toggle('on',x===c);});};});
@@ -1206,7 +1273,7 @@ async function render(){
       b.innerHTML='<span class="spin">▶</span> 유튜브에 올리는 중…';readForm();
       var y=await api('/shorts/yt/upload',{id:D.id,privacy:PV,title:D.title,description:D.description,tags:D.tags});
       if(!y.ok){if(y.error==='yt_login'||y.error==='yt_config'){ue.textContent=(y.detail||'')+' 목록 화면의 \'유튜브 연결\'에서 먼저 연결해 주세요.';b.disabled=false;b.textContent='▶ 다시 올리기';return;}throw new Error(y.detail||y.error);}
-      b.textContent='✅ 올렸어요';ue.innerHTML='<a href="'+esc(y.yt.url)+'" target="_blank" style="color:var(--sky)">'+esc(y.yt.url)+'</a>';
+      if(y.queued){b.textContent='📅 예약했어요';ue.style.color='var(--ok)';ue.textContent=y.msg;return;}b.textContent='✅ 올렸어요';ue.innerHTML='<a href="'+esc(y.yt.url)+'" target="_blank" style="color:var(--sky)">'+esc(y.yt.url)+'</a>';
     }catch(e){ue.textContent=e.message;b.disabled=false;b.textContent='▶ 다시 올리기';}
   };
 }

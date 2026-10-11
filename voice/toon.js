@@ -230,7 +230,7 @@ function done(blob,type){
    +'<p class="note" style="text-align:center">'+(total()+0.7).toFixed(1)+'초 · '+(blob.size/1048576).toFixed(1)+'MB</p>'
    +'<button class="big ok" id="dl">📥 기기에 저장 · 인스타에 올리기</button>'
    +'<p class="lbl">유튜브 제목</p><input type="text" id="yt" value="'+esc(title)+'">'
-   +'<p class="lbl">공개 범위</p><div class="chips">'+[['private','비공개'],['unlisted','일부 공개'],['public','바로 공개']].map(function(p,k){return '<button class="chip'+(k===0?' on':'')+'" data-pv="'+p[0]+'">'+p[1]+'</button>';}).join('')+'</div>'
+   +'<p class="lbl">공개 범위</p><div class="chips">'+[['private','비공개'],['unlisted','일부 공개'],['public','바로 공개'],['queue','📅 예약(하루 1개 자동)']].map(function(p,k){return '<button class="chip'+(k===0?' on':'')+'" data-pv="'+p[0]+'">'+p[1]+'</button>';}).join('')+'</div>'
    +'<button class="big red" id="ytUp">▶ 유튜브에 올리기</button><div class="bar" id="ubw" style="display:none;margin-top:8px"><i id="ub"></i></div><p class="note">AI 로 만든 그림이라 AI 합성 콘텐츠로 표시돼요. 제목에 #Shorts 가 붙어요.</p><div class="err" id="ue"></div>';
   var PV='private';document.querySelectorAll('[data-pv]').forEach(function(c){c.onclick=function(){PV=c.getAttribute('data-pv');document.querySelectorAll('[data-pv]').forEach(function(z){z.classList.toggle('on',z===c);});};});
   $('dl').onclick=function(){var f=new File([blob],($('yt').value||'toon').replace(/[\\/:*?"<>|#]/g,'').slice(0,40)+'.'+ext,{type:type});
@@ -246,7 +246,7 @@ function done(blob,type){
       b.innerHTML='<span class="spin">▶</span> 유튜브에 올리는 중…';
       var y=await api('/shorts/yt/upload',{id:T.id,privacy:PV,title:tt,description:x.description||'',tags:(x.tags||[]).concat(['공감툰','해외살이','광저우']),synthetic:true});
       if(!y.ok)throw new Error(y.detail||y.error);
-      b.textContent='✅ 올렸어요';ue.innerHTML='<a href="'+esc(y.yt.url)+'" target="_blank" style="color:var(--sky)">'+esc(y.yt.url)+'</a>';
+      if(y.queued){b.textContent='📅 예약했어요';ue.style.color='var(--ok)';ue.textContent=y.msg;return;}b.textContent='✅ 올렸어요';ue.innerHTML='<a href="'+esc(y.yt.url)+'" target="_blank" style="color:var(--sky)">'+esc(y.yt.url)+'</a>';
     }catch(e){ue.textContent=e.message;b.disabled=false;b.textContent='▶ 다시 올리기';}};
 }
 start();
