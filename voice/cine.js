@@ -53,8 +53,8 @@ video.out{width:70%;max-width:320px;display:block;margin:10px auto;border-radius
 <main id="main"></main>
 <script>
 var CODE='';try{CODE=localStorage.getItem('pb-code')||'';}catch(e){}
-var S={mood:'cine',model:'flash',sec:5,img:null},ST=null,POLL={};
-try{var sv=JSON.parse(localStorage.getItem('cine-opt')||'null');if(sv){S.mood=sv.mood||'cine';S.model=sv.model||'flash';}}catch(e){}
+var S={mood:'cine',model:'hq',sec:5,img:null},ST=null,POLL={};
+try{var sv=JSON.parse(localStorage.getItem('cine-opt')||'null');if(sv){S.mood=sv.mood||'cine';S.model=sv.model||'hq';}}catch(e){}
 function keep(){try{localStorage.setItem('cine-opt',JSON.stringify({mood:S.mood,model:S.model}));}catch(e){}}
 function $(i){return document.getElementById(i);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -72,7 +72,7 @@ function draw(){
   var h='<div class="card"><h2>사진 고르기</h2><label class="pick"><input type="file" id="ph" accept="image/*"><b>📷 사진 한 장</b>세로 사진이면 숏츠에 바로 쓰기 좋아요 · 영상은 사진 비율 그대로</label><div id="pvBox"></div></div>'
     +'<div class="card"><h2>어떻게 움직일까요?</h2>'+chips('md',moods,S.mood,'mood')
     +'<p class="lbl">추가 연출 (선택, 한국어 OK)</p><input type="text" id="extra" placeholder="예: 커피잔에서 김이 오르고 창밖 사람들이 지나감">'
-    +'<p class="lbl">품질</p>'+chips('mdl',[['flash','⚡ 빠른판 (소리 자동·움직임 단순)'],['hq','💎 고품질 (wan2.7, 움직임 자연스러움)']],S.model,'model')
+    +'<p class="lbl">품질</p>'+chips('mdl',[['hq','💎 고품질 (wan2.7, 추천)'],['flash','⚡ 빠른판 (소리 자동·움직임 단순)']],S.model,'model')
     +'<p class="lbl">길이</p>'+chips('sc',[[5,'5초'],[10,'10초 (비용 2배)']],S.sec,'sec')
     +'<button class="big" id="go">🎞 영상 만들기</button><p class="note" id="cnt"></p><div class="err" id="err"></div><div id="pend"></div></div>'
     +'<div class="card"><h2>만든 영상</h2><div id="gal" class="gal"></div><p class="note">저장 → 편집실에서 클립으로 고르면 숏츠 인트로·전환 컷으로 쓸 수 있어요. 소리는 AI가 만든 효과음·배경음이에요.</p></div>';

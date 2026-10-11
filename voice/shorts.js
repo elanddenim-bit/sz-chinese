@@ -494,7 +494,7 @@ async function cineMake(env, b, h) {
   if (!d.day || d.day.d !== today) d.day = { d: today, n: 0 };
   if (d.day.n >= cineCap(env)) throw serr("오늘 영상 " + cineCap(env) + "개를 다 만들었어요. 내일 다시 만들 수 있어요.", 429);
   if (d.pend.length >= 3) throw serr("만드는 중인 영상이 3개예요. 하나 끝나면 다시 눌러 주세요.", 429);
-  const kind = b.model === "hq" ? "hq" : "flash", model = CINE_MODELS[kind](env);
+  const kind = b.model === "flash" ? "flash" : "hq", model = CINE_MODELS[kind](env);
   const mood = CINE_MOODS[b.mood] ? b.mood : "cine";
   const extra = String(b.prompt || "").trim().slice(0, 200);
   // 사진을 千问 VL 이 직접 보고 '이 사진에 실제 있는 것'의 움직임 + 카메라 움직임을 구체적으로 연출(예전: 고정 프리셋 + "원본 유지" → 밋밋·어색, 소유자 피드백 2026-10-11)
