@@ -330,7 +330,7 @@ async function render0(dry){
   out.innerHTML='<p class="prog" id="rp">'+(dry?'미리보기 중…':'녹화 중… 화면을 켜 두세요')+'</p><div class="bar"><i id="rb"></i></div>';out.appendChild(cv);cv.className='pv';
   if(dry)cv.scrollIntoView({block:'center',behavior:'smooth'});
   var END=D.opts.end?2:0;
-  var plan=D.scenes.map(function(s,i){var nd=narr[i]?narr[i].duration+0.4:0;return {s:s,i:i,sp:s.sp||1,seg:segLen(s),nd:narr[i]?narr[i].duration:0,ck:sayChunks(s.say),len:Math.max(segLen(s),nd,0.8)};}),total=plan.reduce(function(a,p){return a+p.len;},0)+END,doneT=0,bgmPos=0;
+  var plan=D.scenes.map(function(s,i){var nd=narr[i]?narr[i].duration+0.4:0,c=CLIPS[s.clip],room=c?Math.max(0.3,(c.dur-s.s)/(s.sp||1)):segLen(s);return {s:s,i:i,sp:s.sp||1,seg:segLen(s),nd:narr[i]?narr[i].duration:0,ck:sayChunks(s.say),len:Math.max(Math.min(Math.max(segLen(s),nd),room),0.8)};}),total=plan.reduce(function(a,p){return a+p.len;},0)+END,doneT=0,bgmPos=0;
   // 배경음악: 구간마다 이어지는 위치부터 짧게 페이드 인·아웃(녹화 일시정지 사이 끊김 없이 이어 붙음), 내레이션 땐 낮춤
   function bgm(at,len,duck,fadeOut){var lv=D.opts.bgv;if(!BGM||!BGM.buf||!lv)return;var s=ac.createBufferSource(),gn=ac.createGain();s.buffer=BGM.buf;s.loop=true;s.connect(gn);gn.connect(BUS.comp);
     var l=lv*(duck?0.4:1),fo=Math.min(len,fadeOut||0.04);gn.gain.setValueAtTime(0,at);gn.gain.linearRampToValueAtTime(l,at+0.03);gn.gain.setValueAtTime(l,at+Math.max(0.03,len-fo));gn.gain.linearRampToValueAtTime(0,at+len);
@@ -345,17 +345,16 @@ async function render0(dry){
       if(D.opts.fit==='full'){var bs=Math.max(W/vw,H/vh)*1.1;tg.drawImage(v,0,0,tiny.width,tiny.height);g.imageSmoothingEnabled=true;g.drawImage(tiny,(W-vw*bs)/2,(H-vh*bs)/2,vw*bs,vh*bs);g.fillStyle='rgba(0,0,0,.45)';g.fillRect(0,0,W,H);var fs2=Math.min(W/vw,H/vh);g.drawImage(v,(W-vw*fs2)/2,(H-vh*fs2)/2,vw*fs2,vh*fs2);}
       else{var cs=Math.max(W/vw,H/vh);g.drawImage(v,(W-vw*cs)/2,(H-vh*cs)/2,vw*cs,vh*cs);}
     }
-    if(hasSnap&&ready&&el<0.25){g.globalAlpha=1-el/0.25;g.drawImage(sn,0,0);g.globalAlpha=1;}
     var gr=g.createLinearGradient(0,H*0.5,0,H);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,.55)');g.fillStyle=gr;g.fillRect(0,H*0.5,W,H*0.5);
     if(sc.cap){var pop=Math.min(1,el/0.18),fs=Math.round(66*(0.85+0.15*pop)),fnt='900 '+fs+'px -apple-system,"Apple SD Gothic Neo",sans-serif';g.font=fnt;wrap(g,sc.cap,W-140).forEach(function(l,k){stroke(l,W/2,H*0.20+k*(fs+12),fnt,idx===0&&k===0?'#FFD84D':'#FFFFFF',14);});}
     // 내레이션 자막: 말하는 속도에 맞춰 한 토막씩(글자 수 비례로 시간 배분)
-    var P=CUR,talking=P&&P.nd&&el>=0.05&&el<=P.nd+0.15,shown=false;
-    if(D.opts.subs&&P&&P.ck.length){var span=P.nd||len,tt=(P.nd?el-0.05:el)/span,ci=-1,acc=0;
-      if(tt>=0&&tt<=1.03){for(var q=0;q<P.ck.length;q++){acc+=P.ck[q].w;if(tt<=acc+1e-6){ci=q;break;}}if(ci<0)ci=P.ck.length-1;}
-      if(ci>=0){var f2='800 44px -apple-system,"Apple SD Gothic Neo",sans-serif';g.font=f2;var sl=wrap(g,P.ck[ci].t,W-150).slice(0,2);sl.forEach(function(l,k){stroke(l,W/2-20,H*0.67+k*56-(sl.length-1)*28,f2,'#FFFFFF',10);});shown=true;}}
+    var P=CUR,S=SPK,te=S?ac.currentTime-S.t0:-1,talking=!!(S&&te>=-0.05&&te<=S.nd+0.15),shown=false,Q=talking?{ck:S.ck,nd:S.nd,el:te}:(P&&!P.nd?{ck:P.ck,nd:0,el:el}:null);
+    if(D.opts.subs&&Q&&Q.ck.length){var span=Q.nd||len,tt=Q.el/span,ci=-1,acc=0;
+      if(tt>=0&&tt<=1.03){for(var q=0;q<Q.ck.length;q++){acc+=Q.ck[q].w;if(tt<=acc+1e-6){ci=q;break;}}if(ci<0)ci=Q.ck.length-1;}
+      if(ci>=0){var f2='800 44px -apple-system,"Apple SD Gothic Neo",sans-serif';g.font=f2;var sl=wrap(g,Q.ck[ci].t,W-150).slice(0,2);sl.forEach(function(l,k){stroke(l,W/2-20,H*0.67+k*56-(sl.length-1)*28,f2,'#FFFFFF',10);});shown=true;}}
     // 영상 속 말 자막: 내레이션이 안 나올 때 그 순간 말한 문장(한국어 크게 + 원문 작게)
     var A=D.opts.osub&&clipAsr(sc.clip);
-    if(A&&!talking&&!(shown&&!P.nd)){var mt=v.currentTime,row=null;for(var r=0;r<A.length;r++){if(A[r][3]&&mt>=A[r][0]-0.1&&mt<=A[r][1]+0.3){row=A[r];break;}}
+    if(A&&!talking&&!shown){var mt=v.currentTime,row=null;for(var r=0;r<A.length;r++){if(A[r][3]&&mt>=A[r][0]-0.1&&mt<=A[r][1]+0.3){row=A[r];break;}}
       if(row){var f3='800 42px -apple-system,"Apple SD Gothic Neo",sans-serif';g.font=f3;var kl=wrap(g,row[3],W-150).slice(0,2),y0=H*0.70-(kl.length-1)*27;
         if(row[2]){var f4='600 26px -apple-system,"PingFang SC",sans-serif';g.font=f4;stroke(wrap(g,row[2],W-160)[0],W/2-20,y0-52,f4,'#FFD84D',7);}
         kl.forEach(function(l,k){stroke(l,W/2-20,y0+k*54,f3,'#FFFFFF',10);});}}
@@ -372,34 +371,47 @@ async function render0(dry){
     g.font='800 44px -apple-system,"Apple SD Gothic Neo",sans-serif';g.textAlign='center';g.fillStyle='#FFFFFF';g.fillText('🔔 구독',W/2,by+bh/2+15);
     g.globalAlpha=1;bar(el,END);
   }
-  var started=false,stopped=false,CUR=null;
+  var started=false,stopped=false,CUR=null,SPK=null,narrEnd=0,prevV=null,prevArgs=null,LEAD=0.3;
   // 녹화는 처음부터 끝까지 멈추지 않음(iOS 는 pause/resume 때 소리 앞뒤가 잘려 단어가 씹혔음).
   // 다음 구간 영상은 지금 구간이 나오는 동안 미리 찾아 두어 컷 사이 멈춤을 최소로.
-  function preseek(j){var v2=EL[j],sj=D.scenes[j];if(!v2||!sj)return;v2._pre=-1;v2.pause();seekTo(v2,sj.s).then(function(){v2._pre=j;});}
+  function preseek(j){var v2=EL[j],sj=D.scenes[j];if(!v2||!sj)return;v2._pre=-1;v2._run=-1;v2.pause();seekTo(v2,Math.max(0,sj.s-LEAD*(sj.sp||1))).then(function(){v2._pre=j;});}
+  // 새 컷 첫 프레임을 기다리는 동안 앞 컷을 계속 움직이게 그림(예전엔 화면이 멈춰 보였음)
+  function waitLive(v){return new Promise(function(done){var ok=false;firstFrame(v).then(function(){ok=true;});(function lp(){if(ok||run.stop)return done();if(prevV&&prevArgs&&prevV.readyState>=2)draw(prevV,prevArgs[0],prevArgs[1],prevArgs[2],prevArgs[3]);requestAnimationFrame(lp);})();});}
   if(EL[0])preseek(0);
   for(var k=0;k<plan.length;k++){
     if(run.stop){stopped=true;break;}
     var p=plan[k],sc=p.s,c=CLIPS[sc.clip],v=EL[k];if(!c||!v)continue;CUR=p;
     $('rp').textContent=(dry?'미리보기 ':'녹화 중… ')+(k+1)+' / '+plan.length+' 구간';
-    if(v._pre!==k){v.pause();await seekTo(v,sc.s);}
-    v.playbackRate=p.sp;try{v.preservesPitch=true;v.webkitPreservesPitch=true;}catch(e){}
-    try{var pr=v.play();if(pr&&pr.catch)pr.catch(function(){v.muted=true;var p2=v.play();if(p2&&p2.catch)p2.catch(function(){});});}catch(e){}
-    await firstFrame(v);
+    // 앞 컷 끝나기 직전에 이미 재생을 시작해 둔 경우(LEAD)엔 기다릴 것 없이 바로 이어짐
+    if(!(v._run===k&&!v.paused)){
+      if(v._pre!==k){v.pause();await seekTo(v,sc.s);}
+      v.playbackRate=p.sp;try{v.preservesPitch=true;v.webkitPreservesPitch=true;}catch(e){}
+      try{var pr=v.play();if(pr&&pr.catch)pr.catch(function(){v.muted=true;var p2=v.play();if(p2&&p2.catch)p2.catch(function(){});});}catch(e){}
+      await waitLive(v);
+    }
+    if(prevV&&prevV!==v){prevV.pause();prevV.playbackRate=1;}
     draw(v,sc,0,p.len,k);
-    if(rec&&!started){rec.start(500);started=true;await sleep(120);}
+    if(rec&&!started){rec.start(500);started=true;await new Promise(function(d){var e=performance.now()+120;(function lp(){if(performance.now()>=e)return d();draw(v,sc,0,p.len,k);requestAnimationFrame(lp);})();});}
     var t0=ac.currentTime,hasN=!!narr[p.i],last=k===plan.length-1;
     // 내레이션이 구간보다 길면 화면을 멈추지 않고 영상을 이어서 재생(클립 끝까지)
-    var stopAt=Math.min(c.dur-0.05,sc.s+p.len*p.sp),aud=Math.max(0.1,Math.min(p.len,(c.dur-sc.s)/p.sp));
+    var vs0=Math.max(sc.s,v.currentTime||0),stopAt=Math.min(c.dur-0.05,vs0+p.len*p.sp),aud=Math.max(0.1,Math.min(p.len,(c.dur-sc.s)/p.sp));
     if(EL[k+1]&&EL[k+1]!==v)preseek(k+1);
     // 원본 소리: 컷마다 60ms 페이드(툭 소리 방지), 내레이션 나올 땐 40%로 낮춤
-    if(v._gain){var lv=D.opts.orig*(hasN?0.4:1),gg=v._gain.gain;gg.cancelScheduledValues(t0);gg.setValueAtTime(0,t0);gg.linearRampToValueAtTime(lv,t0+0.06);gg.setValueAtTime(lv,t0+Math.max(0.06,aud-0.06));gg.linearRampToValueAtTime(0,t0+aud);}
-    if(hasN){var bs=ac.createBufferSource();bs.buffer=narr[p.i];bs.connect(BUS.comp);bs.start(t0+0.1);}
+    if(v._gain){var lv=D.opts.orig*(hasN||narrEnd>t0+0.2?0.4:1),gg=v._gain.gain;gg.cancelScheduledValues(t0);gg.setValueAtTime(0,t0);gg.linearRampToValueAtTime(lv,t0+0.06);gg.setValueAtTime(lv,t0+Math.max(0.06,aud-0.06));gg.linearRampToValueAtTime(0,t0+aud);}
+    // 내레이션: 앞 내레이션이 아직 말하는 중이면 끝난 뒤에(겹치지 않게). 컷이 바뀌어도 말은 이어짐
+    if(hasN){var ns=Math.max(t0+0.1,narrEnd+0.08),bs=ac.createBufferSource();bs.buffer=narr[p.i];bs.connect(BUS.comp);bs.start(ns);SPK={ck:p.ck,nd:p.nd,t0:ns};narrEnd=ns+p.nd;}
+    if(last&&narrEnd>t0+p.len-0.3){p.len=narrEnd-t0+0.4;stopAt=Math.min(c.dur-0.05,vs0+p.len*p.sp);}
     bgm(t0,p.len,hasN,last&&!END?1.2:0.04);
-    await new Promise(function(done){(function loop(){var el=ac.currentTime-t0;if(el>=p.len||run.stop){done();return;}if(v.currentTime>=stopAt&&!v.paused)v.pause();draw(v,sc,el,p.len,k);requestAnimationFrame(loop);})();});
-    v.pause();v.playbackRate=1;if(v._gain){v._gain.gain.cancelScheduledValues(ac.currentTime);v._gain.gain.setValueAtTime(0,ac.currentTime);}
+    var nv=EL[k+1],nk=k+1,lead=false;
+    await new Promise(function(done){(function loop(){var el=ac.currentTime-t0;if(el>=p.len||run.stop){done();return;}if(v.currentTime>=stopAt&&!v.paused)v.pause();
+      if(!lead&&nv&&nv!==v&&nv._pre===nk&&el>=p.len-LEAD){lead=true;nv._run=nk;nv.playbackRate=plan[nk].sp;if(nv._gain){nv._gain.gain.cancelScheduledValues(ac.currentTime);nv._gain.gain.setValueAtTime(0,ac.currentTime);}try{var q=nv.play();if(q&&q.catch)q.catch(function(){nv._run=-1;});}catch(e){nv._run=-1;}}
+      draw(v,sc,el,p.len,k);requestAnimationFrame(loop);})();});
+    if(v._gain){v._gain.gain.cancelScheduledValues(ac.currentTime);v._gain.gain.setValueAtTime(0,ac.currentTime);}
+    prevV=v;prevArgs=[sc,p.len,p.len,k];
     doneT+=p.len;sgx.drawImage(cv,0,0);hasSnap=true;
     if(EL[k+1]===v)preseek(k+1);
   }
+  if(prevV){prevV.pause();prevV.playbackRate=1;}
   if(!run.stop&&END&&hasSnap){var t1=ac.currentTime;bgm(t1,END,false,END);
     await new Promise(function(done){(function loop(){var el=ac.currentTime-t1;if(el>=END||run.stop){done();return;}drawEnd(el);requestAnimationFrame(loop);})();});}
   stopped=stopped||run.stop;
