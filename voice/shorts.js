@@ -120,6 +120,7 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
   if (path === "/shorts/yt/queue") return ytQueueView(env, b, h);
   if (path === "/shorts/week") return weekView(env, b, h);
   if (path === "/shorts/radar") return radarView(env, b, h);
+  if (path === "/shorts/cmt") return cmtView(env, b, h);
   if (path === "/shorts/cine/state") return cineView(env, h);
   if (path === "/shorts/cine/make") return cineMake(env, b, h);
   if (path === "/shorts/cine/poll") return cinePoll(env, b, h);
@@ -239,11 +240,68 @@ async function radarView(env, b, h) {
   }
   return { ok: true, radar: doc || null };
 }
+// 💬 댓글 질문 광산(2026-10-11): 레이더가 찾은 터진 영상(상위·작은 채널 대박) 댓글을 모아 '질문'만 추림 → 千问이 비슷한 질문끼리 묶되
+// 묶음 크기·좋아요 합계는 코드가 번호로 직접 셈(AI가 숫자 안 만듦). 우리가 광저우에서 찍어서 답할 수 있는지 표시 + 주제·첫마디.
+// commentThreads.list 1단위/영상. KV shorts:cmt:<해시>(14일), 하루 2번.
+const isQ = (t) => /[?？]|궁금|어디|얼마|어떻게|뭐예요|뭔가요|인가요|나요\b|까요|되나요|있나요|하나요|할까|알려\s?주/.test(t);
+async function cmtMake(env, h) {
+  const rd = await env.KV.get("shorts:radar:" + h, "json");
+  if (!rd) throw serr("먼저 📡 경쟁 채널 레이더를 한 번 돌려 주세요(그 영상들 댓글을 캐요).");
+  const { token } = await ytToken(env, h);
+  const H = { authorization: "Bearer " + token };
+  const st = await env.KV.get("yt:stats:" + h, "json");
+  const vids = [...new Map([...(rd.top || []), ...(rd.sleepers || [])].map((x) => [x.id, x])).values()].slice(0, 22);
+  const mineIds = st && st.items ? st.items.filter((x) => x.privacy === "public" && x.comments > 0).slice(0, 10).map((x) => x.id) : [];
+  const pull = async (id, mine) => {
+    const r = await fetch("https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&order=relevance&maxResults=100&textFormat=plainText&videoId=" + id, { headers: H }).catch(() => null);
+    if (!r || !r.ok) return [];
+    const j = await r.json().catch(() => ({}));
+    return (j.items || []).map((x) => { const c = x.snippet.topLevelComment.snippet; return { t: String(c.textDisplay || "").replace(/\s+/g, " ").trim(), likes: +c.likeCount || 0, rep: +x.snippet.totalReplyCount || 0, v: id, mine }; });
+  };
+  const got = (await Promise.all(vids.map((v) => pull(v.id, false)).concat(mineIds.map((id) => pull(id, true))))).flat();
+  const total = got.filter((x) => !x.mine).length;
+  const qs = got.filter((x) => /[가-힣]/.test(x.t) && x.t.length >= 6 && isQ(x.t));
+  const theirs = qs.filter((x) => !x.mine).sort((a, c) => c.likes - a.likes).slice(0, 320);
+  const mine = qs.filter((x) => x.mine).slice(0, 30);
+  if (theirs.length < 8) throw serr("질문 댓글이 너무 적게 모였어요(" + theirs.length + "개). 레이더를 새로 돌린 뒤 다시 해 보세요.", 502);
+  const vt = Object.fromEntries(vids.map((v) => [v.id, v.t]));
+  const o = await qwen(env, [
+    { role: "system", content: "너는 유튜브 댓글 분석가다. 번호 붙은 한국어 질문 댓글을 '같은 걸 묻는 것'끼리 묶어라. 각 묶음: q=대표 질문(한국어, 짧게), ids=그 묶음에 속한 댓글 번호 배열(반드시 실제 번호만, 한 댓글은 한 묶음에만), can=광저우 사는 한국인 부부(얼굴 안 나옴, 직접 촬영)가 찍어서 답할 수 있으면 true(정치·남의 사생활·영상 속 인물 개인 질문·특정 연예인은 false), topic=우리가 만들 숏츠 주제, hook=첫 2초 한국어 한마디, film=무엇을 찍으면 되는지 한 줄. 사소한 감탄·인사·영상 속 사람 개인 질문은 버려라. 묶음 최대 15개. 숫자(개수)는 쓰지 마라 — 개수는 프로그램이 ids로 센다." +
+      ' JSON만: {"groups":[{"q":"","ids":[1,2],"can":true,"topic":"","hook":"","film":""}]}' },
+    { role: "user", content: theirs.map((x, i) => i + 1 + ". " + x.t.slice(0, 140)).join("\n") },
+  ]);
+  const used = new Set();
+  const groups = (Array.isArray(o.groups) ? o.groups : []).map((g) => {
+    const ids = [...new Set((Array.isArray(g.ids) ? g.ids : []).map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= theirs.length && !used.has(n)))];
+    ids.forEach((n) => used.add(n));
+    const mem = ids.map((n) => theirs[n - 1]);
+    const vs = [...new Set(mem.map((x) => x.v))];
+    return { q: String(g.q || "").slice(0, 80), n: mem.length, likes: mem.reduce((a, x) => a + x.likes, 0), vids: vs.length, can: g.can !== false, topic: String(g.topic || "").slice(0, 80), hook: String(g.hook || "").slice(0, 80), film: String(g.film || "").slice(0, 120),
+      ex: mem.sort((a, c) => c.likes - a.likes).slice(0, 3).map((x) => ({ t: x.t.slice(0, 120), likes: x.likes, from: (vt[x.v] || "").slice(0, 50) })) };
+  }).filter((g) => g.n >= 2 && g.q).sort((a, c) => c.n - a.n || c.likes - a.likes);
+  const doc = { at: Date.now(), videos: vids.length, total, questions: theirs.length, groups, mine: mine.map((x) => ({ t: x.t.slice(0, 160), likes: x.likes, rep: x.rep, v: x.v })) };
+  await env.KV.put("shorts:cmt:" + h, JSON.stringify(doc), { expirationTtl: 14 * 86400 });
+  return doc;
+}
+async function cmtView(env, b, h) {
+  let doc = await env.KV.get("shorts:cmt:" + h, "json");
+  if (b && b.fresh) {
+    const ck = "shorts:cmt:re:" + h + ":" + cnDay(), n = Number(await env.KV.get(ck)) || 0;
+    if (n >= 2) throw serr("오늘은 2번 캤어요. 내일 다시 눌러 주세요.", 429);
+    await env.KV.put(ck, String(n + 1), { expirationTtl: 2 * 86400 });
+    doc = await cmtMake(env, h);
+  }
+  return { ok: true, cmt: doc || null, radar: !!(await env.KV.get("shorts:radar:" + h)) };
+}
+
 // 주제 추천·주간 기획 프롬프트에 넣을 한 단락
 async function radarHint(env, h) {
   const d = await env.KV.get("shorts:radar:" + h, "json");
-  if (!d || !d.ai || !d.ai.patterns) return "";
-  return " 경쟁 채널 데이터(" + d.n + "편 실측): " + d.ai.patterns.slice(0, 4).map((p) => p.name + "(" + p.evidence + ")").join("; ") + ". 길이별(채널 보정 배수, 1.0=평소): " + d.lens.map((x) => x.k + " " + (x.lift != null ? "×" + x.lift : "?")).join(", ") + ". 이 패턴을 우선 따르되 근거 약한 건 참고만.";
+  const cm = await env.KV.get("shorts:cmt:" + h, "json");
+  const dem = cm && cm.groups ? cm.groups.filter((g) => g.can).slice(0, 6).map((g) => "'" + g.q + "' " + g.n + "명").join(", ") : "";
+  const demTxt = dem ? " 한국 시청자가 댓글로 실제 많이 묻는 질문(우리가 답할 수 있는 것): " + dem + ". 이 질문에 답하는 주제를 우선하라." : "";
+  if (!d || !d.ai || !d.ai.patterns) return demTxt;
+  return demTxt + " 경쟁 채널 데이터(" + d.n + "편 실측): " + d.ai.patterns.slice(0, 4).map((p) => p.name + "(" + p.evidence + ")").join("; ") + ". 길이별(채널 보정 배수, 1.0=평소): " + d.lens.map((x) => x.k + " " + (x.lift != null ? "×" + x.lift : "?")).join(", ") + ". 이 패턴을 우선 따르되 근거 약한 건 참고만.";
 }
 
 async function weekMake(env, h) {
@@ -1235,6 +1293,17 @@ function toast(t){var d=document.createElement('div');d.className='toast';d.text
 function api(p,b){b=b||{};b.code=CODE;return fetch(p,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json().catch(function(){return {error:'서버 응답 오류 '+r.status};});});}
 function gate(m){$('main').innerHTML='<div class="gate"><p>'+esc(m||'초대 코드를 넣어 주세요')+'</p><input type="text" id="cd" placeholder="초대 코드" style="max-width:220px"> <button class="chip on" id="go">열기</button></div>';$('go').onclick=function(){CODE=$('cd').value.trim();try{localStorage.setItem('pb-code',CODE);}catch(e){}home();};}
 function costTxt(c,caps){if(!c)return '';return '오늘 그림 '+(c.img||0)+'/'+caps.img+' · 클립 '+(c.vid||0)+'/'+caps.vid+'<br>약 '+((c.img||0)*0.2+(c.vid||0)*3+(c.tts||0)/10000*0.8).toFixed(1)+'위안';}
+function cmt(fresh){var bx=$('cmBox'),bt=$('cmGo');if(!bx)return;if(fresh){bt.disabled=true;bx.innerHTML='<span class="spin">⛏</span> 터진 영상 20여 편 댓글 모아서 질문만 추리는 중… (30~60초)';}
+  api('/shorts/cmt',fresh?{fresh:true}:{}).then(function(r){bt.disabled=false;if(!r.ok){bx.textContent=r.detail||r.error;return;}var d=r.cmt;
+    if(!d){bx.innerHTML=r.radar?'레이더가 찾은 터진 영상들의 댓글에서 <b>한국 시청자가 실제로 묻는 질문</b>을 모아, 많이 나온 순으로 보여 줘요. 우리가 찍어서 답할 수 있는 건 바로 주제로. ‘캐기’를 눌러 보세요.':'먼저 위 📡 레이더를 한 번 돌려 주세요 — 그 영상들 댓글을 캐요.';return;}
+    bt.textContent='다시 캐기';var H='<small>'+new Date(d.at).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'})+' · 영상 '+d.videos+'편 · 댓글 '+d.total+'개 중 질문 '+d.questions+'개 · 숫자=같은 걸 물은 댓글 수(프로그램이 셈)</small>';
+    H+=d.groups.map(function(g,i){return '<div class="idea" style="'+(g.can?'':'opacity:.55')+'"><div style="display:flex;gap:8px;align-items:baseline"><b style="font-size:18px;color:var(--sky);min-width:34px">'+g.n+'</b><b style="flex:1">'+esc(g.q)+'</b></div><small>👍 '+g.likes+' · 영상 '+g.vids+'편에서'+(g.can?'':' · 우리가 답하긴 어려움')+'</small>'
+      +(g.can?'<div style="font-size:13px;margin-top:4px">🎬 '+esc(g.topic)+'<br><small>첫마디 “'+esc(g.hook)+'” · 찍을 것: '+esc(g.film)+'</small></div><div style="margin-top:6px"><button class="chip" data-cmt="'+i+'">이걸로 대본</button> <a class="chip" style="text-decoration:none" href="/edit?topic='+encodeURIComponent(g.topic+' — 첫마디: '+g.hook)+'">🎥 편집실로</a></div>':'')
+      +'<details><summary style="font-size:12px;color:var(--ink2)">실제 댓글 보기</summary>'+g.ex.map(function(x){return '<div style="font-size:12.5px;margin:4px 0">“'+esc(x.t)+'” <small>👍'+x.likes+' · '+esc(x.from)+'</small></div>';}).join('')+'</details></div>';}).join('');
+    if(d.mine&&d.mine.length)H+='<p class="lbl">우리 영상에 달린 질문 — 답글 달아 주면 채널에 좋아요</p>'+d.mine.map(function(x){return '<a href="https://youtube.com/shorts/'+esc(x.v)+'" target="_blank" style="display:block;font-size:13px;padding:5px 0;border-top:1px solid var(--line);color:var(--ink);text-decoration:none">“'+esc(x.t)+'” <small>'+(x.rep?'답글 '+x.rep:'<b style="color:var(--red)">아직 답 없음</b>')+'</small></a>';}).join('');
+    H+='<p class="note">많이 나온 질문은 💡 주제 추천·토요일 주간 기획에도 자동으로 들어가요.</p>';
+    bx.innerHTML=H;
+    bx.querySelectorAll('[data-cmt]').forEach(function(b){b.onclick=function(){var g=d.groups[+b.getAttribute('data-cmt')];$('topic').value=g.topic+' — 첫마디: '+g.hook+' (시청자 질문: '+g.q+')';$('topic').scrollIntoView({block:'center'});toast('대본 쓰기를 누르세요');};});});}
 function radar(fresh){var bx=$('rdBox'),bt=$('rdGo');if(!bx)return;if(fresh){bt.disabled=true;bx.innerHTML='<span class="spin">📡</span> 비슷한 채널 영상 200여 편 모으고 계산하는 중… (30~60초)';}
   api('/shorts/radar',fresh?{fresh:true}:{}).then(function(r){bt.disabled=false;if(!r.ok){bx.textContent=r.detail||r.error;return;}var d=r.radar;
     if(!d){bx.innerHTML='‘중국 사는 한국인’ 계열 한국어 숏츠를 모아 <b>어떤 제목·길이·주제가 터지는지</b> 숫자로 보여 줘요. 결과는 주제 추천·주간 기획에 자동 반영돼요. ‘분석하기’를 눌러 보세요.';return;}
@@ -1284,6 +1353,7 @@ function home(){
     h+='<div class="card" id="wkCard"><h2>🗓 이번 주말 찍을 숏츠 <button class="chip" id="wkRe" style="float:right;font-size:12px;padding:3px 9px">다시 만들기</button></h2><textarea id="wkMemo" rows="2" placeholder="이번 주 일정 (예: 화 광저우→제남 출장, 수~목 제남→닝보, 월·금 광저우)" style="width:100%;box-sizing:border-box;margin:4px 0 6px;border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;background:var(--card);color:var(--ink)"></textarea><div id="wkBox" class="note">불러오는 중…</div></div>';
     h+='<div class="card" id="qCard" style="display:none"><h2>📅 예약 발행</h2><div id="qBox" class="note"></div></div>';
     if(j.yt)h+='<div class="card" id="rdCard"><h2>📡 경쟁 채널 레이더 <button class="chip" id="rdGo" style="float:right;font-size:12px;padding:3px 9px">분석하기</button></h2><div id="rdBox" class="note">불러오는 중…</div></div>';
+    if(j.yt)h+='<div class="card" id="cmCard"><h2>💬 댓글 질문 광산 <button class="chip" id="cmGo" style="float:right;font-size:12px;padding:3px 9px">캐기</button></h2><div id="cmBox" class="note">불러오는 중…</div></div>';
     if(j.yt)h+='<div class="card"><h2>📈 내 채널 성적 <button class="chip" id="stRe" style="float:right;font-size:12px;padding:3px 9px">새로고침</button></h2><div id="stBox" class="note">불러오는 중…</div></div>';
     h='<button class="big" id="avOpen" style="margin:0 0 12px;background:var(--ink)">🎙 숏츠용 내 목소리 · 🗣 캐릭터가 말하기</button>'+h;h='<a class="big" href="/cine" style="text-align:center;text-decoration:none;margin:0 0 12px;background:#6B4FA0">🎞 사진 한 장 → 시네마틱 영상</a>'+h;h='<a class="big" href="/toon" style="text-align:center;text-decoration:none;margin:0 0 12px;background:#1F7A4D">🎨 공감툰 만들기 (그림 + 자막 + 효과음)</a>'+h;h='<a class="big" href="/edit" style="text-align:center;text-decoration:none;background:var(--red);margin:0 0 12px">🎥 내가 찍은 영상으로 만들기 (편집실)</a>'+h;
     if(j.list&&j.list.length)h+='<div class="card"><h2>내 숏츠</h2><div class="list">'+j.list.map(function(x){return '<a href="'+(x.kind==='mine'?'/edit?id='+x.id:x.kind==='toon'?'/toon':'#')+'"'+(x.kind==='mine'||x.kind==='toon'?'':' data-open="'+x.id+'"')+'>'+(x.kind==='mine'?'🎥 ':x.kind==='toon'?'🎨 ':'')+'<span>'+esc(x.title)+'</span><small>'+(x.yt?'▶ '+(x.yt.privacy==='public'?'공개':x.yt.privacy==='unlisted'?'일부공개':'비공개'):new Date(x.made).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}))+'</small></a>';}).join('')+'</div></div>';
@@ -1306,7 +1376,7 @@ function home(){
       api('/shorts/script',{topic:t,sec:SEC,angle:ANG,series:SER}).then(function(r){b.disabled=false;b.textContent='✍️ 대본 쓰기';if(!r.ok){$('e1').textContent=r.detail||r.error;return;}D=r.draft;F=r.files||{};editor();});};
     $('avOpen').onclick=ava;
     ytBox();qLoad();wkLoad();$('wkRe').onclick=function(){wkLoad(true);};$('wkMemo').onchange=function(){api('/shorts/week',{memo:this.value});toast('일정 저장 — 다시 만들기를 누르면 반영돼요');};
-    if(j.yt){radar(false);$('rdGo').onclick=function(){radar(true);};stats(false);$('stRe').onclick=function(){stats(true);};}
+    if(j.yt){radar(false);$('rdGo').onclick=function(){radar(true);};cmt(false);$('cmGo').onclick=function(){cmt(true);};stats(false);$('stRe').onclick=function(){stats(true);};}
   }).catch(function(){gate('서버에 연결하지 못했어요');});
 }
 var AV={voice:'Cherry',res:'480P'};try{AV.voice=localStorage.getItem('av-voice')||'Cherry';}catch(e){}
