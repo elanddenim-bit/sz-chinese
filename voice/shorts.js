@@ -233,10 +233,10 @@ async function radarMake(env, h) {
 async function radarView(env, b, h) {
   let doc = await env.KV.get("shorts:radar:" + h, "json");
   if (b && b.fresh) {
-    const ck = "shorts:radar:re:" + h + ":" + cnDay(), n = Number(await env.KV.get(ck)) || 0;
+    const ck = "shorts:radar:ok:" + h + ":" + cnDay(), n = Number(await env.KV.get(ck)) || 0;
     if (n >= 2) throw serr("오늘은 레이더를 2번 돌렸어요(유튜브 검색 한도 아끼기). 내일 다시 눌러 주세요.", 429);
+    doc = await radarMake(env, h); // 실패는 횟수에 안 셈(2026-10-11: 실패 두 번에 하루 한도가 끝나던 문제)
     await env.KV.put(ck, String(n + 1), { expirationTtl: 2 * 86400 });
-    doc = await radarMake(env, h);
   }
   return { ok: true, radar: doc || null };
 }
@@ -294,10 +294,10 @@ async function cmtMake(env, h) {
 async function cmtView(env, b, h) {
   let doc = await env.KV.get("shorts:cmt:" + h, "json");
   if (b && b.fresh) {
-    const ck = "shorts:cmt:re:" + h + ":" + cnDay(), n = Number(await env.KV.get(ck)) || 0;
+    const ck = "shorts:cmt:ok:" + h + ":" + cnDay(), n = Number(await env.KV.get(ck)) || 0;
     if (n >= 2) throw serr("오늘은 2번 캤어요. 내일 다시 눌러 주세요.", 429);
+    doc = await cmtMake(env, h); // 실패는 횟수에 안 셈(2026-10-11: 실패 두 번에 하루 한도가 끝나던 문제)
     await env.KV.put(ck, String(n + 1), { expirationTtl: 2 * 86400 });
-    doc = await cmtMake(env, h);
   }
   return { ok: true, cmt: doc || null, radar: !!(await env.KV.get("shorts:radar:" + h)) };
 }
