@@ -202,21 +202,30 @@ async function radarMake(env, h) {
     "꿀팁·방법": (x) => /꿀팁|방법|하는\s?법|필수|주의/.test(x.t), "먹방·음식": (x) => /먹|음식|맛|식당|요리|국수|훠궈|딤섬/.test(x.t),
   };
   const all_d = items.map((x) => x.d), base = median(all_d);
-  const stats = Object.entries(feat).map(([k, f]) => { const a = items.filter(f).map((x) => x.d), b2 = items.filter((x) => !f(x)).map((x) => x.d); return { k, n: a.length, with: Math.round(median(a)), without: Math.round(median(b2)) }; }).filter((x) => x.n >= 4);
-  const lens = [[0, 20, "~20초"], [21, 40, "21~40초"], [41, 60, "41~60초"], [61, 180, "1분 넘음"]].map(([a, z, k]) => { const l = items.filter((x) => x.sec >= a && x.sec <= z).map((x) => x.d); return { k, n: l.length, med: Math.round(median(l)) }; }).filter((x) => x.n);
+  // 채널 보정: 큰 채널 몇 곳이 한 장르를 독식하면 '특징 효과'처럼 보임(2026-10-11 첫 실행에서 중국인 반응 ×41 — 리액션 대형 채널 효과) →
+  // 같은 채널 안에서 평소(그 채널 중앙값) 대비 몇 배인지(lift)로 비교. 2편 이상 잡힌 채널만.
+  const byCh = {}; items.forEach((x) => (byCh[x.cid] = byCh[x.cid] || []).push(x.d));
+  items.forEach((x) => { const l = byCh[x.cid]; x.lift = l.length >= 2 ? Math.round((x.d / Math.max(1, median(l))) * 100) / 100 : null; });
+  const lifts = (arr) => arr.map((x) => x.lift).filter((v) => v != null);
+  const chs = (arr) => new Set(arr.map((x) => x.cid)).size;
+  const stats = Object.entries(feat).map(([k, f]) => {
+    const A = items.filter(f), B = items.filter((x) => !f(x)), la = lifts(A), lb = lifts(B);
+    return { k, n: A.length, ch: chs(A), with: Math.round(median(A.map((x) => x.d))), without: Math.round(median(B.map((x) => x.d))), lw: la.length >= 3 ? Math.round(median(la) * 100) / 100 : null, lo: lb.length >= 3 ? Math.round(median(lb) * 100) / 100 : null, ln: la.length };
+  }).filter((x) => x.n >= 4);
+  const lens = [[0, 20, "~20초"], [21, 40, "21~40초"], [41, 60, "41~60초"], [61, 180, "1분 넘음"]].map(([a, z, k]) => { const L = items.filter((x) => x.sec >= a && x.sec <= z), la = lifts(L); return { k, n: L.length, ch: chs(L), med: Math.round(median(L.map((x) => x.d))), lift: la.length >= 3 ? Math.round(median(la) * 100) / 100 : null }; }).filter((x) => x.n);
   const top = items.slice(0, 25), low = items.slice(-12);
   const st = await env.KV.get("yt:stats:" + h, "json");
   const mine = st && st.items ? st.items.filter((x) => x.privacy === "public").slice(0, 10).map((x) => x.title + " (조회 " + x.views + ")").join(" / ") : "";
   let ai = null;
   try {
     ai = await qwen(env, [
-      { role: "system", content: "너는 유튜브 숏츠 데이터 분석가다. 아래는 '중국 관련 한국어 숏츠' 최근 60일 영상 실측 데이터(d=하루당 조회, r=구독자 대비 조회 배수, sec=길이)와 코드가 계산한 특징별 중앙값이다. 숫자를 새로 지어내지 말고 주어진 숫자만 근거로 써라. 우리 채널: 광저우 사는 한국인 40대 부부, 얼굴 안 나옴, 직접 찍은 영상 + AI 내레이션. " +
+      { role: "system", content: "너는 유튜브 숏츠 데이터 분석가다. 아래는 '중국 관련 한국어 숏츠' 최근 60일 영상 실측 데이터(d=하루당 조회, r=구독자 대비 조회 배수, sec=길이)와 코드가 계산한 특징별 중앙값이다. 숫자를 새로 지어내지 말고 주어진 숫자만 근거로 써라. 중요: 원 중앙값은 큰 채널 몇 곳의 장르 효과에 휘둘리므로, '채널 보정 배수(같은 채널 평소 대비, 1.0=평소)'를 우선 근거로 삼고, 채널 수가 3곳 미만이거나 보정값이 없는 특징은 '근거 약함'이라고 말하라. 우리 채널이 현실적으로 못 하는 것(얼굴 노출, 외국인 출연 섭외 등)은 그대로 추천하지 말고 우리가 할 수 있는 형태로 바꿔라. 우리 채널: 광저우 사는 한국인 40대 부부, 얼굴 안 나옴, 직접 찍은 영상 + AI 내레이션. " +
         '잘 되는 패턴 3~5개(근거 숫자·예시 제목 포함, 우리 채널에 적용하는 법), 첫 2초 훅 문장 틀 3개, 우리가 해볼 주제 5개(어떤 터진 영상에서 왔는지), 피할 것 2개를 한국어로. JSON만: {"patterns":[{"name":"","evidence":"","apply":""}],"hooks":[""],"topics":[{"topic":"","hook":"","from":""}],"avoid":[""],"oneline":"한 줄 결론"}' },
-      { role: "user", content: "전체 " + items.length + "편, 하루당 조회 중앙값 " + Math.round(base) + ". 길이별: " + lens.map((x) => x.k + " " + x.n + "편 중앙값 " + x.med).join(", ") + ". 특징별(있음/없음 중앙값): " + stats.map((x) => x.k + " " + x.n + "편 " + x.with + "/" + x.without).join(", ") +
+      { role: "user", content: "전체 " + items.length + "편, 하루당 조회 중앙값 " + Math.round(base) + ". 길이별: " + lens.map((x) => x.k + " " + x.n + "편(" + x.ch + "채널) 중앙값 " + x.med + (x.lift != null ? " 채널보정 ×" + x.lift : "")).join(", ") + ". 특징별(있음/없음 원 중앙값, 채널보정 있음/없음): " + stats.map((x) => x.k + " " + x.n + "편·" + x.ch + "채널 " + x.with + "/" + x.without + (x.lw != null ? " 보정 ×" + x.lw + "/×" + (x.lo != null ? x.lo : "?") : " 보정 없음")).join(", ") +
         ".\n상위: " + top.map((x) => "[" + x.d + "/일, r" + x.r + ", " + x.sec + "초] " + x.t).join(" | ") + "\n하위: " + low.map((x) => "[" + x.d + "/일, " + x.sec + "초] " + x.t).join(" | ") + (mine ? "\n우리 채널 영상: " + mine : "") },
     ]);
   } catch (e) { ai = { error: String(e.message || e).slice(0, 120) }; }
-  const doc = { at: now, n: items.length, base: Math.round(base), lens, stats, top: top.slice(0, 15).map(({ cid, ...x }) => x), sleepers: items.filter((x) => x.subs && x.subs < 20000 && x.r >= 3).sort((a, c) => c.r - a.r).slice(0, 6).map(({ cid, ...x }) => x), ai };
+  const doc = { at: now, n: items.length, base: Math.round(base), lens, stats, nch: Object.keys(byCh).length, top: top.slice(0, 15).map(({ cid, ...x }) => x), sleepers: items.filter((x) => x.subs && x.subs < 20000 && x.r >= 3).sort((a, c) => c.r - a.r).slice(0, 6).map(({ cid, ...x }) => x), ai };
   await env.KV.put("shorts:radar:" + h, JSON.stringify(doc), { expirationTtl: 14 * 86400 });
   return doc;
 }
@@ -234,7 +243,7 @@ async function radarView(env, b, h) {
 async function radarHint(env, h) {
   const d = await env.KV.get("shorts:radar:" + h, "json");
   if (!d || !d.ai || !d.ai.patterns) return "";
-  return " 경쟁 채널 데이터(" + d.n + "편 실측): " + d.ai.patterns.slice(0, 4).map((p) => p.name + "(" + p.evidence + ")").join("; ") + ". 길이별 하루당 조회 중앙값: " + d.lens.map((x) => x.k + " " + x.med).join(", ") + ". 이 패턴을 우선 따르라.";
+  return " 경쟁 채널 데이터(" + d.n + "편 실측): " + d.ai.patterns.slice(0, 4).map((p) => p.name + "(" + p.evidence + ")").join("; ") + ". 길이별(채널 보정 배수, 1.0=평소): " + d.lens.map((x) => x.k + " " + (x.lift != null ? "×" + x.lift : "?")).join(", ") + ". 이 패턴을 우선 따르되 근거 약한 건 참고만.";
 }
 
 async function weekMake(env, h) {
@@ -1231,10 +1240,10 @@ function radar(fresh){var bx=$('rdBox'),bt=$('rdGo');if(!bx)return;if(fresh){bt.
     if(!d){bx.innerHTML='‘중국 사는 한국인’ 계열 한국어 숏츠를 모아 <b>어떤 제목·길이·주제가 터지는지</b> 숫자로 보여 줘요. 결과는 주제 추천·주간 기획에 자동 반영돼요. ‘분석하기’를 눌러 보세요.';return;}
     bt.textContent='새로 분석';var ai=d.ai||{},H='';
     if(ai.oneline)H+='<p style="margin:0 0 6px;font-size:14.5px;color:var(--ink)"><b>'+esc(ai.oneline)+'</b></p>';
-    H+='<small>'+new Date(d.at).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'})+' · 최근 60일 '+d.n+'편 · 하루당 조회 중앙값 <b>'+d.base+'</b></small>';
+    H+='<small>'+new Date(d.at).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'})+' · 최근 60일 '+d.n+'편'+(d.nch?' · '+d.nch+'채널':'')+' · 하루당 조회 중앙값 <b>'+d.base+'</b></small>';
     var mx=Math.max.apply(null,d.lens.map(function(x){return x.med;}).concat([1]));
-    H+='<p class="lbl">길이별 하루당 조회(중앙값)</p>'+d.lens.map(function(x){return '<div style="display:flex;align-items:center;gap:6px;font-size:12.5px;margin:3px 0"><span style="width:64px">'+esc(x.k)+'</span><span style="flex:1;background:var(--soft);border-radius:4px;height:12px"><i style="display:block;height:100%;border-radius:4px;background:var(--sky);width:'+Math.round(x.med/mx*100)+'%"></i></span><b style="width:52px;text-align:right">'+x.med+'</b><small style="width:34px">'+x.n+'편</small></div>';}).join('');
-    H+='<p class="lbl">제목에 이게 있으면? (있음 vs 없음, 하루당 조회 중앙값)</p>'+d.stats.slice().sort(function(a,c){return c.with/(c.without||1)-a.with/(a.without||1);}).map(function(x){var k=x.with/(x.without||1),col=k>=1.3?'var(--ok)':k<=0.77?'var(--red)':'var(--ink2)';return '<div style="display:flex;gap:6px;font-size:12.5px;margin:2px 0"><span style="flex:1">'+esc(x.k)+' <small>('+x.n+'편)</small></span><b style="color:'+col+'">'+x.with+'</b><span>vs '+x.without+'</span><b style="color:'+col+';width:46px;text-align:right">×'+k.toFixed(1)+'</b></div>';}).join('');
+    H+='<p class="lbl">길이별 하루당 조회(중앙값) · <b>보정</b>=같은 채널 평소 대비</p>'+d.lens.map(function(x){return '<div style="display:flex;align-items:center;gap:6px;font-size:12.5px;margin:3px 0"><span style="width:64px">'+esc(x.k)+'</span><span style="flex:1;background:var(--soft);border-radius:4px;height:12px"><i style="display:block;height:100%;border-radius:4px;background:var(--sky);width:'+Math.round(x.med/mx*100)+'%"></i></span><b style="width:44px;text-align:right">'+x.med+'</b><small style="width:62px;text-align:right">'+(x.lift!=null?'보정 ×'+x.lift:'')+'</small><small style="width:34px">'+x.n+'편</small></div>';}).join('');
+    H+='<p class="lbl">제목에 이게 있으면? — <b>채널 보정 배수</b>(같은 채널 평소 대비, 있음÷없음)</p>'+d.stats.map(function(x){var adj=x.lw!=null&&x.lo!=null,k=adj?x.lw/(x.lo||1):x.with/(x.without||1),weak=!adj||x.ch<3;x._k=k;x._weak=weak;return x;}).sort(function(a,c){return (a._weak-c._weak)||(c._k-a._k);}).map(function(x){var k=x._k,col=x._weak?'var(--ink2)':k>=1.3?'var(--ok)':k<=0.77?'var(--red)':'var(--ink2)';return '<div style="display:flex;gap:6px;font-size:12.5px;margin:2px 0;'+(x._weak?'opacity:.6':'')+'"><span style="flex:1">'+esc(x.k)+' <small>('+x.n+'편·'+(x.ch||'?')+'채널'+(x._weak?' · 근거 약함':'')+')</small></span><small>원 '+x.with+' vs '+x.without+'</small><b style="color:'+col+';width:46px;text-align:right">×'+k.toFixed(1)+'</b></div>';}).join('');
     if(ai.patterns)H+='<p class="lbl">잘 되는 패턴</p>'+ai.patterns.map(function(p){return '<div class="idea"><b>'+esc(p.name)+'</b><small><br>📊 '+esc(p.evidence)+'<br>👉 '+esc(p.apply)+'</small></div>';}).join('');
     if(ai.hooks&&ai.hooks.length)H+='<p class="lbl">첫 2초 훅 틀</p>'+ai.hooks.map(function(x){return '<div style="font-size:13.5px;margin:3px 0">“'+esc(x)+'”</div>';}).join('');
     if(ai.topics)H+='<p class="lbl">우리가 해볼 주제</p>'+ai.topics.map(function(x,i){return '<div class="idea"><b>'+esc(x.topic)+'</b><small><br>첫마디 “'+esc(x.hook)+'” · 참고: '+esc(x.from)+'</small><br><button class="chip" data-rdt="'+i+'">이걸로 대본</button> <a class="chip" style="text-decoration:none" href="/edit?topic='+encodeURIComponent(x.topic+' — 첫마디: '+x.hook)+'">🎥 편집실로</a></div>';}).join('');
