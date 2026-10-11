@@ -629,10 +629,24 @@ async function ice(env, action, params) {
   if (!r.ok) throw serr("알리바바 편집 " + r.status + ": " + (j.Code || "") + " " + String(j.Message || "").slice(0, 200), 502);
   return j;
 }
+// OSS V4 서명(2025~ 새 버킷은 V1 금지: "V1 url signature is forbidden")
+async function hmac256(key, msg) {
+  const k = await crypto.subtle.importKey("raw", typeof key === "string" ? new TextEncoder().encode(key) : key, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(msg)));
+}
+const hexOf = (u) => [...u].map((x) => x.toString(16).padStart(2, "0")).join("");
+async function sha256hex(s) { return hexOf(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)))); }
+function ossV4Time() { const dt = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z"); return { dt, d: dt.slice(0, 8) }; }
+async function ossV4Key(a, d) { let k = await hmac256("aliyun_v4" + a.sec, d); for (const x of [a.region, "oss", "aliyun_v4_request"]) k = await hmac256(k, x); return k; }
 async function ossSign(a, key, sec) {
-  const exp = Math.floor(Date.now() / 1000) + (sec || 7200);
-  const sig = await hmacSha1B64(a.sec, "GET\n\n\n" + exp + "\n/" + a.bucket + "/" + key);
-  return "https://" + ossHost(a) + "/" + key.split("/").map(encodeURIComponent).join("/") + "?OSSAccessKeyId=" + encodeURIComponent(a.id) + "&Expires=" + exp + "&Signature=" + encodeURIComponent(sig);
+  const { dt, d } = ossV4Time(), host = ossHost(a);
+  const q = { "x-oss-additional-headers": "host", "x-oss-credential": a.id + "/" + d + "/" + a.region + "/oss/aliyun_v4_request", "x-oss-date": dt, "x-oss-expires": String(sec || 7200), "x-oss-signature-version": "OSS4-HMAC-SHA256" };
+  const cq = Object.keys(q).map((k) => [pctEnc(k), pctEnc(q[k])]).sort((x, y) => (x[0] < y[0] ? -1 : 1)).map((x) => x[0] + "=" + x[1]).join("&");
+  const uri = "/" + a.bucket + "/" + key.split("/").map(pctEnc).join("/");
+  const creq = "GET\n" + uri + "\n" + cq + "\nhost:" + host + "\n\nhost\nUNSIGNED-PAYLOAD";
+  const sts = "OSS4-HMAC-SHA256\n" + dt + "\n" + d + "/" + a.region + "/oss/aliyun_v4_request\n" + (await sha256hex(creq));
+  const sig = hexOf(await hmac256(await ossV4Key(a, d), sts));
+  return "https://" + host + "/" + key.split("/").map(pctEnc).join("/") + "?" + cq + "&x-oss-signature=" + sig;
 }
 const cloudDir = (h, id) => { if (!/^s[0-9a-z]{6,12}$/.test(String(id || ""))) throw serr("bad id"); return "sz/" + h + "/" + id + "/"; };
 async function cloudPing(env, b) {
@@ -648,8 +662,9 @@ async function cloudPing(env, b) {
 async function cloudPolicy(env, b, h) {
   if (!cloudOk(env)) throw serr("클라우드 편집 설정(시크릿)이 아직 없어요.", 400, "cloud_config");
   const a = ali(env), dir = cloudDir(h, b.id);
-  const policy = btoa(JSON.stringify({ expiration: new Date(Date.now() + 3 * 3600e3).toISOString(), conditions: [["starts-with", "$key", dir], ["content-length-range", 0, 2147483648]] }));
-  return { ok: true, host: "https://" + ossHost(a), dir, fields: { OSSAccessKeyId: a.id, policy, Signature: await hmacSha1B64(a.sec, policy), success_action_status: "200" } };
+  const { dt, d } = ossV4Time(), cred = a.id + "/" + d + "/" + a.region + "/oss/aliyun_v4_request";
+  const policy = btoa(JSON.stringify({ expiration: new Date(Date.now() + 3 * 3600e3).toISOString(), conditions: [{ bucket: a.bucket }, { "x-oss-signature-version": "OSS4-HMAC-SHA256" }, { "x-oss-credential": cred }, { "x-oss-date": dt }, ["starts-with", "$key", dir], ["content-length-range", 0, 2147483648], { success_action_status: "200" }] }));
+  return { ok: true, host: "https://" + ossHost(a), dir, fields: { "x-oss-signature-version": "OSS4-HMAC-SHA256", "x-oss-credential": cred, "x-oss-date": dt, policy, "x-oss-signature": hexOf(await hmac256(await ossV4Key(a, d), policy)), success_action_status: "200" } };
 }
 async function cloudSubmit(env, b, h) {
   if (!cloudOk(env)) throw serr("클라우드 편집 설정(시크릿)이 아직 없어요.", 400, "cloud_config");
