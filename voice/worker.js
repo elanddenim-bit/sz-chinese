@@ -11,6 +11,7 @@
 //  GET /mystery · POST /mystery/state|new|check|skip|hint|accuse · GET /mystery/img   🕵️ 광저우 미스터리 (mystery.js)
 //  GET /timecam · POST /timecam/list|make|poll · GET /timecam/img   🕰 타임머신 카메라 (timecam.js)
 //  GET /shorts · POST /shorts/* · GET /shorts/file · GET /shorts/yt/cb   🎬 숏츠 공방 (shorts.js, 주인 전용)
+//  GET /toon   🎨 공감툰 — 그림+자막+효과음 (toon.js, AI 제안은 POST /shorts/toon/idea)
 //  GET /edit   🎥 편집실 — 내가 찍은 클립으로 숏츠 (edit.js, 계획은 POST /shorts/plan)
 //  GET  /  ·  GET /agent      박비서(음성 비서) 화면 · 그 WebSocket — 서버가 도구 호출을 실행 (agent.js)
 // 시크릿: DASHSCOPE_API_KEY, DASHSCOPE_WS_HOST, ALLOWED_CODES
@@ -28,6 +29,7 @@ import { novelApi, novelGet, NOVEL_HTML } from "./novel.js";
 import { trendApi, trendGet, TREND_HTML } from "./trend.js";
 import { shortsApi, shortsSave, shortsFile, ytCallback, legalPage, SHORTS_HTML } from "./shorts.js";
 import { EDIT_HTML } from "./edit.js";
+import { TOON_HTML } from "./toon.js";
 import ICON180 from "./icon-180.png";
 import ICON192 from "./icon-192.png";
 import ICON512 from "./icon-512.png";
@@ -82,6 +84,7 @@ export default {
       if (url.pathname === "/u" && req.method === "POST") return await beacon(req, env, ctx);
       if (req.method === "GET" && (url.pathname === "/about" || url.pathname === "/privacy" || url.pathname === "/terms")) return legalPage(url.pathname);
       if (url.pathname === "/edit" && req.method === "GET") return new Response(EDIT_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
+      if (url.pathname === "/toon" && req.method === "GET") return new Response(TOON_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/shorts" && req.method === "GET") return new Response(SHORTS_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/shorts/file" && (req.method === "GET" || req.method === "HEAD")) return await shortsFile(req, env, url);
       if (url.pathname === "/shorts/yt/cb" && req.method === "GET") return await ytCallback(env, url);

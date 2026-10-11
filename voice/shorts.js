@@ -99,6 +99,8 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
   if (path === "/shorts/update") return update(env, b, h);
   if (path === "/shorts/asset") return asset(env, b, h, synth);
   if (path === "/shorts/poll") return poll(env, b, h);
+  if (path === "/shorts/toon/idea") return toonIdea(env, b);
+  if (path === "/shorts/toon/new") return toonNew(env, b, h);
   if (path === "/shorts/voice/enroll") return krEnroll(env, b, h);
   if (path === "/shorts/voice/status") return krStatus(env, h);
   if (path === "/shorts/voice/try") return krTry(env, b, h, synth);
@@ -557,6 +559,39 @@ async function krTry(env, b, h, synth) {
   return { ok: true, url: await fileUrl(env, k), which: voice === (await env.KV.get(krKey(h))) ? "kr" : "zh" };
 }
 
+// ---------------- 🎨 공감툰 (그림 + 자막 + 효과음, /toon) ----------------
+// 주인공: 흰 티·선글라스 치비 캐릭터(광저우 사는 한국인 직장인). 그림은 사용자가 GPT 로 뽑고, 여기선 자막·장면 프롬프트만 제안
+async function toonIdea(env, b) {
+  const topic = String(b.topic || "").trim().slice(0, 300);
+  if (!topic) throw serr("주제를 적어 주세요.");
+  const out = await qwen(env, [
+    { role: "system", content: "너는 인스타 릴스·유튜브 숏츠 'POV 공감툰' 작가다. 채널 '살다보니외국'. 주인공은 광저우에 사는 한국인 직장인(주재원 3년 차), 흰 티·검은 선글라스·갈색 곱슬머리 치비 캐릭터이고 말은 하지 않는다. 그림 1~2장 + 짧은 자막 2줄로 5~7초 안에 '아 ㅋㅋ 맞아' 하게 만든다. 해외 사는 한국인·중국 생활 해 본 사람이 공감할 구체적인 순간으로(뻔한 일반론 말고). 사실·숫자를 지어내지 말 것. " +
+      "출력 필드: pov(첫 자막, 'POV: '로 시작, 공백 포함 24자 이내), punch(두 번째 자막=반전·속마음, 24자 이내), bubble(그림 속 말풍선에 넣을 아주 짧은 말 8자 이내, 필요 없으면 빈 문자열), zh(이 상황에서 실제로 듣거나 쓰는 중국어 한마디, 없으면 빈 문자열), py(zh 의 성조 병음), ko(zh 의 한국어 뜻, 짧게), " +
+      "scenes(1~2개: {beat:'setup'|'punch', prompt: GPT 이미지 생성에 붙여 넣을 영어 장면 묘사. 주인공은 반드시 'Our character' 로 지칭, 표정·동작을 구체적으로, 광저우 디테일(광저우 타워·야자수·早茶·위챗·사무실 등) 하나 이상, 다른 사람은 'simple cute side character', 마지막에 'Vertical 9:16, keep the top 25% empty, no text.' 를 붙인다}), " +
+      "sfx(추천 효과음 2개, 다음 중에서: ding,pop,whoosh,thud,beep,msg,fail — 첫 번째는 시작, 두 번째는 반전 순간), title(유튜브 제목 30자 이내, 해시태그 없이), description(2줄), tags(6개, # 없이)." +
+      ' JSON 만: {"pov":"","punch":"","bubble":"","zh":"","py":"","ko":"","scenes":[{"beat":"","prompt":""}],"sfx":["",""],"title":"","description":"","tags":[]}' },
+    { role: "user", content: "주제: " + topic },
+  ]);
+  const S = ["ding", "pop", "whoosh", "thud", "beep", "msg", "fail"];
+  return { ok: true, idea: {
+    pov: String(out.pov || "").slice(0, 40), punch: String(out.punch || "").slice(0, 40), bubble: String(out.bubble || "").slice(0, 16),
+    zh: String(out.zh || "").slice(0, 30), py: String(out.py || "").slice(0, 60), ko: String(out.ko || "").slice(0, 40),
+    scenes: (Array.isArray(out.scenes) ? out.scenes : []).slice(0, 2).map((x) => ({ beat: String(x.beat || "").slice(0, 10), prompt: String(x.prompt || "").slice(0, 900) })).filter((x) => x.prompt),
+    sfx: (Array.isArray(out.sfx) ? out.sfx : []).map(String).filter((x) => S.includes(x)).slice(0, 2),
+    title: String(out.title || topic).slice(0, 60), description: String(out.description || "").slice(0, 400), tags: (Array.isArray(out.tags) ? out.tags : []).map((t) => String(t).replace(/^#/, "").slice(0, 30)).slice(0, 8),
+  } };
+}
+// 업로드용 초안(목록에 🎨 로 표시) — 그림은 서버에 안 올리고 완성 영상만 /shorts/save
+async function toonNew(env, b, h) {
+  const id = "s" + Date.now().toString(36);
+  const d = { id, kind: "toon", topic: String(b.topic || "").slice(0, 300), made: Date.now(), title: String(b.title || "공감툰").slice(0, 90), description: String(b.description || "").slice(0, 900), tags: (Array.isArray(b.tags) ? b.tags : []).map((t) => String(t).replace(/^#/, "").slice(0, 30)).slice(0, 10), scenes: [] };
+  await env.KV.put(draftKey(h, id), JSON.stringify(d), { expirationTtl: 120 * 86400 });
+  const l = (await env.KV.get(listKey(h), "json")) || [];
+  l.unshift({ id, title: d.title, made: d.made, kind: "toon" });
+  await env.KV.put(listKey(h), JSON.stringify(l.slice(0, 40)));
+  return { ok: true, id };
+}
+
 // 완성 영상 저장(본문 그대로)
 export async function shortsSave(req, env, url, hashFn, allowed) {
   const code = req.headers.get("x-code") || "";
@@ -786,8 +821,8 @@ function home(){
       +'<button class="big" id="scriptBtn">✍️ 대본 쓰기</button><div class="err" id="e1"></div></div>';
     h+='<div class="card" id="ytCard"><h2>유튜브 연결</h2><div id="ytBox" class="note">확인 중…</div></div>';
     if(j.yt)h+='<div class="card"><h2>📈 내 채널 성적 <button class="chip" id="stRe" style="float:right;font-size:12px;padding:3px 9px">새로고침</button></h2><div id="stBox" class="note">불러오는 중…</div></div>';
-    h='<button class="big" id="avOpen" style="margin:0 0 12px;background:var(--ink)">🎙 숏츠용 내 목소리 · 🗣 캐릭터가 말하기</button>'+h;h='<a class="big" href="/edit" style="text-align:center;text-decoration:none;background:var(--red);margin:0 0 12px">🎥 내가 찍은 영상으로 만들기 (편집실)</a>'+h;
-    if(j.list&&j.list.length)h+='<div class="card"><h2>내 숏츠</h2><div class="list">'+j.list.map(function(x){return '<a href="'+(x.kind==='mine'?'/edit?id='+x.id:'#')+'"'+(x.kind==='mine'?'':' data-open="'+x.id+'"')+'>'+(x.kind==='mine'?'🎥 ':'')+'<span>'+esc(x.title)+'</span><small>'+(x.yt?'▶ '+(x.yt.privacy==='public'?'공개':x.yt.privacy==='unlisted'?'일부공개':'비공개'):new Date(x.made).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}))+'</small></a>';}).join('')+'</div></div>';
+    h='<button class="big" id="avOpen" style="margin:0 0 12px;background:var(--ink)">🎙 숏츠용 내 목소리 · 🗣 캐릭터가 말하기</button>'+h;h='<a class="big" href="/toon" style="text-align:center;text-decoration:none;margin:0 0 12px;background:#1F7A4D">🎨 공감툰 만들기 (그림 + 자막 + 효과음)</a>'+h;h='<a class="big" href="/edit" style="text-align:center;text-decoration:none;background:var(--red);margin:0 0 12px">🎥 내가 찍은 영상으로 만들기 (편집실)</a>'+h;
+    if(j.list&&j.list.length)h+='<div class="card"><h2>내 숏츠</h2><div class="list">'+j.list.map(function(x){return '<a href="'+(x.kind==='mine'?'/edit?id='+x.id:x.kind==='toon'?'/toon':'#')+'"'+(x.kind==='mine'||x.kind==='toon'?'':' data-open="'+x.id+'"')+'>'+(x.kind==='mine'?'🎥 ':x.kind==='toon'?'🎨 ':'')+'<span>'+esc(x.title)+'</span><small>'+(x.yt?'▶ '+(x.yt.privacy==='public'?'공개':x.yt.privacy==='unlisted'?'일부공개':'비공개'):new Date(x.made).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}))+'</small></a>';}).join('')+'</div></div>';
     $('main').innerHTML=h;
     document.querySelectorAll('[data-ang]').forEach(function(b){b.onclick=function(){ANG=b.getAttribute('data-ang');try{localStorage.setItem('sh-ang',ANG);}catch(e){}document.querySelectorAll('[data-ang]').forEach(function(x){x.classList.toggle('on',x===b);});};});
     document.querySelectorAll('[data-sec]').forEach(function(b){b.onclick=function(){SEC=+b.getAttribute('data-sec');document.querySelectorAll('[data-sec]').forEach(function(x){x.classList.toggle('on',x===b);});};});
