@@ -14,7 +14,7 @@ export const APPS = {
   didi: { name: "디디 주소록", icon: "🚕", f: { copy_name: "이름 복사·디디 열기", copy_addr: "주소 복사", driver: "기사님 화면", route: "방문 동선", map: "지도 열기", save: "저장·편집", search: "검색" } },
   threepark: { name: "삼박네", icon: "🏡", f: { pg_home: "홈", pg_plan: "일정표", pg_photos: "사진 기록", pg_movie: "다큐", paint: "그림엽서", movie_make: "다큐 만들기", upload: "사진 올리기" } },
   spain: { name: "스페인 일정", icon: "🇪🇸", f: { pg_home: "일정 보기" } },
-  shorts: { name: "숏츠 공방", icon: "🎬", f: { ideas: "주제 추천", script: "대본", plan: "편집실 AI 계획", asr: "영상 속 말 자막", upload: "유튜브 업로드" } },
+  shorts: { name: "숏츠 공방", icon: "🎬", f: { ideas: "주제 추천", script: "대본", plan: "편집실 AI 계획", asr: "영상 속 말 자막", upload: "유튜브 업로드", cine: "시네마틱 영상" } },
   quest: { name: "주말 탐험", icon: "🧭", f: { new: "퀘스트 받기", done: "사진 인증 성공", fail: "인증 실패", honor: "그래도 인정" } },
   trend: { name: "오늘의 중국 인터넷", icon: "🔥", f: { open: "열어 봄", make: "새 판 만들기" } },
   novel: { name: "우리 연재 소설", icon: "📖", f: { write: "한 화 쓰기", s_warm: "잔잔한 에세이", s_sitcom: "시트콤", s_noir: "하드보일드" } },

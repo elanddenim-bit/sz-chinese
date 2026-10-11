@@ -11,6 +11,7 @@
 //  GET /mystery · POST /mystery/state|new|check|skip|hint|accuse · GET /mystery/img   🕵️ 광저우 미스터리 (mystery.js)
 //  GET /timecam · POST /timecam/list|make|poll · GET /timecam/img   🕰 타임머신 카메라 (timecam.js)
 //  GET /shorts · POST /shorts/* · GET /shorts/file · GET /shorts/yt/cb   🎬 숏츠 공방 (shorts.js, 주인 전용)
+//  GET /cine   🎞 사진 → 시네마틱 영상 (cine.js, POST /shorts/cine/*)
 //  GET /toon   🎨 공감툰 — 그림+자막+효과음 (toon.js, AI 제안은 POST /shorts/toon/idea)
 //  GET /edit   🎥 편집실 — 내가 찍은 클립으로 숏츠 (edit.js, 계획은 POST /shorts/plan)
 //  GET  /  ·  GET /agent      박비서(음성 비서) 화면 · 그 WebSocket — 서버가 도구 호출을 실행 (agent.js)
@@ -30,6 +31,7 @@ import { trendApi, trendGet, TREND_HTML } from "./trend.js";
 import { shortsApi, shortsSave, shortsFile, ytCallback, legalPage, SHORTS_HTML, shortsCron, weekCron } from "./shorts.js";
 import { EDIT_HTML } from "./edit.js";
 import { TOON_HTML } from "./toon.js";
+import { CINE_HTML } from "./cine.js";
 import ICON180 from "./icon-180.png";
 import ICON192 from "./icon-192.png";
 import ICON512 from "./icon-512.png";
@@ -91,6 +93,7 @@ export default {
       if (req.method === "GET" && (url.pathname === "/about" || url.pathname === "/privacy" || url.pathname === "/terms")) return legalPage(url.pathname);
       if (url.pathname === "/edit" && req.method === "GET") return new Response(EDIT_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/toon" && req.method === "GET") return new Response(TOON_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
+      if (url.pathname === "/cine" && req.method === "GET") return new Response(CINE_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/shorts" && req.method === "GET") return new Response(SHORTS_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/shorts/file" && (req.method === "GET" || req.method === "HEAD")) return await shortsFile(req, env, url);
       if (url.pathname === "/shorts/yt/cb" && req.method === "GET") return await ytCallback(env, url);
@@ -125,7 +128,7 @@ export default {
       if (url.pathname.startsWith("/trend/")) return json(req, await trendApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/shorts/")) {
         const out = await shortsApi(env, ctx, url.pathname, b, h, synth);
-        const ev = { "/shorts/script": "script", "/shorts/yt/upload": "upload", "/shorts/ideas": "ideas", "/shorts/plan": "plan", "/shorts/asr": "asr" }[url.pathname];
+        const ev = { "/shorts/script": "script", "/shorts/yt/upload": "upload", "/shorts/ideas": "ideas", "/shorts/plan": "plan", "/shorts/asr": "asr", "/shorts/cine/make": "cine" }[url.pathname];
         if (ev) ctx.waitUntil(logUse(env, "shorts", { [ev]: 1 }, 0, h).catch(() => {}));
         return json(req, out);
       }

@@ -119,6 +119,10 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
   if (path === "/shorts/yt/upload") return ytUpload(env, b, h);
   if (path === "/shorts/yt/queue") return ytQueueView(env, b, h);
   if (path === "/shorts/week") return weekView(env, b, h);
+  if (path === "/shorts/cine/state") return cineView(env, h);
+  if (path === "/shorts/cine/make") return cineMake(env, b, h);
+  if (path === "/shorts/cine/poll") return cinePoll(env, b, h);
+  if (path === "/shorts/cine/del") return cineDel(env, b, h);
   throw serr("not_found", 404);
 }
 const caps = (env) => ({ img: Number(env.SHORTS_IMG_DAY) || 40, vid: Number(env.SHORTS_VID_DAY) || 6 });
@@ -457,6 +461,96 @@ async function avaDoc(env, h) {
   const d = (await env.KV.get(avaKey(h), "json")) || { list: [] };
   if (d.day !== cnDay()) { d.day = cnDay(); d.sec = 0; }
   return d;
+}
+// 🎞 사진 한 장 → 시네마틱 영상(2026-10-11, cine.js 화면): 通义万相 图生视频 — 빠른판 wan2.6-i2v-flash(소리 자동) / 고품질 wan2.7-i2v(효과음 자동)
+// 720P·5초 기본, 하루 SHORTS_CINE_DAY(기본 10)개. 사진은 R2 shorts/<해시>/scinema/src<t>.jpg → 百炼 임시 저장소(oss://) → 비동기 작업
+// KV shorts:cine:<해시> {list 40[{k,src,model,prompt,mood,sec,at,task}], pend[{task,model,prompt,mood,sec,src,at}], day:{d,n}}
+const CINE = "scinema";
+const cineKey = (h) => "shorts:cine:" + h;
+const CINE_MODELS = { flash: () => "wan2.6-i2v-flash", hq: (env) => env.SHORTS_CINE_HQ || "wan2.7-i2v" };
+const CINE_MOODS = {
+  cine: ["🎬 영화처럼", "电影感，镜头缓慢推进，浅景深，柔和自然光，画面稳定细腻"],
+  wind: ["🍃 바람·자연", "微风吹动树叶和衣角，光影轻轻摇曳，镜头缓慢横移，环境声自然"],
+  steam: ["🍜 음식 김", "食物热气袅袅升起，特写，镜头缓慢推近，油光与质感细腻，轻微环境声"],
+  crowd: ["🚶 사람·거리", "街头行人自然走动，车辆缓慢经过，镜头稳定，城市环境声"],
+  night: ["🌃 야경·네온", "夜晚霓虹灯闪烁，灯光倒影微动，镜头缓慢拉远，氛围感"],
+  sky: ["☁️ 하늘 타임랩스", "云层快速流动的延时摄影效果，光线变化，镜头固定"],
+  pop: ["✨ 깜짝 연출", "画面中物体轻快地动起来，有趣的小惊喜，镜头轻微推进，节奏明快"],
+};
+async function cineDoc(env, h) { const d = (await env.KV.get(cineKey(h), "json")) || {}; d.list = d.list || []; d.pend = d.pend || []; return d; }
+const cineCap = (env) => Number(env.SHORTS_CINE_DAY) || 10;
+async function cineView(env, h) {
+  const d = await cineDoc(env, h), today = cnDay();
+  const list = await Promise.all(d.list.map(async (x) => ({ ...x, url: await fileUrl(env, x.k), srcUrl: x.src ? await fileUrl(env, x.src) : "" })));
+  return { ok: true, list, pend: d.pend.map((p) => ({ task: p.task, model: p.model, mood: p.mood, at: p.at })), used: d.day && d.day.d === today ? d.day.n : 0, cap: cineCap(env),
+    moods: Object.fromEntries(Object.entries(CINE_MOODS).map(([k, v]) => [k, v[0]])) };
+}
+async function cineMake(env, b, h) {
+  const m = /^data:image\/(jpeg|png|webp);base64,(.+)$/.exec(String(b.image || ""));
+  if (!m) throw serr("사진을 골라 주세요.");
+  const bytes = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0));
+  if (bytes.length > 8e6) throw serr("사진이 너무 커요.");
+  const d = await cineDoc(env, h), today = cnDay();
+  if (!d.day || d.day.d !== today) d.day = { d: today, n: 0 };
+  if (d.day.n >= cineCap(env)) throw serr("오늘 영상 " + cineCap(env) + "개를 다 만들었어요. 내일 다시 만들 수 있어요.", 429);
+  if (d.pend.length >= 3) throw serr("만드는 중인 영상이 3개예요. 하나 끝나면 다시 눌러 주세요.", 429);
+  const kind = b.model === "hq" ? "hq" : "flash", model = CINE_MODELS[kind](env);
+  const mood = CINE_MOODS[b.mood] ? b.mood : "cine";
+  let extra = String(b.prompt || "").trim().slice(0, 200);
+  if (extra && /[가-힣]/.test(extra)) {
+    try { const o = await qwen(env, [{ role: "system", content: '한국어 영상 연출 지시를 영상 생성 모델용 중국어 한 문장으로 옮겨라. JSON만: {"zh":""}' }, { role: "user", content: extra }]); extra = String(o.zh || extra).slice(0, 300); } catch {}
+  }
+  const prompt = CINE_MOODS[mood][1] + (extra ? "。" + extra : "") + "。保持原图人物、建筑、文字和构图不变，真实自然，不要出现新文字或水印。";
+  const sec = [5, 10].includes(Number(b.sec)) ? Number(b.sec) : 5;
+  const t = Date.now(), ext = m[1] === "png" ? "png" : m[1] === "webp" ? "webp" : "jpg";
+  const src = "shorts/" + h + "/" + CINE + "/src" + t + "." + ext;
+  await env.R2.put(src, bytes, { httpMetadata: { contentType: "image/" + m[1] } });
+  const img = await ossUp(env, model, bytes, "cine-" + t + "." + ext, "image/" + m[1]);
+  const body = kind === "hq"
+    ? { model, input: { prompt, media: [{ type: "first_frame", url: img }] }, parameters: { resolution: "720P", duration: sec, prompt_extend: true, watermark: false } }
+    : { model, input: { prompt, img_url: img }, parameters: { resolution: "720P", duration: sec, prompt_extend: true, audio: true, watermark: false } };
+  const j = await dsRaw(env, "/services/aigc/video-generation/video-synthesis", body, { "X-DashScope-Async": "enable", ...OSSR });
+  const task = j.output && j.output.task_id;
+  if (!task) throw serr("작업 번호를 받지 못했어요.", 502);
+  d.day.n += 1;
+  d.pend.push({ task, model: kind, prompt: extra, mood, sec, src, at: t });
+  await env.KV.put(cineKey(h), JSON.stringify(d));
+  return { ok: true, task, used: d.day.n, cap: cineCap(env) };
+}
+async function cinePoll(env, b, h) {
+  const d = await cineDoc(env, h);
+  const p = d.pend.find((x) => x.task === String(b.task || ""));
+  if (!p) return { ok: true, status: "none" };
+  const el = Math.round((Date.now() - p.at) / 1000);
+  const r = await fetch("https://" + host(env) + "/api/v1/tasks/" + p.task, { headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY } }).catch(() => null);
+  if (!r || (!r.ok && (r.status >= 500 || r.status === 429))) return { ok: true, status: "RETRY", el };
+  const j = await r.json().catch(() => ({}));
+  const o = j.output || {}, st = o.task_status || "UNKNOWN";
+  if (st === "UNKNOWN" && r.ok) return { ok: true, status: "RUNNING", el };
+  if (st === "FAILED" || st === "CANCELED" || (st === "UNKNOWN" && !r.ok)) {
+    const d2 = await cineDoc(env, h); d2.pend = d2.pend.filter((x) => x.task !== p.task);
+    if (d2.day && d2.day.d === cnDay(p.at)) d2.day.n = Math.max(0, d2.day.n - 1); // 실패는 과금 안 됨 → 개수 되돌림
+    if (p.src) await env.R2.delete(p.src).catch(() => {});
+    await env.KV.put(cineKey(h), JSON.stringify(d2));
+    return { ok: true, status: "failed", detail: String(o.message || o.code || st).slice(0, 200) };
+  }
+  if (st !== "SUCCEEDED") return { ok: true, status: st, el };
+  const url = (o.results && o.results.video_url) || o.video_url;
+  if (!url) return { ok: true, status: "failed", detail: "결과 주소 없음" };
+  const f = await fetch(url);
+  if (!f.ok) return { ok: true, status: "RETRY", el };
+  const k = "shorts/" + h + "/" + CINE + "/v" + p.at + ".mp4";
+  await env.R2.put(k, await f.arrayBuffer(), { httpMetadata: { contentType: "video/mp4" } });
+  const d2 = await cineDoc(env, h);
+  d2.pend = d2.pend.filter((x) => x.task !== p.task);
+  if (!d2.list.some((x) => x.k === k)) d2.list = [{ k, src: p.src, model: p.model, mood: p.mood, prompt: p.prompt, sec: p.sec, at: p.at, task: p.task }].concat(d2.list).slice(0, 40);
+  await env.KV.put(cineKey(h), JSON.stringify(d2));
+  return { ok: true, status: "done", url: await fileUrl(env, k) };
+}
+async function cineDel(env, b, h) {
+  const d = await cineDoc(env, h), x = d.list.find((y) => y.k === String(b.k || ""));
+  if (x) { await env.R2.delete(x.k).catch(() => {}); if (x.src) await env.R2.delete(x.src).catch(() => {}); d.list = d.list.filter((y) => y !== x); await env.KV.put(cineKey(h), JSON.stringify(d)); }
+  return cineView(env, h);
 }
 async function avaView(env, d) {
   return { ok: true, face: d.face ? (await fileUrl(env, d.face)) + "&v=" + (d.faceAt || 0) : "", /* v: 같은 이름이라 브라우저 캐시에 옛 그림이 남는 것 방지 */ check: d.check || null, pend: d.pend || null, used: d.sec || 0, cap: avaCap(env),
@@ -1084,7 +1178,7 @@ function home(){
     h+='<div class="card" id="wkCard"><h2>🗓 이번 주말 찍을 숏츠 <button class="chip" id="wkRe" style="float:right;font-size:12px;padding:3px 9px">다시 만들기</button></h2><textarea id="wkMemo" rows="2" placeholder="이번 주 일정 (예: 화 광저우→제남 출장, 수~목 제남→닝보, 월·금 광저우)" style="width:100%;box-sizing:border-box;margin:4px 0 6px;border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;background:var(--card);color:var(--ink)"></textarea><div id="wkBox" class="note">불러오는 중…</div></div>';
     h+='<div class="card" id="qCard" style="display:none"><h2>📅 예약 발행</h2><div id="qBox" class="note"></div></div>';
     if(j.yt)h+='<div class="card"><h2>📈 내 채널 성적 <button class="chip" id="stRe" style="float:right;font-size:12px;padding:3px 9px">새로고침</button></h2><div id="stBox" class="note">불러오는 중…</div></div>';
-    h='<button class="big" id="avOpen" style="margin:0 0 12px;background:var(--ink)">🎙 숏츠용 내 목소리 · 🗣 캐릭터가 말하기</button>'+h;h='<a class="big" href="/toon" style="text-align:center;text-decoration:none;margin:0 0 12px;background:#1F7A4D">🎨 공감툰 만들기 (그림 + 자막 + 효과음)</a>'+h;h='<a class="big" href="/edit" style="text-align:center;text-decoration:none;background:var(--red);margin:0 0 12px">🎥 내가 찍은 영상으로 만들기 (편집실)</a>'+h;
+    h='<button class="big" id="avOpen" style="margin:0 0 12px;background:var(--ink)">🎙 숏츠용 내 목소리 · 🗣 캐릭터가 말하기</button>'+h;h='<a class="big" href="/cine" style="text-align:center;text-decoration:none;margin:0 0 12px;background:#6B4FA0">🎞 사진 한 장 → 시네마틱 영상</a>'+h;h='<a class="big" href="/toon" style="text-align:center;text-decoration:none;margin:0 0 12px;background:#1F7A4D">🎨 공감툰 만들기 (그림 + 자막 + 효과음)</a>'+h;h='<a class="big" href="/edit" style="text-align:center;text-decoration:none;background:var(--red);margin:0 0 12px">🎥 내가 찍은 영상으로 만들기 (편집실)</a>'+h;
     if(j.list&&j.list.length)h+='<div class="card"><h2>내 숏츠</h2><div class="list">'+j.list.map(function(x){return '<a href="'+(x.kind==='mine'?'/edit?id='+x.id:x.kind==='toon'?'/toon':'#')+'"'+(x.kind==='mine'||x.kind==='toon'?'':' data-open="'+x.id+'"')+'>'+(x.kind==='mine'?'🎥 ':x.kind==='toon'?'🎨 ':'')+'<span>'+esc(x.title)+'</span><small>'+(x.yt?'▶ '+(x.yt.privacy==='public'?'공개':x.yt.privacy==='unlisted'?'일부공개':'비공개'):new Date(x.made).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}))+'</small></a>';}).join('')+'</div></div>';
     $('main').innerHTML=h;
     document.querySelectorAll('[data-ang]').forEach(function(b){b.onclick=function(){ANG=b.getAttribute('data-ang');try{localStorage.setItem('sh-ang',ANG);}catch(e){}document.querySelectorAll('[data-ang]').forEach(function(x){x.classList.toggle('on',x===b);});};});
