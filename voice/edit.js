@@ -487,7 +487,7 @@ async function cloudRender(){
       if(hasN){ns=Math.max(t0+0.1,nEnd+0.08);nEnd=ns+nd;talk.push([ns,nEnd]);aud.push({k:k,tin:ns,tout:nEnd});}
       if(last&&nEnd>t0+len-0.3)len=nEnd-t0+0.4;
       var vl=Math.min(len,room);used[sc.clip]=1;
-      vid.push({clip:sc.clip,in:sc.s,out:Math.min(c.dur,sc.s+vl*sp),speed:sp,tin:t0,tout:t0+vl,gain:(o.orig||0)*(hasN||nEnd>t0+0.2?0.4:1)});
+      vid.push({clip:sc.clip,in:sc.s,out:Math.min(c.dur,sc.s+vl*sp),speed:sp,tin:t0,tout:t0+vl,gain:(o.orig||0)*(hasN||nEnd>t0+0.2?0.25:1)});
       if(len>vl+0.05)ovs.push({kind:'freeze',layer:'main',v:c.v,at:Math.min(c.dur,sc.s+vl*sp)-0.06,tin:t0+vl,tout:t0+len});
       if(sc.cap)ovs.push({kind:'cap',layer:'cap',txt:sc.cap,first:k===0,tin:t0,tout:t0+len});
       if(o.subs){var chs=sayChunks(sc.say);if(chs.length&&(hasN||!o.narr||!sc.say)){var s0=hasN?ns:t0,span=hasN?nd:len,acc=0;chs.forEach(function(ch){var a=s0+acc*span;acc+=ch.w;ovs.push({kind:'sub',layer:'sub',txt:ch.t,tin:a,tout:Math.max(a+0.3,s0+acc*span)});});}}
@@ -516,7 +516,7 @@ async function cloudRender(){
       done+=u.size;if(u.clip){OSSUP[u.key]=Date.now();try{localStorage.setItem('ed-oss',JSON.stringify(OSSUP));}catch(e){}}}
     var tl={fit:o.fit,video:vid.map(function(v){return {k:clipKey[v.clip],in:v.in,out:v.out,speed:v.speed,tin:v.tin,tout:v.tout,gain:v.gain};}),
       images:ovs.map(function(x){return {k:x.key,layer:x.layer,tin:x.tin,tout:x.tout};}),
-      audio:aud.map(function(a){return {k:a.key,tin:a.tin,tout:a.tout,gain:1.3,track:'narr'};}).concat(bgmKey?[{k:bgmKey,tin:0,tout:T,gain:Math.min(0.6,o.bgv*2),loop:true,fade:1.2,track:'bgm'}]:[])};
+      audio:aud.map(function(a){return {k:a.key,tin:a.tin,tout:a.tout,gain:2.2,track:'narr'};}).concat(bgmKey?[{k:bgmKey,tin:0,tout:T,gain:Math.min(0.6,o.bgv*2),loop:true,fade:1.2,track:'bgm'}]:[])};
     prog('☁️ 알리바바에 편집 맡기는 중…');
     var s=await api('/shorts/cloud/submit',{id:D.id,tl:tl});if(!s.ok)throw new Error(s.detail||s.error);
     var t1=Date.now(),res=null;
