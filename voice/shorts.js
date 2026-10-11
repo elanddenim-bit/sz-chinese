@@ -171,6 +171,8 @@ async function ideas(env, h, b) {
 // 이번 주말에 찍을 3편 + 찍을 컷 목록. KV shorts:week:<해시> {at, items[{title,kind,where,hook,why,shots[{what,how,sec}],angle}]}, 직접 다시 만들기 하루 3번
 // 📡 경쟁 채널 레이더(2026-10-11): '중국 사는 한국인' 계열 한국어 숏츠를 유튜브 검색(기존 youtube.readonly 토큰) → 최근 60일 영상 하루당 조회수로
 // 길이·제목 특징별 중앙값을 코드로 직접 계산(숫자는 AI가 만들지 않음) → 千问이 그 숫자로 패턴·해볼 주제 정리. KV shorts:radar:<해시>(14일), 새로 분석 하루 2번
+// 중국 관련성: 검색이 엉뚱한 바이럴(연예인·한국 제도 등)도 섞어 와서 댓글 광산이 "지창욱 근황" 같은 걸 캤음(2026-10-11) → 제목·채널명에 중국 관련 말이 있는 영상만
+const CN_REL = /중국|중국인|中国|广州|上海|北京|深圳|광저우|상하이|베이징|선전|홍콩|청두|충칭|항저우|하얼빈|칭다오|다롄|시안|쑤저우|위챗|알리페이|타오바오|핀둬둬|테무|알리익스프레스|위안|元|훠궈|마라|딤섬|양꼬치|조선족|화교|차이나|china|chinese/i;
 const RADAR_Q = ["중국 생활", "중국 사는 한국인", "광저우", "중국 물가", "중국 여행 꿀팁", "중국 편의점", "상하이 일상", "중국 출장", "중국인 반응 한국", "중국 음식 리뷰"];
 const median = (a) => { if (!a.length) return 0; const s = a.slice().sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 async function radarMake(env, h) {
@@ -188,7 +190,7 @@ async function radarMake(env, h) {
   let items = vids.map((x) => {
     const at = Date.parse(x.snippet.publishedAt) || now, days = Math.max(1, (now - at) / 86400e3), v = +((x.statistics || {}).viewCount) || 0;
     return { id: x.id, t: x.snippet.title, ch: x.snippet.channelTitle, cid: x.snippet.channelId, at, sec: isoSec(x.contentDetails && x.contentDetails.duration), v, likes: +((x.statistics || {}).likeCount) || 0, com: +((x.statistics || {}).commentCount) || 0, d: Math.round(v / days) };
-  }).filter((x) => /[가-힣]/.test(x.t) && x.sec > 0 && x.sec <= 180 && now - x.at > 2 * 86400e3);
+  }).filter((x) => /[가-힣]/.test(x.t) && x.sec > 0 && x.sec <= 180 && now - x.at > 2 * 86400e3 && CN_REL.test(x.t + " " + x.ch));
   if (items.length < 10) throw serr("비슷한 채널 영상을 충분히 못 찾았어요(" + items.length + "개). 잠시 뒤 다시 눌러 주세요.", 502);
   // 채널 구독자 → 구독자 대비 조회(작은 채널인데 터진 영상 = 따라 할 만한 패턴)
   const cids = [...new Set(items.map((x) => x.cid))];
@@ -226,7 +228,7 @@ async function radarMake(env, h) {
         ".\n상위: " + top.map((x) => "[" + x.d + "/일, r" + x.r + ", " + x.sec + "초] " + x.t).join(" | ") + "\n하위: " + low.map((x) => "[" + x.d + "/일, " + x.sec + "초] " + x.t).join(" | ") + (mine ? "\n우리 채널 영상: " + mine : "") },
     ]);
   } catch (e) { ai = { error: String(e.message || e).slice(0, 120) }; }
-  const doc = { at: now, n: items.length, base: Math.round(base), lens, stats, nch: Object.keys(byCh).length, top: top.slice(0, 15).map(({ cid, ...x }) => x), sleepers: items.filter((x) => x.subs && x.subs < 20000 && x.r >= 3).sort((a, c) => c.r - a.r).slice(0, 6).map(({ cid, ...x }) => x), ai };
+  const doc = { at: now, n: items.length, base: Math.round(base), lens, stats, nch: Object.keys(byCh).length, pool: items.slice(0, 40).map((x) => ({ id: x.id, t: x.t })), top: top.slice(0, 15).map(({ cid, ...x }) => x), sleepers: items.filter((x) => x.subs && x.subs < 20000 && x.r >= 3).sort((a, c) => c.r - a.r).slice(0, 6).map(({ cid, ...x }) => x), ai };
   await env.KV.put("shorts:radar:" + h, JSON.stringify(doc), { expirationTtl: 14 * 86400 });
   return doc;
 }
@@ -250,7 +252,8 @@ async function cmtMake(env, h) {
   const { token } = await ytToken(env, h);
   const H = { authorization: "Bearer " + token };
   const st = await env.KV.get("yt:stats:" + h, "json");
-  const vids = [...new Map([...(rd.top || []), ...(rd.sleepers || [])].map((x) => [x.id, x])).values()].slice(0, 22);
+  const vids = [...new Map([...(rd.pool || []), ...(rd.top || []), ...(rd.sleepers || [])].filter((x) => CN_REL.test(x.t || "")).map((x) => [x.id, x])).values()].slice(0, 35);
+  if (vids.length < 5) throw serr("중국 관련 영상이 레이더에 " + vids.length + "편뿐이에요. 📡 레이더를 ‘새로 분석’한 뒤 다시 캐 주세요.");
   const mineIds = st && st.items ? st.items.filter((x) => x.privacy === "public" && x.comments > 0).slice(0, 10).map((x) => x.id) : [];
   const fails = [];
   const pull = async (id, mine) => {
@@ -274,7 +277,7 @@ async function cmtMake(env, h) {
   }
   const vt = Object.fromEntries(vids.map((v) => [v.id, v.t]));
   const o = await qwen(env, [
-    { role: "system", content: "너는 유튜브 댓글 분석가다. 번호 붙은 한국어 댓글 중 질문·궁금증·요청(물음표 없어도 '~궁금하네요', '~알려 주세요', '~해 주세요', '~가 보고 싶다' 포함)만 골라 '같은 걸 묻는 것'끼리 묶어라. 감상·감탄·농담은 버려라. 각 묶음: q=대표 질문(한국어, 짧게), ids=그 묶음에 속한 댓글 번호 배열(반드시 실제 번호만, 한 댓글은 한 묶음에만), can=광저우 사는 한국인 부부(얼굴 안 나옴, 직접 촬영)가 찍어서 답할 수 있으면 true(정치·남의 사생활·영상 속 인물 개인 질문·특정 연예인은 false), topic=우리가 만들 숏츠 주제, hook=첫 2초 한국어 한마디, film=무엇을 찍으면 되는지 한 줄. 사소한 감탄·인사·영상 속 사람 개인 질문은 버려라. 묶음 최대 15개. 숫자(개수)는 쓰지 마라 — 개수는 프로그램이 ids로 센다." +
+    { role: "system", content: "너는 유튜브 댓글 분석가다. 번호 붙은 한국어 댓글 중 질문·궁금증·요청(물음표 없어도 '~궁금하네요', '~알려 주세요', '~해 주세요', '~가 보고 싶다' 포함)만 골라 '같은 걸 묻는 것'끼리 묶어라. 감상·감탄·농담은 버려라. 중국 생활·여행·물가·음식·문화·중국인과 관련 없는 질문(연예인·영상 속 인물 개인사·한국 제도·병역 등)은 묶지 말고 버려라. 각 묶음: q=대표 질문(한국어, 짧게), ids=그 묶음에 속한 댓글 번호 배열(반드시 실제 번호만, 한 댓글은 한 묶음에만), can=광저우 사는 한국인 부부(얼굴 안 나옴, 직접 촬영)가 찍어서 답할 수 있으면 true(정치·남의 사생활·영상 속 인물 개인 질문·특정 연예인은 false), topic=우리가 만들 숏츠 주제, hook=첫 2초 한국어 한마디, film=무엇을 찍으면 되는지 한 줄. 사소한 감탄·인사·영상 속 사람 개인 질문은 버려라. 묶음 최대 15개. 숫자(개수)는 쓰지 마라 — 개수는 프로그램이 ids로 센다." +
       ' JSON만: {"groups":[{"q":"","ids":[1,2],"can":true,"topic":"","hook":"","film":""}]}' },
     { role: "user", content: theirs.map((x, i) => i + 1 + ". " + x.t.slice(0, 140)).join("\n") },
   ]);
