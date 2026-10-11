@@ -164,6 +164,7 @@ async function ideas(env, h, b) {
 // 🗓 이번 주 숏츠 기획(2026-10-11): 토요일 아침(중국 8시, 크론) 내 기록(주말 탐험·간판·타임머신·이미 만든 숏츠) + 채널 성적 + 오늘의 중국 인터넷으로
 // 이번 주말에 찍을 3편 + 찍을 컷 목록. KV shorts:week:<해시> {at, items[{title,kind,where,hook,why,shots[{what,how,sec}],angle}]}, 직접 다시 만들기 하루 3번
 async function weekMake(env, h) {
+  const memo = String((await env.KV.get("shorts:week:memo:" + h)) || "").slice(0, 400);
   const q = (await env.KV.get("quest:" + h, "json")) || {}, sg = (await env.KV.get("sg:" + h, "json")) || {}, tc = (await env.KV.get("tc:" + h, "json")) || {};
   const made = ((await env.KV.get(listKey(h), "json")) || []).slice(0, 20).map((x) => x.title);
   const been = (q.hist || []).slice(0, 12).map((x) => x.name + "(" + (x.area || "") + ", " + (x.date || "") + (x.comment ? ", " + String(x.comment).slice(0, 40) : "") + ")");
@@ -178,10 +179,10 @@ async function weekMake(env, h) {
   }
   const out = await qwen(env, [
     { role: "system", content: "너는 한국 시청자용 유튜브 숏츠 채널 기획자 겸 촬영 감독이다. 채널: 광저우(바이윈구 거주)에 사는 한국인 40대 부부가 주말에 돌아다니며 직접 찍는 광저우 생활. 얼굴은 안 나온다(손·뒷모습·풍경·음식만). " + KR_RULES +
-      " 이번 주말에 직접 찍을 숏츠 3편을 기획하라. 3편은 서로 다른 각도로: 1편은 우리가 다녀온 곳·기록을 살린 것, 1편은 새로 가 볼 만한 광저우 장소(실제 있는 곳, 지하철로 1시간 안), 1편은 요즘 화제나 한국과의 비교. 이미 만든 영상 주제는 반복 금지. " +
+      " 주인의 이번 주 일정 메모가 있으면 반드시 반영하라: 출장·이동 중엔 업무에 지장 없게 컷당 몇 초·하루 합계 10분 안에 찍을 수 있는 것만(공항·고속철·호텔·현지 아침·퇴근 후 명소·현지 음식), 공장 안·거래처 이름·라벨·제품·회의는 절대 찍지 않는다. 출장지가 있으면 3편 중 2편 이상을 출장지(도시 비교·현지 음식 가격·호텔·이동)로. 찍어 둔 영상은 2~3주에 걸쳐 나눠 올리므로 날짜·요일에 묶이지 않는 내용으로. 각 편 where 에 언제 찍을지(요일·시간대)도 적어라. 이번 주에 직접 찍을 숏츠 3편을 기획하라. 3편은 서로 다른 각도로: 1편은 우리가 다녀온 곳·기록을 살린 것, 1편은 새로 가 볼 만한 광저우 장소(실제 있는 곳, 지하철로 1시간 안), 1편은 요즘 화제나 한국과의 비교. 이미 만든 영상 주제는 반복 금지. " +
       "각 편마다 찍을 컷 5~7개: what(무엇을, 한국어 짧게), how(어떻게 — 구도·움직임·소리, 폰 하나로 가능한 것), sec(초, 3~8). 첫 컷은 훅(손으로 가격표 들기, 음식 김 나는 클로즈업, 반전 장면 등). 마지막 컷은 댓글 유도 장면. 얼굴 정면 금지. " +
       ' JSON만 출력: {"items":[{"title":"한국어 제목 40자 이내","kind":"record|new|trend","where":"촬영 장소(중국어 이름+한국어)","hook":"첫 2초 한마디","why":"한국인이 왜 볼지 한 문장","angle":"compare|price|tip|shock|food|life","shots":[{"what":"","how":"","sec":4}]}]}' },
-    { role: "user", content: "오늘: " + cnDay() + "(이번 주말 촬영용)" + ". 우리가 가 본 곳: " + (been.join(" / ") || "(없음)") + ". 웃긴 간판 기록: " + (signs.join(" / ") || "(없음)") + ". 타임머신 사진 " + ((Array.isArray(tc) ? tc : []).length) + "장. 이미 만든 숏츠: " + (made.join(" / ") || "(없음)") + ". 오늘의 중국 인터넷: " + (trend.join(" / ") || "(없음)") + ". 1위안 ≈ " + ((await krw(env)) || 190) + "원. " + perf },
+    { role: "user", content: (memo ? "이번 주 일정 메모: " + memo + ". " : "") + "오늘: " + cnDay() + "(이번 주 촬영용)" + ". 우리가 가 본 곳: " + (been.join(" / ") || "(없음)") + ". 웃긴 간판 기록: " + (signs.join(" / ") || "(없음)") + ". 타임머신 사진 " + ((Array.isArray(tc) ? tc : []).length) + "장. 이미 만든 숏츠: " + (made.join(" / ") || "(없음)") + ". 오늘의 중국 인터넷: " + (trend.join(" / ") || "(없음)") + ". 1위안 ≈ " + ((await krw(env)) || 190) + "원. " + perf },
   ], { search: true });
   const items = (Array.isArray(out.items) ? out.items : []).slice(0, 3).map((x) => ({
     title: String(x.title || "").slice(0, 60), kind: ["record", "new", "trend"].includes(x.kind) ? x.kind : "new", where: String(x.where || "").slice(0, 80), hook: String(x.hook || "").slice(0, 80), why: String(x.why || "").slice(0, 140),
@@ -194,13 +195,15 @@ async function weekMake(env, h) {
 }
 async function weekView(env, b, h) {
   let doc = await env.KV.get("shorts:week:" + h, "json");
+  if (b && typeof b.memo === "string") await env.KV.put("shorts:week:memo:" + h, b.memo.slice(0, 400));
+  const memo = (await env.KV.get("shorts:week:memo:" + h)) || "";
   if (b && b.fresh) {
     const ck = "shorts:week:re:" + h + ":" + cnDay(), n = Number(await env.KV.get(ck)) || 0;
     if (n >= 3) throw serr("오늘은 기획을 3번 다시 만들었어요. 내일 다시 눌러 주세요.", 429);
     await env.KV.put(ck, String(n + 1), { expirationTtl: 2 * 86400 });
     doc = await weekMake(env, h);
   }
-  return { ok: true, plan: doc || null };
+  return { ok: true, plan: doc || null, memo };
 }
 export async function weekCron(env) {
   const h = await env.KV.get("usage:owner");
@@ -897,10 +900,14 @@ async function ytStatus(env, h) {
 const qKey = (h) => "shorts:q:" + h;
 const isLimit = (e) => /exceeded the number of videos|uploadLimitExceeded/i.test(String((e && e.message) || e));
 const cnHour = () => (new Date().getUTCHours() + 8) % 24;
+const qEvery = (q) => ([1, 2, 3].includes(Number(q.every)) ? Number(q.every) : 1);
+const gapMs = (q) => qEvery(q) * 86400e3 - 4 * 3600e3; // 매일이면 20시간, 이틀이면 44시간…
 function qWhen(q) {
-  const n = q.items.length, h = cnHour(), today = !q.last || Date.now() - q.last > 20 * 3600e3;
-  const first = today && h < 21 ? "오늘 저녁 6~9시" : "내일 저녁 6~9시";
-  return n <= 1 ? first : first + "부터 하루 1개씩 (" + n + "개 대기)";
+  const n = q.items.length, h = cnHour(), ev = qEvery(q), next = (q.last || 0) + gapMs(q);
+  const dd = Math.max(0, Math.round((Date.parse(cnDay(next) ) - Date.parse(cnDay())) / 86400e3));
+  const d0 = !q.last || next <= Date.now() ? (h < 21 ? 0 : 1) : dd;
+  const first = d0 === 0 ? "오늘 저녁 6~9시" : d0 === 1 ? "내일 저녁 6~9시" : d0 + "일 뒤 저녁 6~9시";
+  return n <= 1 ? first : first + "부터 " + (ev === 1 ? "하루 1개씩" : ev + "일에 1개씩") + " (" + n + "개 대기, 끝까지 약 " + (d0 + (n - 1) * ev) + "일)";
 }
 async function ytQueueAdd(env, b, h, why) {
   const id = String(b.id || "");
@@ -908,18 +915,19 @@ async function ytQueueAdd(env, b, h, why) {
   if (!d) throw serr("초안을 찾지 못했어요.", 404);
   const q = (await env.KV.get(qKey(h), "json")) || { items: [], last: 0 };
   q.items = q.items.filter((x) => x.id !== id);
-  if (q.items.length >= 14) throw serr("예약이 14개 꽉 찼어요. 먼저 올라간 뒤 다시 넣어 주세요.");
+  if (q.items.length >= 20) throw serr("예약이 20개 꽉 찼어요. 먼저 올라간 뒤 다시 넣어 주세요.");
   q.items.push({ id, privacy: ["public", "unlisted", "private"].includes(b.privacy) ? b.privacy : "public", title: String(b.title || d.title || "").slice(0, 95), description: b.description != null ? String(b.description).slice(0, 4800) : null, tags: (b.tags || d.tags || []).slice(0, 15), synthetic: b.synthetic !== false, at: Date.now(), tries: 0 });
-  if (why) q.last = Math.max(q.last || 0, Date.now() - 4 * 3600e3); // 방금 한도에 걸림 → 오늘은 쉬고 내일부터
+  if (why) q.last = Math.max(q.last || 0, Date.now() - 4 * 3600e3 - (qEvery(q) - 1) * 86400e3); // 방금 한도에 걸림 → 오늘은 쉬고 내일부터
   await env.KV.put(qKey(h), JSON.stringify(q));
   const msg = (why ? "오늘 유튜브 업로드 한도에 걸려서 " : "") + "예약했어요 — " + qWhen(q) + " 자동으로 올라가요. 숏츠 공방 첫 화면에서 확인·취소할 수 있어요.";
   return { ok: true, queued: true, n: q.items.length, msg };
 }
 async function ytQueueView(env, b, h) {
   const q = (await env.KV.get(qKey(h), "json")) || { items: [], last: 0 };
+  if ([1, 2, 3].includes(Number(b.every))) { q.every = Number(b.every); await env.KV.put(qKey(h), JSON.stringify(q)); }
   if (b.del) { q.items = q.items.filter((x) => x.id !== String(b.del)); await env.KV.put(qKey(h), JSON.stringify(q)); }
   if (b.now) { const x = q.items.find((y) => y.id === String(b.now)); if (x) { const r = await ytRunOne(env, h, q, x); return { ...(await ytQueueView(env, {}, h)), tried: r }; } }
-  return { ok: true, items: q.items.map((x) => ({ id: x.id, title: x.title, at: x.at, privacy: x.privacy, err: x.err || "" })), when: q.items.length ? qWhen(q) : "", last: q.last || 0, err: q.err || "" };
+  return { ok: true, items: q.items.map((x) => ({ id: x.id, title: x.title, at: x.at, privacy: x.privacy, err: x.err || "" })), when: q.items.length ? qWhen(q) : "", every: qEvery(q), last: q.last || 0, err: q.err || "" };
 }
 async function ytRunOne(env, h, q, x) {
   try {
@@ -942,7 +950,7 @@ export async function shortsCron(env) {
     for (const k of l.keys) {
       const h = k.name.slice(9), q = await env.KV.get(k.name, "json");
       if (!q || !q.items || !q.items.length) continue;
-      if (q.last && Date.now() - q.last < 20 * 3600e3) continue;
+      if (q.last && Date.now() - q.last < gapMs(q)) continue;
       await ytRunOne(env, h, q, q.items[0]);
     }
     cur = l.list_complete ? null : l.cursor;
@@ -1047,9 +1055,9 @@ function api(p,b){b=b||{};b.code=CODE;return fetch(p,{method:'POST',headers:{'co
 function gate(m){$('main').innerHTML='<div class="gate"><p>'+esc(m||'초대 코드를 넣어 주세요')+'</p><input type="text" id="cd" placeholder="초대 코드" style="max-width:220px"> <button class="chip on" id="go">열기</button></div>';$('go').onclick=function(){CODE=$('cd').value.trim();try{localStorage.setItem('pb-code',CODE);}catch(e){}home();};}
 function costTxt(c,caps){if(!c)return '';return '오늘 그림 '+(c.img||0)+'/'+caps.img+' · 클립 '+(c.vid||0)+'/'+caps.vid+'<br>약 '+((c.img||0)*0.2+(c.vid||0)*3+(c.tts||0)/10000*0.8).toFixed(1)+'위안';}
 function wkLoad(fresh){var bx=$('wkBox'),rb=$('wkRe');if(!bx)return;if(fresh){rb.disabled=true;bx.innerHTML='<span class="spin">🗓</span> 내 기록·채널 성적 보고 3편 기획 중… (20~40초)';}
-  api('/shorts/week',fresh?{fresh:true}:{}).then(function(r){if(rb)rb.disabled=false;if(!r.ok){bx.textContent=r.detail||r.error;return;}var p=r.plan;
+  var mm=$('wkMemo');api('/shorts/week',fresh?{fresh:true,memo:mm?mm.value:''}:{}).then(function(r){if(rb)rb.disabled=false;if(!r.ok){bx.textContent=r.detail||r.error;return;}var p=r.plan;if(mm&&!fresh&&!mm.value)mm.value=r.memo||'';
     if(!p){bx.innerHTML='매주 <b>토요일 아침 8시</b>에 이번 주말 찍을 숏츠 3편과 컷 목록이 여기 자동으로 생겨요. 지금 보려면 ‘다시 만들기’.';return;}
-    var K={record:'📍 다녀온 곳',new:'🆕 새로 가 볼 곳',trend:'🔥 화제·비교'};
+    var K={record:'📍 다녀온 곳',new:'🆕 새로 찍을 곳',trend:'🔥 화제·비교'};
     bx.innerHTML='<small>'+esc(p.day)+' 기획</small>'+p.items.map(function(x,i){return '<details class="idea" style="margin-top:8px"'+(i===0?' open':'')+'><summary><b>'+esc(K[x.kind]||'')+' · '+esc(x.title)+'</b></summary><small>📍 '+esc(x.where)+'<br>첫마디: “'+esc(x.hook)+'”<br>'+esc(x.why)+'</small>'
       +'<ol style="margin:8px 0 6px 18px;padding:0">'+x.shots.map(function(s){return '<li style="margin:4px 0"><b>'+esc(s.what)+'</b> <small>('+s.sec+'초)</small><br><small>'+esc(s.how)+'</small></li>';}).join('')+'</ol>'
       +'<a class="chip" style="text-decoration:none;display:inline-block" href="/edit?topic='+encodeURIComponent(x.title+' — 첫마디: '+x.hook)+'">🎥 찍고 나서 편집실로</a> <button class="chip" data-wkt="'+i+'">✍️ AI 대본으로</button></details>';}).join('');
@@ -1058,7 +1066,8 @@ function qLoad(arg){api('/shorts/yt/queue',arg||{}).then(function(r){var c=$('qC
   if(r.tried)toast(r.tried.ok?'올렸어요 ✅':'아직 안 돼요: '+(r.tried.error||'').slice(0,60));
   if(!r.items.length&&!r.err){c.style.display='none';return;}c.style.display='block';
   bx.innerHTML=(r.items.length?'<b>'+esc(r.when)+'</b><div class="list" style="margin-top:6px">'+r.items.map(function(x,i){return '<a href="#" style="cursor:default"><span>'+(i+1)+'. '+esc(x.title)+(x.err?'<br><small style="color:var(--red)">'+esc(x.err.slice(0,80))+'</small>':'')+'</span><small><button class="chip" data-qnow="'+x.id+'" style="font-size:12px;padding:3px 8px">지금</button> <button class="chip" data-qdel="'+x.id+'" style="font-size:12px;padding:3px 8px">✕</button></small></a>';}).join('')+'</div>':'')
-    +(r.err?'<p class="note" style="color:var(--red)">'+esc(r.err)+'</p>':'')+'<p class="note">중국 시간 저녁 6~9시 사이에 하루 1개씩 자동으로 올라가요. ‘지금’은 바로 시도(한도면 실패).</p>';
+    +(r.err?'<p class="note" style="color:var(--red)">'+esc(r.err)+'</p>':'')+'<p class="lbl">올리는 간격</p><div class="chips">'+[[1,'매일'],[2,'이틀에 1개'],[3,'사흘에 1개']].map(function(e){return '<button class="chip'+(r.every===e[0]?' on':'')+'" data-qev="'+e[0]+'">'+e[1]+'</button>';}).join('')+'</div><p class="note">중국 시간 저녁 6~9시에 자동으로 올라가요. 출장 전 몰아 찍은 걸 넣어 두고 이틀·사흘 간격으로 2~3주 나눠 쓰기 좋아요. ‘지금’은 바로 시도(한도면 실패).</p>';
+  bx.querySelectorAll('[data-qev]').forEach(function(b){b.onclick=function(){qLoad({every:+b.getAttribute('data-qev')});};});
   bx.querySelectorAll('[data-qdel]').forEach(function(b){b.onclick=function(e){e.preventDefault();qLoad({del:b.getAttribute('data-qdel')});};});
   bx.querySelectorAll('[data-qnow]').forEach(function(b){b.onclick=function(e){e.preventDefault();b.disabled=true;b.textContent='…';qLoad({now:b.getAttribute('data-qnow')});};});});}
 function home(){
@@ -1072,7 +1081,7 @@ function home(){
       +'<p class="lbl">길이</p><div class="chips">'+[30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div>'
       +'<button class="big" id="scriptBtn">✍️ 대본 쓰기</button><div class="err" id="e1"></div></div>';
     h+='<div class="card" id="ytCard"><h2>유튜브 연결</h2><div id="ytBox" class="note">확인 중…</div></div>';
-    h+='<div class="card" id="wkCard"><h2>🗓 이번 주말 찍을 숏츠 <button class="chip" id="wkRe" style="float:right;font-size:12px;padding:3px 9px">다시 만들기</button></h2><div id="wkBox" class="note">불러오는 중…</div></div>';
+    h+='<div class="card" id="wkCard"><h2>🗓 이번 주말 찍을 숏츠 <button class="chip" id="wkRe" style="float:right;font-size:12px;padding:3px 9px">다시 만들기</button></h2><textarea id="wkMemo" rows="2" placeholder="이번 주 일정 (예: 화 광저우→제남 출장, 수~목 제남→닝보, 월·금 광저우)" style="width:100%;box-sizing:border-box;margin:4px 0 6px;border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;background:var(--card);color:var(--ink)"></textarea><div id="wkBox" class="note">불러오는 중…</div></div>';
     h+='<div class="card" id="qCard" style="display:none"><h2>📅 예약 발행</h2><div id="qBox" class="note"></div></div>';
     if(j.yt)h+='<div class="card"><h2>📈 내 채널 성적 <button class="chip" id="stRe" style="float:right;font-size:12px;padding:3px 9px">새로고침</button></h2><div id="stBox" class="note">불러오는 중…</div></div>';
     h='<button class="big" id="avOpen" style="margin:0 0 12px;background:var(--ink)">🎙 숏츠용 내 목소리 · 🗣 캐릭터가 말하기</button>'+h;h='<a class="big" href="/toon" style="text-align:center;text-decoration:none;margin:0 0 12px;background:#1F7A4D">🎨 공감툰 만들기 (그림 + 자막 + 효과음)</a>'+h;h='<a class="big" href="/edit" style="text-align:center;text-decoration:none;background:var(--red);margin:0 0 12px">🎥 내가 찍은 영상으로 만들기 (편집실)</a>'+h;
@@ -1095,7 +1104,7 @@ function home(){
     $('scriptBtn').onclick=function(){var t=$('topic').value.trim();if(!t){$('e1').textContent='주제를 적거나 추천에서 골라 주세요';return;}var b=this;b.disabled=true;b.innerHTML='<span class="spin">✍️</span> 대본 쓰는 중… (15초쯤)';
       api('/shorts/script',{topic:t,sec:SEC,angle:ANG,series:SER}).then(function(r){b.disabled=false;b.textContent='✍️ 대본 쓰기';if(!r.ok){$('e1').textContent=r.detail||r.error;return;}D=r.draft;F=r.files||{};editor();});};
     $('avOpen').onclick=ava;
-    ytBox();qLoad();wkLoad();$('wkRe').onclick=function(){wkLoad(true);};
+    ytBox();qLoad();wkLoad();$('wkRe').onclick=function(){wkLoad(true);};$('wkMemo').onchange=function(){api('/shorts/week',{memo:this.value});toast('일정 저장 — 다시 만들기를 누르면 반영돼요');};
     if(j.yt){stats(false);$('stRe').onclick=function(){stats(true);};}
   }).catch(function(){gate('서버에 연결하지 못했어요');});
 }
