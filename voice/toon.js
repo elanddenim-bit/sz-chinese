@@ -82,7 +82,7 @@ function start(){
   $('setupBtn').onclick=function(){copy(SETUP);};
   $('ideaBtn').onclick=getIdea;
   $('imgs').onchange=addImages;
-  $('refill').onclick=function(){if(!T.idea){toast('먼저 ① 에서 💡 를 눌러 주세요');return;}if(!CARDS.length){toast('그림을 먼저 넣어 주세요');return;}autoFill(true);toast('그림 '+CARDS.length+'장에 맞게 채웠어요');};
+  $('refill').onclick=function(){if(!T.idea){toast('먼저 ① 에서 💡 를 눌러 주세요');return;}if(!CARDS.length){toast('그림을 먼저 넣어 주세요');return;}if(CARDS.length>2&&!T.idea.extra){toast('3번째 장면 자막을 새로 받는 중…');if(!$('topic').value.trim())$('topic').value=T.topic;getIdea();return;}autoFill(true);toast('그림 '+CARDS.length+'장에 맞게 채웠어요');};
   document.querySelectorAll('[data-try]').forEach(function(b){b.onclick=function(){var ac=getAC();playSfx(ac,b.getAttribute('data-try'),ac.currentTime+0.05,BUS.sfx);};});
   document.querySelectorAll('[data-bgv]').forEach(function(b){b.onclick=function(){T.bgv=+b.getAttribute('data-bgv');keep();document.querySelectorAll('[data-bgv]').forEach(function(x){x.classList.toggle('on',x===b);});};});
   $('bgm').onchange=function(){var f=this.files&&this.files[0];if(!f)return;BGM={file:f,name:f.name,buf:null};$('bgmName').textContent=f.name;if(!T.bgv){T.bgv=0.12;keep();document.querySelectorAll('[data-bgv]').forEach(function(x){x.classList.toggle('on',+x.getAttribute('data-bgv')===0.12);});}};
