@@ -1057,7 +1057,8 @@ export async function shortsFile(req, env, url) {
 }
 
 // ---------------- 유튜브 ----------------
-const YT_SCOPE = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly";
+// force-ssl(2026-10-11): 댓글 읽기(commentThreads.list 는 readonly 로 403 insufficientPermissions) — 이후 답글·제목 실험에도 필요
+const YT_SCOPE = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl";
 function ytCfg(env) { if (!env.YT_CLIENT_ID || !env.YT_CLIENT_SECRET) throw serr("유튜브 연결 설정(YT_CLIENT_ID·YT_CLIENT_SECRET 시크릿)이 아직 없어요.", 400, "yt_config"); }
 async function ytStart(env, h) {
   ytCfg(env);
@@ -1240,7 +1241,7 @@ async function ytUpload(env, b, h) {
 // 구글 OAuth 브랜딩(앱 게시)에 필요한 공개 페이지 — 홈·개인정보처리방침·약관
 const LEGAL = {
   "/about": ["숏츠 공방", "<p>숏츠 공방은 운영자 본인(박지훈)이 광저우 생활을 소개하는 유튜브 숏츠를 만들고 본인 채널에 올리기 위한 개인용 도구입니다.</p><p>AI(알리바바 百炼)로 대본·그림·내레이션을 만들고, 사용자가 직접 연결한 본인 유튜브 채널에만 영상을 업로드합니다. 외부 사용자에게 서비스를 제공하지 않습니다.</p><p><a href=\"/privacy\">개인정보처리방침</a> · <a href=\"/terms\">이용약관</a></p>"],
-  "/privacy": ["개인정보처리방침", "<p>시행일: 2026년 10월 10일</p><h2>수집하는 정보</h2><p>유튜브 연결 시 Google OAuth 로 발급되는 리프레시 토큰과 채널 이름만 저장합니다. 이메일·연락처·시청 기록 등 다른 Google 사용자 데이터는 요청하거나 저장하지 않습니다.</p><h2>이용 목적</h2><p>사용자가 직접 만든 숏츠 영상을 사용자 본인의 유튜브 채널에 업로드하고, 연결된 채널 이름을 화면에 표시하기 위해서만 사용합니다(YouTube Data API: youtube.upload, youtube.readonly).</p><h2>보관·삭제</h2><p>토큰은 Cloudflare 저장소에 암호화 전송으로 보관되며, 사용자가 연결 해제를 요청하거나 <a href=\"https://myaccount.google.com/permissions\">Google 계정 권한 페이지</a>에서 접근을 취소하면 더 이상 사용되지 않습니다. 제3자에게 제공·판매하지 않습니다.</p><h2>Google API 서비스 사용자 데이터 정책</h2><p>Google API 로부터 받은 정보의 사용 및 다른 앱으로의 전송은 제한적 사용 요구사항을 포함한 Google API 서비스 사용자 데이터 정책을 준수합니다. 본 서비스는 YouTube API 서비스를 사용하며, 이용자는 <a href=\"https://www.youtube.com/t/terms\">YouTube 서비스 약관</a>과 <a href=\"https://policies.google.com/privacy\">Google 개인정보처리방침</a>의 적용을 받습니다.</p><h2>문의</h2><p>운영자에게 연결된 유튜브 채널을 통해 문의할 수 있습니다.</p>"],
+  "/privacy": ["개인정보처리방침", "<p>시행일: 2026년 10월 10일</p><h2>수집하는 정보</h2><p>유튜브 연결 시 Google OAuth 로 발급되는 리프레시 토큰과 채널 이름만 저장합니다. 이메일·연락처·시청 기록 등 다른 Google 사용자 데이터는 요청하거나 저장하지 않습니다.</p><h2>이용 목적</h2><p>사용자가 직접 만든 숏츠 영상을 사용자 본인의 유튜브 채널에 업로드하고, 연결된 채널 이름을 화면에 표시하기 위해서만 사용합니다(YouTube Data API: youtube.upload, youtube.readonly, youtube.force-ssl). 공개 영상의 공개 댓글을 읽어 시청자 질문 경향을 분석하는 데에도 쓰며, 댓글 작성자 정보는 저장하지 않습니다.</p><h2>보관·삭제</h2><p>토큰은 Cloudflare 저장소에 암호화 전송으로 보관되며, 사용자가 연결 해제를 요청하거나 <a href=\"https://myaccount.google.com/permissions\">Google 계정 권한 페이지</a>에서 접근을 취소하면 더 이상 사용되지 않습니다. 제3자에게 제공·판매하지 않습니다.</p><h2>Google API 서비스 사용자 데이터 정책</h2><p>Google API 로부터 받은 정보의 사용 및 다른 앱으로의 전송은 제한적 사용 요구사항을 포함한 Google API 서비스 사용자 데이터 정책을 준수합니다. 본 서비스는 YouTube API 서비스를 사용하며, 이용자는 <a href=\"https://www.youtube.com/t/terms\">YouTube 서비스 약관</a>과 <a href=\"https://policies.google.com/privacy\">Google 개인정보처리방침</a>의 적용을 받습니다.</p><h2>문의</h2><p>운영자에게 연결된 유튜브 채널을 통해 문의할 수 있습니다.</p>"],
   "/terms": ["이용약관", "<p>시행일: 2026년 10월 10일</p><p>숏츠 공방은 운영자 개인용 도구이며 초대받은 본인만 사용할 수 있습니다. 업로드되는 영상의 내용과 저작권 책임은 업로드한 사용자에게 있습니다. 본 도구로 유튜브에 업로드하는 경우 <a href=\"https://www.youtube.com/t/terms\">YouTube 서비스 약관</a>이 함께 적용됩니다. 서비스는 사전 통지 없이 변경·중단될 수 있습니다.</p><p>문의는 운영자의 유튜브 채널로 해 주세요.</p>"],
 };
 export function legalPage(path) {
@@ -1302,7 +1303,7 @@ function api(p,b){b=b||{};b.code=CODE;return fetch(p,{method:'POST',headers:{'co
 function gate(m){$('main').innerHTML='<div class="gate"><p>'+esc(m||'초대 코드를 넣어 주세요')+'</p><input type="text" id="cd" placeholder="초대 코드" style="max-width:220px"> <button class="chip on" id="go">열기</button></div>';$('go').onclick=function(){CODE=$('cd').value.trim();try{localStorage.setItem('pb-code',CODE);}catch(e){}home();};}
 function costTxt(c,caps){if(!c)return '';return '오늘 그림 '+(c.img||0)+'/'+caps.img+' · 클립 '+(c.vid||0)+'/'+caps.vid+'<br>약 '+((c.img||0)*0.2+(c.vid||0)*3+(c.tts||0)/10000*0.8).toFixed(1)+'위안';}
 function cmt(fresh){var bx=$('cmBox'),bt=$('cmGo');if(!bx)return;if(fresh){bt.disabled=true;bx.innerHTML='<span class="spin">⛏</span> 터진 영상 20여 편 댓글 모아서 질문만 추리는 중… (30~60초)';}
-  api('/shorts/cmt',fresh?{fresh:true}:{}).then(function(r){bt.disabled=false;if(!r.ok){bx.textContent=r.detail||r.error;return;}var d=r.cmt;
+  api('/shorts/cmt',fresh?{fresh:true}:{}).then(function(r){bt.disabled=false;if(!r.ok){var m=r.detail||r.error||'';if(/insufficientPermissions/.test(m)){bx.innerHTML='댓글을 읽으려면 유튜브 권한 하나(댓글 읽기)를 더 받아야 해요. 아래 버튼 → 구글 화면에서 <b>모든 항목 체크</b> → 허용. ‘확인되지 않은 앱’ 경고가 나오면 고급 → 이동.<button class="big" id="cmRe">▶ 유튜브 다시 연결 (댓글 읽기 권한 추가)</button>';$('cmRe').onclick=function(){api('/shorts/yt/start').then(function(x){if(x.url)location.href=x.url;else toast(x.detail||x.error);});};return;}bx.textContent=m;return;}var d=r.cmt;
     if(!d){bx.innerHTML=r.radar?'레이더가 찾은 터진 영상들의 댓글에서 <b>한국 시청자가 실제로 묻는 질문</b>을 모아, 많이 나온 순으로 보여 줘요. 우리가 찍어서 답할 수 있는 건 바로 주제로. ‘캐기’를 눌러 보세요.':'먼저 위 📡 레이더를 한 번 돌려 주세요 — 그 영상들 댓글을 캐요.';return;}
     bt.textContent='다시 캐기';var H='<small>'+new Date(d.at).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'})+' · 영상 '+d.videos+'편 · 댓글 '+d.total+'개 중 질문 '+d.questions+'개'+(d.fails?' · 못 받은 영상 '+d.fails+'편':'')+' · 숫자=같은 걸 물은 댓글 수(프로그램이 셈)</small>';
     H+=d.groups.map(function(g,i){return '<div class="idea" style="'+(g.can?'':'opacity:.55')+'"><div style="display:flex;gap:8px;align-items:baseline"><b style="font-size:18px;color:var(--sky);min-width:34px">'+g.n+'</b><b style="flex:1">'+esc(g.q)+'</b></div><small>👍 '+g.likes+' · 영상 '+g.vids+'편에서'+(g.can?'':' · 우리가 답하긴 어려움')+'</small>'
