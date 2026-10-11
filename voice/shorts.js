@@ -252,21 +252,29 @@ async function cmtMake(env, h) {
   const st = await env.KV.get("yt:stats:" + h, "json");
   const vids = [...new Map([...(rd.top || []), ...(rd.sleepers || [])].map((x) => [x.id, x])).values()].slice(0, 22);
   const mineIds = st && st.items ? st.items.filter((x) => x.privacy === "public" && x.comments > 0).slice(0, 10).map((x) => x.id) : [];
+  const fails = [];
   const pull = async (id, mine) => {
-    const r = await fetch("https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&order=relevance&maxResults=100&textFormat=plainText&videoId=" + id, { headers: H }).catch(() => null);
-    if (!r || !r.ok) return [];
-    const j = await r.json().catch(() => ({}));
+    const r = await fetch("https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&order=relevance&maxResults=100&textFormat=plainText&videoId=" + id, { headers: H }).catch((e) => ({ ok: false, status: 0, _e: String(e.message || e) }));
+    const j = r.json ? await r.json().catch(() => ({})) : {};
+    if (!r.ok) { fails.push(r.status + " " + ((j.error && j.error.errors && j.error.errors[0] && j.error.errors[0].reason) || (j.error && j.error.message) || r._e || "").slice(0, 60)); return []; }
     return (j.items || []).map((x) => { const c = x.snippet.topLevelComment.snippet; return { t: String(c.textDisplay || "").replace(/\s+/g, " ").trim(), likes: +c.likeCount || 0, rep: +x.snippet.totalReplyCount || 0, v: id, mine }; });
   };
   const got = (await Promise.all(vids.map((v) => pull(v.id, false)).concat(mineIds.map((id) => pull(id, true))))).flat();
   const total = got.filter((x) => !x.mine).length;
-  const qs = got.filter((x) => /[가-힣]/.test(x.t) && x.t.length >= 6 && isQ(x.t));
-  const theirs = qs.filter((x) => !x.mine).sort((a, c) => c.likes - a.likes).slice(0, 320);
+  const ko = got.filter((x) => /[가-힣]/.test(x.t) && x.t.length >= 6);
+  const qs = ko.filter((x) => isQ(x.t));
+  // 질문 모양(?·요?)이 적으면 한국어 댓글 전체를 千问에 주고 질문·궁금증만 골라 묶게(물음표 없이 "~궁금하네요"·"~해 주세요"도 많음)
+  let theirs = qs.filter((x) => !x.mine);
+  if (theirs.length < 40) theirs = theirs.concat(ko.filter((x) => !x.mine && !isQ(x.t)).sort((a, c) => c.likes - a.likes).slice(0, 320 - theirs.length));
+  theirs = theirs.sort((a, c) => c.likes - a.likes).slice(0, 320);
   const mine = qs.filter((x) => x.mine).slice(0, 30);
-  if (theirs.length < 8) throw serr("질문 댓글이 너무 적게 모였어요(" + theirs.length + "개). 레이더를 새로 돌린 뒤 다시 해 보세요.", 502);
+  if (theirs.length < 8) {
+    const ok = vids.length + mineIds.length - fails.length;
+    throw serr("댓글을 거의 못 받았어요 — 영상 " + (vids.length + mineIds.length) + "편 중 " + ok + "편에서 댓글 " + got.length + "개(한국어 " + ko.length + "개)." + (fails.length ? " 실패 이유: " + [...new Set(fails)].slice(0, 3).join(" / ") : " 레이더를 새로 돌린 뒤 다시 해 보세요."), 502);
+  }
   const vt = Object.fromEntries(vids.map((v) => [v.id, v.t]));
   const o = await qwen(env, [
-    { role: "system", content: "너는 유튜브 댓글 분석가다. 번호 붙은 한국어 질문 댓글을 '같은 걸 묻는 것'끼리 묶어라. 각 묶음: q=대표 질문(한국어, 짧게), ids=그 묶음에 속한 댓글 번호 배열(반드시 실제 번호만, 한 댓글은 한 묶음에만), can=광저우 사는 한국인 부부(얼굴 안 나옴, 직접 촬영)가 찍어서 답할 수 있으면 true(정치·남의 사생활·영상 속 인물 개인 질문·특정 연예인은 false), topic=우리가 만들 숏츠 주제, hook=첫 2초 한국어 한마디, film=무엇을 찍으면 되는지 한 줄. 사소한 감탄·인사·영상 속 사람 개인 질문은 버려라. 묶음 최대 15개. 숫자(개수)는 쓰지 마라 — 개수는 프로그램이 ids로 센다." +
+    { role: "system", content: "너는 유튜브 댓글 분석가다. 번호 붙은 한국어 댓글 중 질문·궁금증·요청(물음표 없어도 '~궁금하네요', '~알려 주세요', '~해 주세요', '~가 보고 싶다' 포함)만 골라 '같은 걸 묻는 것'끼리 묶어라. 감상·감탄·농담은 버려라. 각 묶음: q=대표 질문(한국어, 짧게), ids=그 묶음에 속한 댓글 번호 배열(반드시 실제 번호만, 한 댓글은 한 묶음에만), can=광저우 사는 한국인 부부(얼굴 안 나옴, 직접 촬영)가 찍어서 답할 수 있으면 true(정치·남의 사생활·영상 속 인물 개인 질문·특정 연예인은 false), topic=우리가 만들 숏츠 주제, hook=첫 2초 한국어 한마디, film=무엇을 찍으면 되는지 한 줄. 사소한 감탄·인사·영상 속 사람 개인 질문은 버려라. 묶음 최대 15개. 숫자(개수)는 쓰지 마라 — 개수는 프로그램이 ids로 센다." +
       ' JSON만: {"groups":[{"q":"","ids":[1,2],"can":true,"topic":"","hook":"","film":""}]}' },
     { role: "user", content: theirs.map((x, i) => i + 1 + ". " + x.t.slice(0, 140)).join("\n") },
   ]);
@@ -279,7 +287,7 @@ async function cmtMake(env, h) {
     return { q: String(g.q || "").slice(0, 80), n: mem.length, likes: mem.reduce((a, x) => a + x.likes, 0), vids: vs.length, can: g.can !== false, topic: String(g.topic || "").slice(0, 80), hook: String(g.hook || "").slice(0, 80), film: String(g.film || "").slice(0, 120),
       ex: mem.sort((a, c) => c.likes - a.likes).slice(0, 3).map((x) => ({ t: x.t.slice(0, 120), likes: x.likes, from: (vt[x.v] || "").slice(0, 50) })) };
   }).filter((g) => g.n >= 2 && g.q).sort((a, c) => c.n - a.n || c.likes - a.likes);
-  const doc = { at: Date.now(), videos: vids.length, total, questions: theirs.length, groups, mine: mine.map((x) => ({ t: x.t.slice(0, 160), likes: x.likes, rep: x.rep, v: x.v })) };
+  const doc = { at: Date.now(), videos: vids.length, total, questions: qs.filter((x) => !x.mine).length, fails: fails.length, groups, mine: mine.map((x) => ({ t: x.t.slice(0, 160), likes: x.likes, rep: x.rep, v: x.v })) };
   await env.KV.put("shorts:cmt:" + h, JSON.stringify(doc), { expirationTtl: 14 * 86400 });
   return doc;
 }
@@ -1296,7 +1304,7 @@ function costTxt(c,caps){if(!c)return '';return '오늘 그림 '+(c.img||0)+'/'+
 function cmt(fresh){var bx=$('cmBox'),bt=$('cmGo');if(!bx)return;if(fresh){bt.disabled=true;bx.innerHTML='<span class="spin">⛏</span> 터진 영상 20여 편 댓글 모아서 질문만 추리는 중… (30~60초)';}
   api('/shorts/cmt',fresh?{fresh:true}:{}).then(function(r){bt.disabled=false;if(!r.ok){bx.textContent=r.detail||r.error;return;}var d=r.cmt;
     if(!d){bx.innerHTML=r.radar?'레이더가 찾은 터진 영상들의 댓글에서 <b>한국 시청자가 실제로 묻는 질문</b>을 모아, 많이 나온 순으로 보여 줘요. 우리가 찍어서 답할 수 있는 건 바로 주제로. ‘캐기’를 눌러 보세요.':'먼저 위 📡 레이더를 한 번 돌려 주세요 — 그 영상들 댓글을 캐요.';return;}
-    bt.textContent='다시 캐기';var H='<small>'+new Date(d.at).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'})+' · 영상 '+d.videos+'편 · 댓글 '+d.total+'개 중 질문 '+d.questions+'개 · 숫자=같은 걸 물은 댓글 수(프로그램이 셈)</small>';
+    bt.textContent='다시 캐기';var H='<small>'+new Date(d.at).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'})+' · 영상 '+d.videos+'편 · 댓글 '+d.total+'개 중 질문 '+d.questions+'개'+(d.fails?' · 못 받은 영상 '+d.fails+'편':'')+' · 숫자=같은 걸 물은 댓글 수(프로그램이 셈)</small>';
     H+=d.groups.map(function(g,i){return '<div class="idea" style="'+(g.can?'':'opacity:.55')+'"><div style="display:flex;gap:8px;align-items:baseline"><b style="font-size:18px;color:var(--sky);min-width:34px">'+g.n+'</b><b style="flex:1">'+esc(g.q)+'</b></div><small>👍 '+g.likes+' · 영상 '+g.vids+'편에서'+(g.can?'':' · 우리가 답하긴 어려움')+'</small>'
       +(g.can?'<div style="font-size:13px;margin-top:4px">🎬 '+esc(g.topic)+'<br><small>첫마디 “'+esc(g.hook)+'” · 찍을 것: '+esc(g.film)+'</small></div><div style="margin-top:6px"><button class="chip" data-cmt="'+i+'">이걸로 대본</button> <a class="chip" style="text-decoration:none" href="/edit?topic='+encodeURIComponent(g.topic+' — 첫마디: '+g.hook)+'">🎥 편집실로</a></div>':'')
       +'<details><summary style="font-size:12px;color:var(--ink2)">실제 댓글 보기</summary>'+g.ex.map(function(x){return '<div style="font-size:12.5px;margin:4px 0">“'+esc(x.t)+'” <small>👍'+x.likes+' · '+esc(x.from)+'</small></div>';}).join('')+'</details></div>';}).join('');
