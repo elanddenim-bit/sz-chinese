@@ -1113,9 +1113,11 @@ async function ytStats(env, h, b) {
   const { token } = await ytToken(env, h);
   const H = { authorization: "Bearer " + token };
   const get = async (u) => { const r = await fetch("https://www.googleapis.com/youtube/v3/" + u, { headers: H }); const j = await r.json().catch(() => ({})); if (!r.ok) throw serr("유튜브 조회 " + r.status + ": " + ((j.error && j.error.message) || "").slice(0, 160) + (r.status === 403 ? " — 다시 연결해 권한을 모두 체크해 주세요." : ""), 502); return j; };
-  const ch = await get("channels?part=contentDetails,statistics&mine=true");
+  const ch = await get("channels?part=snippet,contentDetails,statistics&mine=true");
   const it0 = ch.items && ch.items[0];
   if (!it0) throw serr("채널을 찾지 못했어요.", 404);
+  // 채널 이름을 바꾸면(2026-10-11 '광저우 둘이서'→'살다보니 외국') 끝 구독 카드·연결 표시가 옛 이름 → 성적 볼 때마다 저장된 이름 갱신
+  try { const nm = it0.snippet && it0.snippet.title, y = await env.KV.get("yt:" + h, "json"); if (nm && y && y.channel !== nm) { y.channel = nm; await env.KV.put("yt:" + h, JSON.stringify(y)); } } catch {}
   const up = it0.contentDetails.relatedPlaylists.uploads;
   const pl = await get("playlistItems?part=contentDetails&maxResults=50&playlistId=" + encodeURIComponent(up));
   const ids = (pl.items || []).map((x) => x.contentDetails.videoId).filter(Boolean);
