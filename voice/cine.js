@@ -72,7 +72,7 @@ function draw(){
   var h='<div class="card"><h2>사진 고르기</h2><label class="pick"><input type="file" id="ph" accept="image/*"><b>📷 사진 한 장</b>세로 사진이면 숏츠에 바로 쓰기 좋아요 · 영상은 사진 비율 그대로</label><div id="pvBox"></div></div>'
     +'<div class="card"><h2>어떻게 움직일까요?</h2>'+chips('md',moods,S.mood,'mood')
     +'<p class="lbl">추가 연출 (선택, 한국어 OK)</p><input type="text" id="extra" placeholder="예: 커피잔에서 김이 오르고 창밖 사람들이 지나감">'
-    +'<p class="lbl">품질</p>'+chips('mdl',[['flash','⚡ 빠른판 (소리 자동)'],['hq','💎 고품질 (wan2.7)']],S.model,'model')
+    +'<p class="lbl">품질</p>'+chips('mdl',[['flash','⚡ 빠른판 (소리 자동·움직임 단순)'],['hq','💎 고품질 (wan2.7, 움직임 자연스러움)']],S.model,'model')
     +'<p class="lbl">길이</p>'+chips('sc',[[5,'5초'],[10,'10초 (비용 2배)']],S.sec,'sec')
     +'<button class="big" id="go">🎞 영상 만들기</button><p class="note" id="cnt"></p><div class="err" id="err"></div><div id="pend"></div></div>'
     +'<div class="card"><h2>만든 영상</h2><div id="gal" class="gal"></div><p class="note">저장 → 편집실에서 클립으로 고르면 숏츠 인트로·전환 컷으로 쓸 수 있어요. 소리는 AI가 만든 효과음·배경음이에요.</p></div>';
@@ -86,7 +86,7 @@ function counter(){$('cnt').textContent='오늘 '+ST.used+' / '+ST.cap+'개 · 7
 function make(){
   if(!S.img){$('err').textContent='사진을 먼저 골라 주세요';return;}
   var b=$('go');b.disabled=true;b.innerHTML='<span class="spin">🎞</span> 맡기는 중…';$('err').textContent='';
-  api('/shorts/cine/make',{image:S.img.data,mood:S.mood,model:S.model,sec:S.sec,prompt:$('extra').value}).then(function(r){b.disabled=false;b.textContent='🎞 영상 만들기';
+  b.innerHTML='<span class="spin">🎬</span> 사진 보고 연출 짜는 중…';api('/shorts/cine/make',{image:S.img.data,mood:S.mood,model:S.model,sec:S.sec,prompt:$('extra').value}).then(function(r){b.disabled=false;b.textContent='🎞 영상 만들기';
     if(!r.ok){$('err').textContent=r.detail||r.error;return;}
     ST.used=r.used;counter();ST.pend.push({task:r.task,model:S.model,mood:S.mood,at:Date.now()});pending();toast('맡겼어요 — 1~5분 걸려요. 화면 닫아도 돼요');});
 }
@@ -108,7 +108,7 @@ function poll(task){
 function gallery(){
   var g=$('gal');if(!g)return;
   if(!ST.list.length){g.innerHTML='<p class="note">아직 없어요.</p>';return;}
-  g.innerHTML=ST.list.map(function(x,i){return '<div class="it"><video src="'+esc(x.url)+'" poster="'+esc(x.srcUrl)+'" controls playsinline preload="none"></video><small>'+esc(ST.moods[x.mood]||'')+' · '+(x.model==='hq'?'고품질':'빠른판')+' · '+x.sec+'초<br>'+new Date(x.at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'})+'</small><div class="mini"><button data-sv="'+i+'">📥 저장</button><button data-dl="'+i+'">🗑</button></div></div>';}).join('');
+  g.innerHTML=ST.list.map(function(x,i){return '<div class="it"><video src="'+esc(x.url)+'" poster="'+esc(x.srcUrl)+'" controls playsinline preload="none"></video><small>'+esc(ST.moods[x.mood]||'')+' · '+(x.model==='hq'?'고품질':'빠른판')+' · '+x.sec+'초<br>'+new Date(x.at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'})+(x.zh?'<details><summary style="font-size:11px;color:var(--ink2)">AI 연출 보기</summary><span style="font-size:11px">'+esc(x.zh)+'</span></details>':'')+'</small><div class="mini"><button data-sv="'+i+'">📥 저장</button><button data-dl="'+i+'">🗑</button></div></div>';}).join('');
   g.querySelectorAll('[data-sv]').forEach(function(b){b.onclick=function(){var x=ST.list[+b.getAttribute('data-sv')];b.disabled=true;b.textContent='받는 중…';
     fetch(x.url).then(function(r){return r.blob();}).then(function(bl){b.disabled=false;b.textContent='📥 저장';var f=new File([bl],'cine-'+x.at+'.mp4',{type:'video/mp4'});
       if(navigator.canShare&&navigator.canShare({files:[f]}))navigator.share({files:[f]}).catch(function(){});else{var a=document.createElement('a');a.href=URL.createObjectURL(bl);a.download=f.name;a.click();}}).catch(function(){b.disabled=false;b.textContent='📥 다시';toast('받기 실패 — 다시 눌러 주세요');});};});

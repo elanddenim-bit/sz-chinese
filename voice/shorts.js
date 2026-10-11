@@ -496,24 +496,32 @@ async function cineMake(env, b, h) {
   if (d.pend.length >= 3) throw serr("만드는 중인 영상이 3개예요. 하나 끝나면 다시 눌러 주세요.", 429);
   const kind = b.model === "hq" ? "hq" : "flash", model = CINE_MODELS[kind](env);
   const mood = CINE_MOODS[b.mood] ? b.mood : "cine";
-  let extra = String(b.prompt || "").trim().slice(0, 200);
-  if (extra && /[가-힣]/.test(extra)) {
-    try { const o = await qwen(env, [{ role: "system", content: '한국어 영상 연출 지시를 영상 생성 모델용 중국어 한 문장으로 옮겨라. JSON만: {"zh":""}' }, { role: "user", content: extra }]); extra = String(o.zh || extra).slice(0, 300); } catch {}
-  }
-  const prompt = CINE_MOODS[mood][1] + (extra ? "。" + extra : "") + "。保持原图人物、建筑、文字和构图不变，真实自然，不要出现新文字或水印。";
+  const extra = String(b.prompt || "").trim().slice(0, 200);
+  // 사진을 千问 VL 이 직접 보고 '이 사진에 실제 있는 것'의 움직임 + 카메라 움직임을 구체적으로 연출(예전: 고정 프리셋 + "원본 유지" → 밋밋·어색, 소유자 피드백 2026-10-11)
+  let prompt = "", neg = "";
+  try {
+    const o = await qwen(env, [
+      { role: "system", content: "너는 AI 영상 생성(图生视频) 연출가다. 사진을 보고 5~10초 영상의 중국어 프롬프트를 쓴다. 규칙: ① 사진에 실제로 보이는 것만 움직인다(새 사람·물건 추가 금지). ② 움직임은 2~3가지를 구체적으로 — 무엇이 어떻게(예: 杯口热气缓缓上升并散开, 树叶随风摆动, 远处行人从左向右走过, 霓虹灯闪烁). 밋밋하면 안 되고 눈에 띄는 움직임 1개는 반드시. ③ 카메라 움직임 1개(缓慢推近/横移/环绕/升起/拉远 중 사진에 맞는 것). ④ 사람 얼굴이 크면 얼굴은 거의 움직이지 않게, 손·몸 동작은 작게. 글자·간판·로고 모양은 그대로. ⑤ 빛·분위기·소리(环境音) 한 줄. 형식: 주체+장면+움직임+카메라+빛·분위기, 120~220자. negative 는 이 사진에서 생기기 쉬운 망가짐(人物面部变形, 手指畸形, 文字乱码, 物体凭空出现, 画面闪烁 등)." +
+        ' 분위기 지시: ' + CINE_MOODS[mood][1] + (extra ? " / 주인 추가 요청(반드시 반영): " + extra : "") + ' JSON만: {"prompt":"","negative":""}' },
+      { role: "user", content: [{ type: "image_url", image_url: { url: "data:image/" + m[1] + ";base64," + m[2] } }, { type: "text", text: "이 사진으로 영상 프롬프트를 써라." }] },
+    ], { model: env.SHORTS_VL_MODEL || "qwen3-vl-plus" });
+    prompt = String(o.prompt || "").slice(0, 900); neg = String(o.negative || "").slice(0, 300);
+  } catch {}
+  if (!prompt) prompt = CINE_MOODS[mood][1] + (extra ? "。" + extra : "");
+  neg = (neg ? neg + "，" : "") + "人物面部变形，肢体扭曲，手指畸形，文字乱码，画面闪烁，突然出现的新物体，静止不动，水印";
   const sec = [5, 10].includes(Number(b.sec)) ? Number(b.sec) : 5;
   const t = Date.now(), ext = m[1] === "png" ? "png" : m[1] === "webp" ? "webp" : "jpg";
   const src = "shorts/" + h + "/" + CINE + "/src" + t + "." + ext;
   await env.R2.put(src, bytes, { httpMetadata: { contentType: "image/" + m[1] } });
   const img = await ossUp(env, model, bytes, "cine-" + t + "." + ext, "image/" + m[1]);
   const body = kind === "hq"
-    ? { model, input: { prompt, media: [{ type: "first_frame", url: img }] }, parameters: { resolution: "720P", duration: sec, prompt_extend: true, watermark: false } }
-    : { model, input: { prompt, img_url: img }, parameters: { resolution: "720P", duration: sec, prompt_extend: true, audio: true, watermark: false } };
+    ? { model, input: { prompt, negative_prompt: neg, media: [{ type: "first_frame", url: img }] }, parameters: { resolution: "720P", duration: sec, prompt_extend: true, watermark: false } }
+    : { model, input: { prompt, negative_prompt: neg, img_url: img }, parameters: { resolution: "720P", duration: sec, prompt_extend: true, audio: true, watermark: false } };
   const j = await dsRaw(env, "/services/aigc/video-generation/video-synthesis", body, { "X-DashScope-Async": "enable", ...OSSR });
   const task = j.output && j.output.task_id;
   if (!task) throw serr("작업 번호를 받지 못했어요.", 502);
   d.day.n += 1;
-  d.pend.push({ task, model: kind, prompt: extra, mood, sec, src, at: t });
+  d.pend.push({ task, model: kind, prompt: extra, zh: prompt.slice(0, 300), mood, sec, src, at: t });
   await env.KV.put(cineKey(h), JSON.stringify(d));
   return { ok: true, task, used: d.day.n, cap: cineCap(env) };
 }
@@ -543,7 +551,7 @@ async function cinePoll(env, b, h) {
   await env.R2.put(k, await f.arrayBuffer(), { httpMetadata: { contentType: "video/mp4" } });
   const d2 = await cineDoc(env, h);
   d2.pend = d2.pend.filter((x) => x.task !== p.task);
-  if (!d2.list.some((x) => x.k === k)) d2.list = [{ k, src: p.src, model: p.model, mood: p.mood, prompt: p.prompt, sec: p.sec, at: p.at, task: p.task }].concat(d2.list).slice(0, 40);
+  if (!d2.list.some((x) => x.k === k)) d2.list = [{ k, src: p.src, model: p.model, mood: p.mood, prompt: p.prompt, zh: p.zh || "", sec: p.sec, at: p.at, task: p.task }].concat(d2.list).slice(0, 40);
   await env.KV.put(cineKey(h), JSON.stringify(d2));
   return { ok: true, status: "done", url: await fileUrl(env, k) };
 }
