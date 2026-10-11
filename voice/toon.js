@@ -117,7 +117,7 @@ function drawCards(){var el=$('cards');if(!el)return;
       +'<input type="text" data-i="'+i+'" data-t="cap2" placeholder="중간에 바뀌는 자막 (선택)" value="'+esc(c.cap2)+'">'
       +'<input type="text" data-i="'+i+'" data-t="sub" placeholder="작은 줄 (중국어 한마디·병음·뜻, 선택)" value="'+esc(c.sub)+'">'
       +'<input type="text" data-i="'+i+'" data-t="bubble" placeholder="말풍선 안 글자 (선택)" value="'+esc(c.bubble)+'">'
-      +chipRow('길이',i,[[2,'2초',"dur"],[2.5,'2.5',"dur"],[3,'3',"dur"],[3.5,'3.5',"dur"],[4,'4',"dur"],[5,'5',"dur"],[6,'6',"dur"]],c.dur)
+      +chipRow('길이',i,[[2,'2초',"dur"],[2.5,'2.5',"dur"],[3,'3',"dur"],[3.5,'3.5',"dur"],[4,'4',"dur"],[5,'5',"dur"],[6,'6',"dur"],[7,'7',"dur"],[8,'8',"dur"]],c.dur)
       +(c.cap2?chipRow('바뀜',i,[[0.4,'40%',"at2"],[0.5,'절반',"at2"],[0.6,'60%',"at2"]],c.at2):'')
       +chipRow('움직임',i,[['in','천천히 확대',"zoom"],['punch','반전 때 확 당김',"zoom"],['none','그대로',"zoom"]],c.zoom)
       +chipRow('시작음',i,SFX.map(function(x){return [x[0],x[1],'sfx1'];}),c.sfx1)
