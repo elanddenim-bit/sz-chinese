@@ -210,7 +210,7 @@ async function plan(env, b, h) {
     (topic ? "내가 적은 설명: " + topic + ". " : "") +
     "이걸로 약 " + sec + "초짜리 한국어 유튜브 숏츠 편집 계획을 짜라. " + (ser ? ser.rule + " " : "") + KR_RULES + " 이번 영상은 " + ang.d + ". 가격이 보이거나 언급되면 위안과 원화(1위안≈" + rate + "원)를 같이. " +
     "규칙: 첫 구간은 가장 눈길 끄는 장면(훅). 구간은 2.5~6초로 너무 잘게 자르지 말고(첫 구간만 1.5초도 됨), 움직임이 이어지는 장면은 한 구간으로 길게, start/end 는 그 클립 길이 안에서 캡처를 근거로 고르고, 흔들리거나 의미 없는 부분은 피한다. 같은 순간을 두 번 쓰지 않는다. 구간 합계가 약 " + sec + "초 — 단 클립이 모자라면 반복하지 말고 더 짧게 끝낸다. " +
-    "cap 은 화면 큰 글씨(한국어 12자 이내, 이모지 1개까지, 필요 없으면 빈칸). say 는 그 구간에 깔 한국어 내레이션 — 구간 길이 1초당 4글자 이내로 짧게, 화면만으로 충분하면 빈칸. 사진에 없는 사실을 지어내지 말 것(모르면 느낌·질문으로). 특히 제목·cap·say 에 '마지막·최초·역대·유일' 같은 사실 주장, 선수·연예인 이름, 날짜·경기 결과는 내가 적은 설명에 있을 때만 쓴다. 마지막 구간은 댓글 유도 질문. " +
+    "cap 은 화면 큰 글씨(한국어 12자 이내, 이모지 1개까지, 필요 없으면 빈칸). say 는 그 구간에 깔 한국어 내레이션 — 구간 길이 1초당 4글자 이내로 짧게, 화면만으로 충분하면 빈칸. say 는 소리 내어 읽는 말이므로 →, :, =, / 같은 기호를 쓰지 말고 문장으로(예: '66위안, 우리 돈 약 만 2천 원'). 같은 클립을 바로 이어 두 번 쓰지 말고, 이야기(가격·음식)와 상관없는 풍경은 중간에 끼우지 말고 쓰려면 맨 앞 분위기 컷으로. 사진에 없는 사실을 지어내지 말 것(모르면 느낌·질문으로). 특히 제목·cap·say 에 '마지막·최초·역대·유일' 같은 사실 주장, 선수·연예인 이름, 날짜·경기 결과는 내가 적은 설명에 있을 때만 쓴다. 마지막 구간은 댓글 유도 질문. " +
     'title(한국어 40자 이내), description(2~3줄), tags(8개 이내, # 없이). JSON만 출력: {"title":"","description":"","tags":[],"segments":[{"clip":1,"start":0,"end":3,"cap":"","say":""}]}' });
   const out = await qwen(env, [{ role: "user", content }], { model: env.SHORTS_VL_MODEL || "qwen3-vl-plus" });
   let segs = (Array.isArray(out.segments) ? out.segments : []).map((x) => {
@@ -219,8 +219,13 @@ async function plan(env, b, h) {
     let st = Math.max(0, Number(x.start) || 0), en = Number(x.end) || st + 3;
     st = Math.min(st, Math.max(0, clips[c].dur - 0.5)); en = Math.min(Math.max(en, st + 1), clips[c].dur);
     if (en - st < 0.5) return null;
-    return { clip: c, s: +st.toFixed(2), e: +en.toFixed(2), cap: String(x.cap || "").slice(0, 30), say: String(x.say || "").slice(0, 160), img: "", move: "" };
-  }).filter(Boolean).slice(0, 15);
+    if (en - st > 6.5) en = st + 6; // 한 구간이 너무 길면 지루함
+    const say = String(x.say || "").replace(/\s*(→|->|=>)\s*/g, ", ").replace(/\s*[:：=]\s*/g, ", ").replace(/,\s*,/g, ",").slice(0, 160);
+    return { clip: c, s: +st.toFixed(2), e: +en.toFixed(2), cap: String(x.cap || "").slice(0, 30), say, img: "", move: "" };
+  }).filter(Boolean)
+    // 바로 앞 구간과 같은 클립이 겹치는 부분이면 버림(같은 장면 반복처럼 보임)
+    .filter((x, i, a) => !(i > 0 && a[i - 1].clip === x.clip && x.s < a[i - 1].e + 0.5))
+    .slice(0, 15);
   if (!segs.length) segs = clips.slice(0, 8).map((c, i) => ({ clip: i, s: 0, e: Math.min(c.dur, 4), cap: "", say: "", img: "", move: "" }));
   const id = "s" + Date.now().toString(36);
   let title = String(out.title || topic || "광저우 둘이서");
