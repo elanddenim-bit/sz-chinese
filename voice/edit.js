@@ -145,6 +145,7 @@ function editor(){
   var o=D.opts||{};D.opts=o;
   if(!o.fit)o.fit='crop';if(o.orig==null)o.orig=0.3;if(o.narr==null)o.narr=true;if(o.subs==null)o.subs=true;
   if(o.tag==null)o.tag='📍 광저우 广州';if(o.end==null)o.end=true;if(o.bgv==null)o.bgv=0.12;
+  if(CLOUD===null){CLOUD=false;api('/shorts/cloud/ping').then(function(r){if(r&&r.ready){CLOUD=true;if(D&&$('renderBtn')&&!$('cloudBtn')){readForm();editor();}}}).catch(function(){});}
   if(CH===null){CH='';api('/shorts/yt/status').then(function(y){CH=(y&&y.channel)||'';}).catch(function(){});}
   var tot=D.scenes.reduce(function(a,s){return a+segLen(s);},0)+(o.end?2:0);
   var h='<div class="card"><h2>제목·설명</h2><input type="text" id="tt" value="'+esc(D.title)+'"><p class="lbl">설명</p><textarea id="ds">'+esc(D.description)+'</textarea><p class="lbl">태그(쉼표)</p><input type="text" id="tg" value="'+esc((D.tags||[]).join(', '))+'"></div>';
@@ -158,7 +159,8 @@ function editor(){
    +'<p class="lbl">배경음악</p><label class="pick" style="padding:12px"><input type="file" id="bgmIn" accept=".mp3,.m4a,.aac,.wav,audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,audio/aac"><b style="font-size:14.5px">🎵 '+(BGM?esc(BGM.name):'폰에 있는 음악 고르기')+'</b>'+(BGM?'눌러서 다른 곡으로':'유튜브 오디오 보관함처럼 저작권 걱정 없는 곡만')+'</label>'
    +(BGM?'<div style="margin-top:6px">'+chipRow('bgv',[[0,'끄기'],[0.07,'아주 작게'],[0.12,'작게'],[0.22,'보통']],o.bgv)+'</div><p class="note">내레이션 나올 땐 자동으로 줄고 끝에서 서서히 꺼져요. 곡은 이 화면을 닫으면 다시 골라야 해요.</p>':'')
    +'<p class="lbl">왼쪽 위 위치 표시 (비우면 없음)</p><input type="text" id="tagIn" maxlength="20" value="'+esc(o.tag)+'"></div>';
-  h+='<div class="card"><h2>영상 완성</h2><p class="note">폰에서 720×1280으로 녹화해요. 길이만큼 걸리니 화면을 켜 두세요.</p><button class="big ghost" id="pvAll">▶ 전체 미리보기 (녹화 안 함)</button><button class="big" id="renderBtn">🎬 영상 만들기</button><div id="out"></div></div>';
+  h+='<div class="card"><h2>영상 완성</h2>'+(CLOUD?'<p class="note">☁️ 클라우드 편집: 원본 클립과 내레이션을 알리바바에 올리면 서버가 정확하게 합쳐요(말·컷 끊김 없음). 처음엔 클립 업로드 시간이 걸리고, 같은 초안을 다시 만들 땐 클립을 다시 안 올려요.</p>':'<p class="note">폰에서 720×1280으로 녹화해요. 길이만큼 걸리니 화면을 켜 두세요.</p>')
+    +'<button class="big ghost" id="pvAll">▶ 전체 미리보기 (녹화 안 함)</button>'+(CLOUD?'<button class="big" id="cloudBtn">☁️ 영상 만들기 (클라우드 편집)</button>':'')+'<button class="big'+(CLOUD?' ghost':'')+'" id="renderBtn">'+(CLOUD?'📱 폰에서 바로 녹화 (예전 방식)':'🎬 영상 만들기')+'</button><div id="out"></div></div>';
   h+='<a class="big ghost" href="/shorts">← 숏츠 공방</a>';
   // 설정 칩·구간 버튼을 누를 때마다 맨 위로 튀던 것 방지: 처음 열 때만 맨 위로
   var first=!$('renderBtn'),y0=window.scrollY||0;$('main').innerHTML=h;window.scrollTo(0,first?0:y0);bind();
@@ -201,6 +203,7 @@ function bind(){
   $('bgmIn').onchange=function(){var f=this.files&&this.files[0];this.value='';if(!f)return;readForm();BGM={file:f,name:f.name.replace(/\.[^.]+$/,'').slice(0,30),buf:null};if(!D.opts.bgv)D.opts.bgv=0.12;editor();saveSoon();};
   if($('asrBtn'))$('asrBtn').onclick=makeAsr;
   $('renderBtn').onclick=function(){render(false);};
+  if($('cloudBtn'))$('cloudBtn').onclick=cloudRender;
   $('pvAll').onclick=function(){render(true);};
   segThumbs();
 }
@@ -446,5 +449,107 @@ async function render0(dry){
 function upBlob(blob,type,onp){return new Promise(function(ok,no){var x=new XMLHttpRequest();x.open('POST','/shorts/save?id='+D.id);x.setRequestHeader('content-type',type);x.setRequestHeader('x-code',CODE);
   x.upload.onprogress=function(e){if(e.lengthComputable)onp(e.loaded/e.total);};
   x.onload=function(){try{ok(JSON.parse(x.responseText));}catch(e){no(new Error('서버 응답 오류 '+x.status));}};x.onerror=function(){no(new Error('네트워크 오류 — 와이파이에서 다시 올려 보세요'));};x.send(blob);});}
+// ---------- 6) ☁️ 클라우드 편집(알리바바) — 폰은 재료만 올리고 서버가 정확한 타임라인으로 합성(실시간 녹화 끊김 없음) ----------
+var CLOUD=null,OSSUP={};try{OSSUP=JSON.parse(localStorage.getItem('ed-oss')||'{}');}catch(e){}
+var KF='-apple-system,"Apple SD Gothic Neo",sans-serif';
+function ovC(){var c=document.createElement('canvas');c.width=720;c.height=1280;return c;}
+function cvBlob(c,type,q){return new Promise(function(ok,no){c.toBlob(function(b){b?ok(b):no(new Error('그림 만들기 실패'));},type||'image/png',q);});}
+function stk(g,txt,x,y,font,fill,lw){g.font=font;g.textAlign='center';g.lineJoin='round';if(lw){g.lineWidth=lw;g.strokeStyle='rgba(0,0,0,.85)';g.strokeText(txt,x,y);}g.fillStyle=fill;g.fillText(txt,x,y);}
+function ovCap(t,first){var c=ovC(),g=c.getContext('2d'),fs=66,f='900 '+fs+'px '+KF;g.font=f;wrap(g,t,580).forEach(function(l,k){stk(g,l,360,256+k*(fs+12),f,first&&k===0?'#FFD84D':'#FFFFFF',14);});return cvBlob(c);}
+function ovSub(t){var c=ovC(),g=c.getContext('2d'),f='800 44px '+KF;g.font=f;var sl=wrap(g,t,570).slice(0,2);sl.forEach(function(l,k){stk(g,l,340,858+k*56-(sl.length-1)*28,f,'#FFFFFF',10);});return cvBlob(c);}
+function ovAsr(ko,zh){var c=ovC(),g=c.getContext('2d'),f='800 42px '+KF;g.font=f;var kl=wrap(g,ko,570).slice(0,2),y0=896-(kl.length-1)*27;
+  if(zh){var f4='600 26px -apple-system,"PingFang SC",sans-serif';g.font=f4;stk(g,wrap(g,zh,560)[0],340,y0-52,f4,'#FFD84D',7);}kl.forEach(function(l,k){stk(g,l,340,y0+k*54,f,'#FFFFFF',10);});return cvBlob(c);}
+function ovBase(){var c=ovC(),g=c.getContext('2d'),gr=g.createLinearGradient(0,640,0,1280);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,.55)');g.fillStyle=gr;g.fillRect(0,640,720,640);
+  if(D.opts.tag){g.font='600 22px -apple-system,sans-serif';g.textAlign='left';g.fillStyle='rgba(255,255,255,.75)';g.fillText(D.opts.tag,30,60);}return cvBlob(c);}
+async function frameJpg(v,t,end){await seekTo(v,Math.max(0,t));var c=ovC(),g=c.getContext('2d'),W=720,H=1280,vw=v.videoWidth||W,vh=v.videoHeight||H,cs=Math.max(W/vw,H/vh);g.drawImage(v,(W-vw*cs)/2,(H-vh*cs)/2,vw*cs,vh*cs);
+  if(end){var t2=document.createElement('canvas');t2.width=24;t2.height=42;t2.getContext('2d').drawImage(c,0,0,24,42);g.imageSmoothingEnabled=true;g.drawImage(t2,-20,-20,W+40,H+40);g.fillStyle='rgba(10,20,35,.55)';g.fillRect(0,0,W,H);
+    var y=H*0.42;stk(g,'끝까지 봐 주셔서 고마워요',W/2,y,'700 38px '+KF,'#FFFFFF',8);if(CH)stk(g,CH,W/2,y+92,'900 64px '+KF,'#FFD84D',12);
+    var bw=300,bh=96,bx=(W-bw)/2,by=y+150,r=bh/2;g.fillStyle='#D21624';g.beginPath();g.moveTo(bx+r,by);g.lineTo(bx+bw-r,by);g.arc(bx+bw-r,by+r,r,-Math.PI/2,Math.PI/2);g.lineTo(bx+r,by+bh);g.arc(bx+r,by+r,r,Math.PI/2,Math.PI*1.5);g.closePath();g.fill();
+    g.font='800 44px '+KF;g.textAlign='center';g.fillStyle='#FFFFFF';g.fillText('🔔 구독',W/2,by+bh/2+15);}
+  return cvBlob(c,'image/jpeg',0.9);}
+function ossPut(pol,key,blob,onp){return new Promise(function(ok,no){var f=new FormData();f.append('key',key);Object.keys(pol.fields).forEach(function(k){f.append(k,pol.fields[k]);});f.append('file',blob);
+  var x=new XMLHttpRequest();x.open('POST',pol.host);x.upload.onprogress=function(e){if(e.lengthComputable&&onp)onp(e.loaded);};
+  x.onload=function(){if(x.status>=200&&x.status<300)ok();else no(new Error('업로드 실패 '+x.status+' '+String(x.responseText||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').slice(0,140)));};
+  x.onerror=function(){no(new Error('업로드 네트워크 오류 — 와이파이 확인, 또는 버킷 CORS 설정(voice.zhnote.net · POST 허용) 확인'));};x.send(f);});}
+function extOf(name,type,def){var m=String(name||'').match(/\.(\w{2,4})$/);if(m)return m[1].toLowerCase();type=String(type||'');return type.indexOf('wav')>=0?'wav':type.indexOf('mpeg')>=0?'mp3':type.indexOf('mp4')>=0||type.indexOf('m4a')>=0||type.indexOf('aac')>=0?'m4a':type.indexOf('webm')>=0?'webm':type.indexOf('quicktime')>=0?'mov':def;}
+async function cloudRender(){
+  if(RUN)return;readForm();api('/shorts/update',{id:D.id,draft:draftBody()});
+  var btn=$('cloudBtn'),out=$('out'),ac=getAC(),lbl=btn.textContent,o=D.opts;btn.disabled=true;$('renderBtn').disabled=true;$('pvAll').disabled=true;
+  function prog(t,f){out.innerHTML='<p class="prog">'+t+'</p><div class="bar"><i id="cb" style="width:'+Math.round((f||0)*100)+'%"></i></div>';}
+  try{
+    var narr=await ensureNarr(ac,function(t){prog(t);});
+    prog('📐 타임라인 짜는 중…');
+    var T=0,nEnd=0,vid=[],ovs=[],aud=[],talk=[],used={};
+    for(var k=0;k<D.scenes.length;k++){var sc=D.scenes[k],c=CLIPS[sc.clip];if(!c)continue;
+      var sp=sc.sp||1,seg=segLen(sc),nd=narr[k]?narr[k].duration:0,room=Math.max(0.3,(c.dur-sc.s)/sp),hasN=!!narr[k],last=k===D.scenes.length-1;
+      var len=Math.max(Math.min(Math.max(seg,nd?nd+0.4:0),room),0.8),t0=T,ns=0;
+      if(hasN){ns=Math.max(t0+0.1,nEnd+0.08);nEnd=ns+nd;talk.push([ns,nEnd]);aud.push({k:k,tin:ns,tout:nEnd});}
+      if(last&&nEnd>t0+len-0.3)len=nEnd-t0+0.4;
+      var vl=Math.min(len,room);used[sc.clip]=1;
+      vid.push({clip:sc.clip,in:sc.s,out:Math.min(c.dur,sc.s+vl*sp),speed:sp,tin:t0,tout:t0+vl,gain:(o.orig||0)*(hasN||nEnd>t0+0.2?0.4:1)});
+      if(len>vl+0.05)ovs.push({kind:'freeze',layer:'main',v:c.v,at:Math.min(c.dur,sc.s+vl*sp)-0.06,tin:t0+vl,tout:t0+len});
+      if(sc.cap)ovs.push({kind:'cap',layer:'cap',txt:sc.cap,first:k===0,tin:t0,tout:t0+len});
+      if(o.subs){var chs=sayChunks(sc.say);if(chs.length&&(hasN||!o.narr||!sc.say)){var s0=hasN?ns:t0,span=hasN?nd:len,acc=0;chs.forEach(function(ch){var a=s0+acc*span;acc+=ch.w;ovs.push({kind:'sub',layer:'sub',txt:ch.t,tin:a,tout:Math.max(a+0.3,s0+acc*span)});});}}
+      var A=o.osub&&clipAsr(sc.clip);if(A)A.forEach(function(r){if(!r[3])return;var a=t0+(r[0]-sc.s)/sp,b=t0+(r[1]+0.3-sc.s)/sp;if(b<=t0||a>=t0+vl)return;ovs.push({kind:'asr',layer:'asr',ko:r[3],zh:r[2],tin:Math.max(t0,a),tout:Math.min(t0+vl,b)});});
+      T+=len;}
+    if(!vid.length)throw new Error('구간이 없어요');
+    ovs=ovs.filter(function(x){if(x.kind!=='asr')return true;return !talk.some(function(t){return x.tin<t[1]&&x.tout>t[0];})&&!ovs.some(function(p){return p.kind==='sub'&&x.tin<p.tout&&x.tout>p.tin;});});
+    var body=T;if(o.end){var lv=vid[vid.length-1];ovs.push({kind:'end',layer:'main',v:CLIPS[lv.clip].v,at:lv.out-0.06,tin:T,tout:T+2});T+=2;}
+    ovs.push({kind:'base',layer:'base',tin:0,tout:body});
+    prog('🔑 업로드 준비…');var pol=await api('/shorts/cloud/policy',{id:D.id});if(!pol.ok)throw new Error(pol.detail||pol.error);var dir=pol.dir;
+    // 올릴 것 목록 — 원본 클립은 같은 초안에서 이미 올렸으면 다시 안 올림
+    var ups=[],clipKey={};
+    Object.keys(used).forEach(function(i){var c=CLIPS[i],f=c.file,key=dir+'clip-'+f.size+'-'+(f.lastModified||0)+'.'+extOf(f.name,f.type,'mp4');clipKey[i]=key;if(!OSSUP[key])ups.push({key:key,size:f.size,get:function(){return f;},clip:1});});
+    var rid=Date.now().toString(36);
+    aud.forEach(function(a,i){var sc=D.scenes[a.k];if(o.voice==='rec'&&sc._rec){var b=sc._rec.blob;a.key=dir+'n'+rid+'-'+i+'.'+extOf('',b.type,'m4a');ups.push({key:a.key,size:b.size,get:function(){return b;}});}
+      else if(sc._narr&&sc._narr.url){var u=sc._narr.url;a.key=dir+'n'+rid+'-'+i+'.'+(u.indexOf('.mp3')>=0?'mp3':'wav');ups.push({key:a.key,size:300000,get:function(){return fetch(u).then(function(r){if(!r.ok)throw new Error('내레이션 받기 실패 '+r.status);return r.blob();});}});}});
+    aud=aud.filter(function(a){return a.key;});
+    var bgmKey='';if(BGM&&o.bgv){bgmKey=dir+'bgm-'+BGM.file.size+'.'+extOf(BGM.file.name,BGM.file.type,'mp3');if(!OSSUP[bgmKey])ups.push({key:bgmKey,size:BGM.file.size,get:function(){return BGM.file;},clip:1});}
+    ovs.forEach(function(x,i){x.key=dir+'o'+rid+'-'+i+(x.kind==='freeze'||x.kind==='end'?'.jpg':'.png');ups.push({key:x.key,size:40000,get:function(){
+      return x.kind==='cap'?ovCap(x.txt,x.first):x.kind==='sub'?ovSub(x.txt):x.kind==='asr'?ovAsr(x.ko,x.zh):x.kind==='base'?ovBase():frameJpg(x.v,x.at,x.kind==='end');}});});
+    var tot=ups.reduce(function(a,u){return a+u.size;},0)||1,done=0;
+    for(var j=0;j<ups.length;j++){var u=ups[j],nm=u.clip?'원본 영상':'재료';
+      prog('⏫ '+nm+' 올리는 중… '+(j+1)+'/'+ups.length+(u.clip?' ('+(u.size/1048576).toFixed(0)+'MB)':''),done/tot);
+      var blob=await u.get();
+      await ossPut(pol,u.key,blob,function(l){var b=$('cb');if(b)b.style.width=Math.round(Math.min(1,(done+l)/tot)*100)+'%';});
+      done+=u.size;if(u.clip){OSSUP[u.key]=Date.now();try{localStorage.setItem('ed-oss',JSON.stringify(OSSUP));}catch(e){}}}
+    var tl={fit:o.fit,video:vid.map(function(v){return {k:clipKey[v.clip],in:v.in,out:v.out,speed:v.speed,tin:v.tin,tout:v.tout,gain:v.gain};}),
+      images:ovs.map(function(x){return {k:x.key,layer:x.layer,tin:x.tin,tout:x.tout};}),
+      audio:aud.map(function(a){return {k:a.key,tin:a.tin,tout:a.tout,gain:1.3,track:'narr'};}).concat(bgmKey?[{k:bgmKey,tin:0,tout:T,gain:Math.min(0.6,o.bgv*2),loop:true,fade:1.2,track:'bgm'}]:[])};
+    prog('☁️ 알리바바에 편집 맡기는 중…');
+    var s=await api('/shorts/cloud/submit',{id:D.id,tl:tl});if(!s.ok)throw new Error(s.detail||s.error);
+    var t1=Date.now(),res=null;
+    while(true){await sleep(4000);var p=await api('/shorts/cloud/poll',{id:D.id,job:s.job,out:s.out});
+      if(!p.ok){if(p.error==='network')continue;throw new Error(p.detail||p.error);}
+      if(p.status==='done'){res=p;break;}if(p.status==='failed')throw new Error('합성 실패(과금 없음): '+(p.detail||''));
+      prog('☁️ 합성 중… '+(p.status==='Queuing'||p.status==='Init'?'차례 기다리는 중':'만드는 중')+' · '+Math.round((Date.now()-t1)/1000)+'초',Math.min(0.98,(p.progress||0)/100));
+      if(Date.now()-t1>900000)throw new Error('15분이 지나도 안 끝났어요. 잠시 뒤 다시 눌러 주세요.');}
+    prog('⬇️ 완성본 받는 중…',1);
+    var r=await fetch(res.url);if(!r.ok)throw new Error('완성본 받기 실패 '+r.status);var vb=await r.blob();
+    cloudDone(vb,T);
+  }catch(e){out.insertAdjacentHTML('beforeend','<p class="err">'+esc(e&&e.message||e)+'</p>');}
+  finally{btn.disabled=false;btn.textContent=lbl;$('renderBtn').disabled=false;$('pvAll').disabled=false;}
+}
+function cloudDone(blob,total){
+  var type='video/mp4',url=URL.createObjectURL(blob);
+  $('out').innerHTML='<video class="out" controls playsinline src="'+url+'"></video>'
+   +'<p class="note" style="text-align:center">'+fmt(total)+'초 · '+(blob.size/1048576).toFixed(1)+'MB · 클라우드 편집</p>'
+   +'<div class="mini" style="justify-content:center"><button id="dl">📥 기기에 저장</button></div>'
+   +'<p class="lbl">유튜브 공개 범위</p><div class="chips">'+[['private','비공개(확인 후 공개)'],['unlisted','일부 공개'],['public','바로 공개']].map(function(x,k){return '<button class="chip'+(k===0?' on':'')+'" data-pv="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>'
+   +'<button class="big red" id="ytUp">▶ 유튜브에 올리기</button><div class="bar" id="ubw" style="display:none;margin-top:8px"><i id="ub"></i></div><div class="err" id="ue"></div>';
+  var PV='private';document.querySelectorAll('[data-pv]').forEach(function(c){c.onclick=function(){PV=c.getAttribute('data-pv');document.querySelectorAll('[data-pv]').forEach(function(x){x.classList.toggle('on',x===c);});};});
+  $('dl').onclick=function(){var f=new File([blob],(D.title||'shorts').replace(/[\\/:*?"<>|#]/g,'').slice(0,40)+'.mp4',{type:type});
+    if(navigator.canShare&&navigator.canShare({files:[f]}))navigator.share({files:[f]}).catch(function(){});else{var a=document.createElement('a');a.href=url;a.download=f.name;a.click();}};
+  $('ytUp').onclick=async function(){var b=this,ue=$('ue');b.disabled=true;ue.textContent='';
+    try{var mb=(blob.size/1048576).toFixed(1);$('ubw').style.display='block';
+      var j=await upBlob(blob,type,function(f){b.innerHTML='<span class="spin">⏫</span> 서버에 저장 중… '+Math.round(f*100)+'% ('+mb+'MB)';$('ub').style.width=Math.round(f*100)+'%';});
+      if(!j.ok)throw new Error(j.detail||j.error);
+      b.innerHTML='<span class="spin">▶</span> 유튜브에 올리는 중…';readForm();
+      var y=await api('/shorts/yt/upload',{id:D.id,privacy:PV,title:D.title,description:D.description,tags:D.tags,synthetic:!!(D.opts.narr&&D.opts.voice!=='rec'&&D.scenes.some(function(x){return (x.say||'').trim();}))});
+      if(!y.ok)throw new Error(y.detail||y.error);
+      b.textContent='✅ 올렸어요';ue.innerHTML='<a href="'+esc(y.yt.url)+'" target="_blank" style="color:var(--sky)">'+esc(y.yt.url)+'</a>';
+    }catch(e){ue.textContent=e.message;b.disabled=false;b.textContent='▶ 다시 올리기';}};
+}
+
 start();
 </script></body></html>`;

@@ -99,6 +99,10 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
   if (path === "/shorts/update") return update(env, b, h);
   if (path === "/shorts/asset") return asset(env, b, h, synth);
   if (path === "/shorts/poll") return poll(env, b, h);
+  if (path === "/shorts/cloud/ping") return cloudPing(env, b);
+  if (path === "/shorts/cloud/policy") return cloudPolicy(env, b, h);
+  if (path === "/shorts/cloud/submit") return cloudSubmit(env, b, h);
+  if (path === "/shorts/cloud/poll") return cloudPoll(env, b, h);
   if (path === "/shorts/toon/idea") return toonIdea(env, b);
   if (path === "/shorts/toon/new") return toonNew(env, b, h);
   if (path === "/shorts/voice/enroll") return krEnroll(env, b, h);
@@ -596,6 +600,111 @@ async function toonNew(env, b, h) {
   l.unshift({ id, title: d.title, made: d.made, kind: "toon" });
   await env.KV.put(listKey(h), JSON.stringify(l.slice(0, 40)));
   return { ok: true, id };
+}
+
+// ---------------- ☁️ 클라우드 편집 (알리바바 IMS 剪辑合成, 2026-10-11) ----------------
+// 폰 실시간 녹화는 기기가 조금만 버벅여도 말·컷이 끊김 → 폰은 재료(원본 클립·내레이션·자막 PNG)만 OSS 에 올리고,
+// 서버가 정확한 타임라인으로 SubmitMediaProducingJob → 완성 mp4(OSS) 서명 주소를 폰에 줌. 720P 0.03위안/분.
+// 시크릿: ALIYUN_AK_ID, ALIYUN_AK_SECRET(RAM, ICE+OSS 권한), OSS_BUCKET(같은 지역·CORS: voice.zhnote.net), ALIYUN_REGION(기본 cn-shanghai)
+const ali = (env) => ({ id: env.ALIYUN_AK_ID, sec: env.ALIYUN_AK_SECRET, bucket: env.OSS_BUCKET, region: env.ALIYUN_REGION || "cn-shanghai" });
+const cloudOk = (env) => !!(env.ALIYUN_AK_ID && env.ALIYUN_AK_SECRET && env.OSS_BUCKET);
+const ossHost = (a) => a.bucket + ".oss-" + a.region + ".aliyuncs.com";
+async function hmacSha1B64(key, msg) {
+  const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(key), { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+  const s = new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(msg)));
+  let t = ""; for (const x of s) t += String.fromCharCode(x);
+  return btoa(t);
+}
+const pctEnc = (s) => encodeURIComponent(s).replace(/[!'()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+// 알리바바 RPC API 서명 v1(HMAC-SHA1), 긴 Timeline 은 POST 폼으로
+async function ice(env, action, params) {
+  const a = ali(env);
+  const p = { Action: action, Version: "2020-11-09", Format: "JSON", AccessKeyId: a.id, SignatureMethod: "HMAC-SHA1", SignatureVersion: "1.0", SignatureNonce: crypto.randomUUID(), Timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"), ...params };
+  const q = Object.keys(p).sort().map((k) => pctEnc(k) + "=" + pctEnc(String(p[k]))).join("&");
+  const sig = await hmacSha1B64(a.sec + "&", "POST&" + pctEnc("/") + "&" + pctEnc(q));
+  let r;
+  try { r = await fetch("https://ice." + a.region + ".aliyuncs.com/", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: q + "&Signature=" + pctEnc(sig), signal: AbortSignal.timeout(25000) }); }
+  catch (e) { throw serr("알리바바 편집 서버 연결 " + (e.name === "TimeoutError" ? "시간 초과" : "실패") + " — 다시 눌러 주세요.", 504); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw serr("알리바바 편집 " + r.status + ": " + (j.Code || "") + " " + String(j.Message || "").slice(0, 200), 502);
+  return j;
+}
+async function ossSign(a, key, sec) {
+  const exp = Math.floor(Date.now() / 1000) + (sec || 7200);
+  const sig = await hmacSha1B64(a.sec, "GET\n\n\n" + exp + "\n/" + a.bucket + "/" + key);
+  return "https://" + ossHost(a) + "/" + key.split("/").map(encodeURIComponent).join("/") + "?OSSAccessKeyId=" + encodeURIComponent(a.id) + "&Expires=" + exp + "&Signature=" + encodeURIComponent(sig);
+}
+const cloudDir = (h, id) => { if (!/^s[0-9a-z]{6,12}$/.test(String(id || ""))) throw serr("bad id"); return "sz/" + h + "/" + id + "/"; };
+async function cloudPing(env, b) {
+  if (!cloudOk(env)) return { ok: true, ready: false };
+  if (!b.test) return { ok: true, ready: true };
+  const a = ali(env), res = { ok: true, ready: true };
+  try { await ice(env, "GetMediaProducingJob", { JobId: "0123456789abcdef0123456789abcdef" }); res.ice = "ok"; }
+  catch (e) { const m = String(e.message || e); res.ice = /AccessKey|Signature|Forbidden|NoPermission|NotActivat|Unauthorized|NotOpen|not.?open|Denied/i.test(m) ? "실패: " + m.slice(0, 180) : "ok"; res.iceRaw = m.slice(0, 180); }
+  try { const r = await fetch(await ossSign(a, "", 300), { signal: AbortSignal.timeout(15000) }); res.oss = r.ok ? "ok" : "실패: HTTP " + r.status + " " + (await r.text()).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 160); }
+  catch (e) { res.oss = "실패: " + (e.name === "TimeoutError" ? "시간 초과" : String(e.message || e).slice(0, 100)); }
+  return res;
+}
+async function cloudPolicy(env, b, h) {
+  if (!cloudOk(env)) throw serr("클라우드 편집 설정(시크릿)이 아직 없어요.", 400, "cloud_config");
+  const a = ali(env), dir = cloudDir(h, b.id);
+  const policy = btoa(JSON.stringify({ expiration: new Date(Date.now() + 3 * 3600e3).toISOString(), conditions: [["starts-with", "$key", dir], ["content-length-range", 0, 2147483648]] }));
+  return { ok: true, host: "https://" + ossHost(a), dir, fields: { OSSAccessKeyId: a.id, policy, Signature: await hmacSha1B64(a.sec, policy), success_action_status: "200" } };
+}
+async function cloudSubmit(env, b, h) {
+  if (!cloudOk(env)) throw serr("클라우드 편집 설정(시크릿)이 아직 없어요.", 400, "cloud_config");
+  const a = ali(env), dir = cloudDir(h, b.id), tl = b.tl || {};
+  const okKey = (k) => typeof k === "string" && k.startsWith(dir) && k.length < 220 && /^[\w\/.\-]+$/.test(k);
+  const url = (k) => { if (!okKey(k)) throw serr("잘못된 재료 경로"); return "https://" + ossHost(a) + "/" + k; };
+  const n3 = (x) => Math.max(0, Math.round((Number(x) || 0) * 1000) / 1000);
+  const W = 720, H = 1280, fit = tl.fit === "full" ? "Contain" : "Cover";
+  const main = [];
+  for (const v of (Array.isArray(tl.video) ? tl.video : []).slice(0, 40)) {
+    const fx = [{ Type: "Volume", Gain: Math.min(2, Math.max(0, Number(v.gain) || 0)) }];
+    if (fit === "Contain") fx.push({ Type: "Background", SubType: "Blur", Radius: 0.1 });
+    const c = { MediaURL: url(v.k), In: n3(v.in), Out: n3(v.out), TimelineIn: n3(v.tin), TimelineOut: n3(v.tout), X: 0, Y: 0, Width: W, Height: H, AdaptMode: fit, Effects: fx };
+    const sp = Number(v.speed) || 1;
+    if (Math.abs(sp - 1) > 0.01) c.Speed = Math.min(4, Math.max(0.25, sp));
+    main.push(c);
+  }
+  if (!main.length) throw serr("영상 구간이 없어요.");
+  const layers = {};
+  for (const im of (Array.isArray(tl.images) ? tl.images : []).slice(0, 400)) {
+    const c = { Type: "Image", MediaURL: url(im.k), TimelineIn: n3(im.tin), TimelineOut: n3(im.tout), X: 0, Y: 0, Width: W, Height: H, AdaptMode: "Cover" };
+    if (c.TimelineOut <= c.TimelineIn) continue;
+    if (im.layer === "main") main.push(c); else (layers[im.layer] = layers[im.layer] || []).push(c);
+  }
+  const byIn = (x, y) => x.TimelineIn - y.TimelineIn;
+  main.sort(byIn);
+  const VideoTracks = [{ VideoTrackClips: main }].concat(["base", "cap", "asr", "sub"].filter((l) => layers[l]).map((l) => ({ VideoTrackClips: layers[l].sort(byIn) })));
+  const tracks = {};
+  for (const au of (Array.isArray(tl.audio) ? tl.audio : []).slice(0, 60)) {
+    const fx = [{ Type: "Volume", Gain: Math.min(3, Math.max(0, Number(au.gain) || 1)) }];
+    if (au.fade) fx.push({ Type: "AFade", SubType: "Out", Duration: Math.min(5, Number(au.fade) || 1), Curve: "tri" });
+    const c = { MediaURL: url(au.k), TimelineIn: n3(au.tin), TimelineOut: n3(au.tout), Effects: fx };
+    if (au.loop) c.LoopMode = true; else { c.In = 0; c.Out = n3(au.tout - au.tin); }
+    const t = au.track === "bgm" ? "bgm" : "narr";
+    (tracks[t] = tracks[t] || []).push(c);
+  }
+  const AudioTracks = Object.keys(tracks).map((t) => ({ AudioTrackClips: tracks[t].sort(byIn) }));
+  const outKey = dir + "out-" + Date.now().toString(36) + ".mp4";
+  const j = await ice(env, "SubmitMediaProducingJob", {
+    Timeline: JSON.stringify({ VideoTracks, AudioTracks }),
+    OutputMediaTarget: "oss-object",
+    OutputMediaConfig: JSON.stringify({ MediaURL: "https://" + ossHost(a) + "/" + outKey, Width: W, Height: H, Bitrate: 3500, Video: { Fps: 30 } }),
+    Source: "OpenAPI",
+  });
+  if (!j.JobId) throw serr("작업 번호를 받지 못했어요: " + JSON.stringify(j).slice(0, 160), 502);
+  return { ok: true, job: j.JobId, out: outKey };
+}
+async function cloudPoll(env, b, h) {
+  const a = ali(env), dir = cloudDir(h, b.id), out = String(b.out || "");
+  if (!out.startsWith(dir) || !/^[\w\/.\-]+$/.test(out)) throw serr("bad out");
+  const j = await ice(env, "GetMediaProducingJob", { JobId: String(b.job || "").slice(0, 64) });
+  const m = j.MediaProducingJob || {};
+  if (m.Status === "Success") return { ok: true, status: "done", url: await ossSign(a, out, 7200), dur: m.Duration || 0 };
+  if (m.Status === "Failed") return { ok: true, status: "failed", detail: ((m.Code || "") + " " + (m.Message || "")).trim().slice(0, 300) };
+  return { ok: true, status: m.Status || "Processing", progress: m.Progress || 0 };
 }
 
 // 완성 영상 저장(본문 그대로)
