@@ -17,7 +17,7 @@ export const TOON_HTML = String.raw`<!doctype html>
 *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,"Apple SD Gothic Neo","PingFang SC",system-ui,sans-serif;-webkit-text-size-adjust:100%}
 header{background:var(--sky);color:#fff;padding:calc(env(safe-area-inset-top) + 14px) 16px 14px;border-bottom:3px solid var(--red);display:flex;align-items:center;gap:12px}
 header h1{margin:0;font-size:19px}a.back{color:#fff;text-decoration:none;font-size:20px}
-main{max-width:640px;margin:0 auto;padding:14px 16px 40px}
+main{max-width:640px;margin:0 auto;padding:14px 16px 110px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
 .card h2{margin:0 0 8px;font-size:15.5px}.lbl{font-size:12.5px;color:var(--ink2);margin:10px 0 4px}
 input[type=text],textarea{width:100%;font:inherit;font-size:16px;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
@@ -101,7 +101,8 @@ function addImages(){var fs=[].slice.call(this.files||[]);this.value='';if(!fs.l
   var room=4-CARDS.length;if(room<=0){toast('4장까지예요');return;}fs=fs.slice(0,room);
   Promise.all(fs.map(function(f){return new Promise(function(ok){var u=URL.createObjectURL(f),im=new Image();im.onload=function(){ok({url:u,img:im});};im.onerror=function(){ok(null);};im.src=u;});})).then(function(list){
     var was=CARDS.length;list.forEach(function(x){if(x)CARDS.push({url:x.url,img:x.img,dur:3,cap1:'',cap2:'',at2:0.5,sub:'',bubble:'',bx:0.5,by:0.32,zoom:'in',sfx1:'',sfx2:''});});
-    if(!was)autoFill(false);drawCards();});}
+    // 처음 넣었을 때, 또는 1장용으로 자동 채운 그대로(손대지 않음)인데 그림이 늘었으면 장 수에 맞게 다시 나눔
+    var x=T.idea,c0=CARDS[0];if(!was||(was===1&&x&&c0.cap1===x.pov&&c0.cap2===x.punch&&CARDS.slice(1).every(function(c){return !c.cap1&&!c.cap2;})))autoFill(false);drawCards();});}
 function autoFill(force){var x=T.idea;if(!x||!CARDS.length)return;var c0=CARDS[0];
   var sub=x.zh?x.zh+'  '+x.py+' · '+x.ko:'';
   if(CARDS.length===1){c0.cap1=x.pov;c0.cap2=x.punch;c0.at2=0.5;c0.sub=sub;c0.bubble=x.bubble;c0.dur=5;c0.sfx1=x.sfx[0]||'';c0.sfx2=x.sfx[1]||'';c0.zoom='punch';}
