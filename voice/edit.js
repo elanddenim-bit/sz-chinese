@@ -160,7 +160,7 @@ function editor(){
    +(BGM?'<div style="margin-top:6px">'+chipRow('bgv',[[0,'끄기'],[0.07,'아주 작게'],[0.12,'작게'],[0.22,'보통']],o.bgv)+'</div><p class="note">내레이션 나올 땐 자동으로 줄고 끝에서 서서히 꺼져요. 곡은 이 화면을 닫으면 다시 골라야 해요.</p>':'')
    +'<p class="lbl">왼쪽 위 위치 표시 (비우면 없음)</p><input type="text" id="tagIn" maxlength="20" value="'+esc(o.tag)+'"></div>';
   h+='<div class="card"><h2>영상 완성</h2>'+(CLOUD?'<p class="note">☁️ 클라우드 편집: 원본 클립과 내레이션을 알리바바에 올리면 서버가 정확하게 합쳐요(말·컷 끊김 없음). 처음엔 클립 업로드 시간이 걸리고, 같은 초안을 다시 만들 땐 클립을 다시 안 올려요.</p>':'<p class="note">폰에서 720×1280으로 녹화해요. 길이만큼 걸리니 화면을 켜 두세요.</p>')
-    +'<button class="big ghost" id="pvAll">▶ 전체 미리보기 (녹화 안 함)</button>'+(CLOUD?'<button class="big" id="cloudBtn">☁️ 영상 만들기 (클라우드 편집)</button>':'')+'<button class="big'+(CLOUD?' ghost':'')+'" id="renderBtn">'+(CLOUD?'📱 폰에서 바로 녹화 (예전 방식)':'🎬 영상 만들기')+'</button><div id="out"></div></div>';
+    +'<button class="big ghost" id="pvAll">▶ 전체 미리보기 (녹화 안 함)</button>'+(CLOUD?'<button class="big" id="cloudBtn">☁️ 영상 만들기 (클라우드 편집)</button><div class="mini" style="margin-top:6px"><button id="cloudTest">🔌 알리바바 연결 확인</button></div><p class="note" id="cloudRes"></p>':'')+'<button class="big'+(CLOUD?' ghost':'')+'" id="renderBtn">'+(CLOUD?'📱 폰에서 바로 녹화 (예전 방식)':'🎬 영상 만들기')+'</button><div id="out"></div></div>';
   h+='<a class="big ghost" href="/shorts">← 숏츠 공방</a>';
   // 설정 칩·구간 버튼을 누를 때마다 맨 위로 튀던 것 방지: 처음 열 때만 맨 위로
   var first=!$('renderBtn'),y0=window.scrollY||0;$('main').innerHTML=h;window.scrollTo(0,first?0:y0);bind();
@@ -204,6 +204,7 @@ function bind(){
   if($('asrBtn'))$('asrBtn').onclick=makeAsr;
   $('renderBtn').onclick=function(){render(false);};
   if($('cloudBtn'))$('cloudBtn').onclick=cloudRender;
+  if($('cloudTest'))$('cloudTest').onclick=function(){var r=$('cloudRes');r.textContent='확인 중…';api('/shorts/cloud/ping',{test:true}).then(function(x){r.textContent=x.ok?'편집 서버: '+x.ice+' · 저장소(OSS): '+x.oss:(x.detail||x.error);});};
   $('pvAll').onclick=function(){render(true);};
   segThumbs();
 }
