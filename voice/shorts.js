@@ -1450,6 +1450,10 @@ main{max-width:640px;margin:0 auto;padding:14px 16px 60px}
 input[type=text],textarea{width:100%;font:inherit;font-size:16px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
 textarea{min-height:64px;resize:vertical}
 .chips{display:flex;flex-wrap:wrap;gap:6px}.chip{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:6px 12px;font:inherit;font-size:13.5px}.chip.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tabs{position:sticky;top:0;z-index:5;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:var(--bg);padding:6px 0 8px;margin:-4px 0 6px}
+.tabs button{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:9px 2px;font:inherit;font-size:13.5px;font-weight:600;position:relative}
+.tabs button.on{background:var(--sky);color:#fff;border-color:var(--sky)}.tabs i{font-style:normal;position:absolute;top:-5px;right:-3px;background:var(--red);color:#fff;border-radius:9px;font-size:10.5px;padding:1px 5px}
+.tools{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 12px}.tools a,.tools button{display:flex;flex-direction:column;align-items:center;gap:3px;border:0;border-radius:12px;color:#fff;font:inherit;font-weight:700;font-size:13px;padding:12px 4px;text-decoration:none;text-align:center;line-height:1.25}.tools b{font-size:22px}
 .big{display:block;width:100%;border:0;border-radius:12px;background:var(--sky);color:#fff;font:inherit;font-weight:700;font-size:16px;padding:14px;margin-top:10px}.big:disabled{opacity:.5}
 .big.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}.big.red{background:var(--red)}
 .idea{border-top:1px solid var(--line);padding:10px 0}.idea:first-child{border-top:0}.idea b{display:block}.idea small{color:var(--ink2)}.idea button{margin-top:6px}
@@ -1492,7 +1496,7 @@ function cmt(fresh){var bx=$('cmBox'),bt=$('cmGo');if(!bx)return;if(fresh){bt.di
     if(d.mine&&d.mine.length)H+='<p class="lbl">우리 영상에 달린 질문 — 답글 달아 주면 채널에 좋아요</p>'+d.mine.map(function(x){return '<a href="https://youtube.com/shorts/'+esc(x.v)+'" target="_blank" style="display:block;font-size:13px;padding:5px 0;border-top:1px solid var(--line);color:var(--ink);text-decoration:none">“'+esc(x.t)+'” <small>'+(x.rep?'답글 '+x.rep:'<b style="color:var(--red)">아직 답 없음</b>')+'</small></a>';}).join('');
     H+='<p class="note">많이 나온 질문은 💡 주제 추천·토요일 주간 기획에도 자동으로 들어가요.</p>';
     bx.innerHTML=H;
-    bx.querySelectorAll('[data-cmt]').forEach(function(b){b.onclick=function(){var g=d.groups[+b.getAttribute('data-cmt')];$('topic').value=g.topic+' — 첫마디: '+g.hook+' (시청자 질문: '+g.q+')';$('topic').scrollIntoView({block:'center'});toast('대본 쓰기를 누르세요');};});});}
+    bx.querySelectorAll('[data-cmt]').forEach(function(b){b.onclick=function(){var g=d.groups[+b.getAttribute('data-cmt')];$('topic').value=g.topic+' — 첫마디: '+g.hook+' (시청자 질문: '+g.q+')';goTab('make');$('topic').scrollIntoView({block:'center'});toast('대본 쓰기를 누르세요');};});});}
 function radar(fresh){var bx=$('rdBox'),bt=$('rdGo');if(!bx)return;if(fresh){bt.disabled=true;bx.innerHTML='<span class="spin">📡</span> 비슷한 채널 영상 200여 편 모으고 계산하는 중… (30~60초)';}
   api('/shorts/radar',fresh?{fresh:true}:{}).then(function(r){bt.disabled=false;if(!r.ok){bx.textContent=r.detail||r.error;return;}var d=r.radar;
     if(!d){bx.innerHTML='‘중국 사는 한국인’ 계열 한국어 숏츠를 모아 <b>어떤 제목·길이·주제가 터지는지</b> 숫자로 보여 줘요. 결과는 주제 추천·주간 기획에 자동 반영돼요. ‘분석하기’를 눌러 보세요.';return;}
@@ -1511,7 +1515,7 @@ function radar(fresh){var bx=$('rdBox'),bt=$('rdGo');if(!bx)return;if(fresh){bt.
     if(d.sleepers&&d.sleepers.length)H+='<details><summary style="font-size:13px">🌱 작은 채널(구독 2만↓)인데 터진 영상 — 우리가 따라 하기 좋은 것</summary>'+d.sleepers.map(vrow).join('')+'</details>';
     if(ai.error)H+='<p class="note" style="color:var(--red)">AI 정리 실패: '+esc(ai.error)+' — 숫자는 위에 그대로 있어요.</p>';
     bx.innerHTML=H;
-    bx.querySelectorAll('[data-rdt]').forEach(function(b){b.onclick=function(){var x=ai.topics[+b.getAttribute('data-rdt')];$('topic').value=x.topic+' — 첫마디: '+x.hook;$('topic').scrollIntoView({block:'center'});toast('대본 쓰기를 누르세요');};});});}
+    bx.querySelectorAll('[data-rdt]').forEach(function(b){b.onclick=function(){var x=ai.topics[+b.getAttribute('data-rdt')];$('topic').value=x.topic+' — 첫마디: '+x.hook;goTab('make');$('topic').scrollIntoView({block:'center'});toast('대본 쓰기를 누르세요');};});});}
 function wkLoad(fresh){var bx=$('wkBox'),rb=$('wkRe');if(!bx)return;if(fresh){rb.disabled=true;bx.innerHTML='<span class="spin">🗓</span> 내 기록·채널 성적 보고 3편 기획 중… (20~40초)';}
   var mm=$('wkMemo');api('/shorts/week',fresh?{fresh:true,memo:mm?mm.value:''}:{}).then(function(r){if(rb)rb.disabled=false;if(!r.ok){bx.textContent=r.detail||r.error;return;}var p=r.plan;if(mm&&!fresh&&!mm.value)mm.value=r.memo||'';
     if(!p){bx.innerHTML='매주 <b>토요일 아침 8시</b>에 이번 주말 찍을 숏츠 3편과 컷 목록이 여기 자동으로 생겨요. 지금 보려면 ‘다시 만들기’.';return;}
@@ -1519,7 +1523,7 @@ function wkLoad(fresh){var bx=$('wkBox'),rb=$('wkRe');if(!bx)return;if(fresh){rb
     bx.innerHTML='<small>'+esc(p.day)+' 기획</small>'+p.items.map(function(x,i){return '<details class="idea" style="margin-top:8px"'+(i===0?' open':'')+'><summary><b>'+esc(K[x.kind]||'')+' · '+esc(x.title)+'</b></summary><small>📍 '+esc(x.where)+'<br>첫마디: “'+esc(x.hook)+'”<br>'+esc(x.why)+'</small>'
       +'<ol style="margin:8px 0 6px 18px;padding:0">'+x.shots.map(function(s){return '<li style="margin:4px 0"><b>'+esc(s.what)+'</b> <small>('+s.sec+'초)</small><br><small>'+esc(s.how)+'</small></li>';}).join('')+'</ol>'
       +'<a class="chip" style="text-decoration:none;display:inline-block" href="/edit?topic='+encodeURIComponent(x.title+' — 첫마디: '+x.hook)+'">🎥 찍고 나서 편집실로</a> <button class="chip" data-wkt="'+i+'">✍️ AI 대본으로</button></details>';}).join('');
-    bx.querySelectorAll('[data-wkt]').forEach(function(b){b.onclick=function(){var x=p.items[+b.getAttribute('data-wkt')];$('topic').value=x.title+' — 첫마디: '+x.hook;$('topic').scrollIntoView({block:'center'});toast('대본 쓰기를 누르세요');};});});}
+    bx.querySelectorAll('[data-wkt]').forEach(function(b){b.onclick=function(){var x=p.items[+b.getAttribute('data-wkt')];$('topic').value=x.title+' — 첫마디: '+x.hook;goTab('make');$('topic').scrollIntoView({block:'center'});toast('대본 쓰기를 누르세요');};});});}
 function qLoad(arg){api('/shorts/yt/queue',arg||{}).then(function(r){var c=$('qCard'),bx=$('qBox');if(!c||!r.ok)return;
   if(r.tried)toast(r.tried.ok?'올렸어요 ✅':'아직 안 돼요: '+(r.tried.error||'').slice(0,60));
   if(!r.items.length&&!r.err){c.style.display='none';return;}c.style.display='block';
@@ -1548,35 +1552,43 @@ function tim(arg){var bx=$('tmBox');if(!bx)return;if(arg&&arg.check)bx.innerHTML
     bx.querySelectorAll('[data-tmurl]').forEach(function(b){b.onclick=function(e){e.preventDefault();window.open(b.getAttribute('data-tmurl'),'_blank');};});
     bx.querySelectorAll('[data-tmuse]').forEach(function(b){b.onclick=function(e){e.preventDefault();var c=TMC[+b.getAttribute('data-tmuse')];
       $('topic').value=c.kind==='rival'?'지금 뜨는 영상 \''+c.title+'\' ('+c.why+') — 같은 소재를 광저우 사는 우리 시각·현지 가격으로 다르게':c.title+' ('+(c.zh||'')+') — '+(c.what||'')+' 한국 반응: '+c.why;
-      if(c.kind==='trend'){SER='cnet';}SEC=30;document.querySelectorAll('[data-sec]').forEach(function(y){y.classList.toggle('on',+y.getAttribute('data-sec')===30);});$('topic').scrollIntoView({block:'center'});toast('대본 쓰기를 누르세요');};});
+      if(c.kind==='trend'){SER='cnet';}SEC=30;document.querySelectorAll('[data-sec]').forEach(function(y){y.classList.toggle('on',+y.getAttribute('data-sec')===30);});goTab('make');$('topic').scrollIntoView({block:'center'});toast('대본 쓰기를 누르세요');};});
     $('tmChk').onclick=function(){tim({check:true});};
   });}
+var TABLOAD={},TABDONE={};
+function goTab(t){var ps=document.querySelectorAll('.tabp');if(!ps.length)return;ps.forEach(function(p){p.style.display=p.getAttribute('data-p')===t?'block':'none';});
+  document.querySelectorAll('[data-tab]').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-tab')===t);});
+  try{localStorage.setItem('sh-tab',t);}catch(e){}if(TABLOAD[t]&&!TABDONE[t]){TABDONE[t]=1;TABLOAD[t]();}}
 function home(){
   if(!CODE)return gate();
   api('/shorts/list').then(function(j){
     if(j.error==='not_allowed')return gate('초대 코드가 맞지 않아요');if(j.error==='not_owner'){$('main').innerHTML='<div class="gate">주인만 쓸 수 있는 화면이에요.</div>';return;}
     if(!j.ok)return gate(j.detail||j.error);L=j;$('cost').innerHTML=costTxt(j.cost,j.caps);
-    var h='<div class="card"><h2>새 숏츠</h2><p class="lbl">주제</p><input type="text" id="topic" placeholder="예: 광저우 아침 早茶, 한국인이 놀라는 3가지">'
+    var P={make:'',idea:'',ch:'',list:''},X={};var h='<div class="card"><h2>✍️ AI 대본으로 만들기</h2><p class="lbl">주제</p><input type="text" id="topic" placeholder="예: 광저우 아침 早茶, 한국인이 놀라는 3가지">'
       +'<p class="lbl">한국 시청자 각도</p><div class="chips">'+ANGS.map(function(a){return '<button class="chip'+(a[0]===ANG?' on':'')+'" data-ang="'+a[0]+'">'+a[1]+'</button>';}).join('')+'</div>'
       +'<div class="mini" style="margin-top:8px"><button id="ideaBtn">💡 주제 추천받기</button><button id="cnetBtn">🔥 오늘의 중국 인터넷에서 고르기</button></div><div id="ideas"></div><p class="note" id="serNote">'+(SER==='cnet'?'시리즈: [중국 인터넷 1분] — 제목 번호 자동 <a href="#" id="serOff">빼기</a>':'')+'</p>'
       +'<p class="lbl">길이</p><div class="chips">'+[30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div>'
       +'<button class="big" id="scriptBtn">✍️ 대본 쓰기</button><div class="err" id="e1"></div></div>';
-    h+='<div class="card" id="ytCard"><h2>유튜브 연결</h2><div id="ytBox" class="note">확인 중…</div></div>';
-    h+='<div class="card" id="wkCard"><h2>🗓 이번 주말 찍을 숏츠 <button class="chip" id="wkRe" style="float:right;font-size:12px;padding:3px 9px">다시 만들기</button></h2><textarea id="wkMemo" rows="2" placeholder="이번 주 일정 (예: 화 광저우→제남 출장, 수~목 제남→닝보, 월·금 광저우)" style="width:100%;box-sizing:border-box;margin:4px 0 6px;border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;background:var(--card);color:var(--ink)"></textarea><div id="wkBox" class="note">불러오는 중…</div></div>';
-    h+='<div class="card" id="qCard" style="display:none"><h2>📅 예약 발행</h2><div id="qBox" class="note"></div></div>';
-    if(j.yt)h+='<div class="card" id="tmCard"><h2>⏰ 숏츠 타이밍 알림</h2><div id="tmBox" class="note">불러오는 중…</div></div>';
-    if(j.yt)h+='<div class="card" id="rdCard"><h2>📡 경쟁 채널 레이더 <button class="chip" id="rdGo" style="float:right;font-size:12px;padding:3px 9px">분석하기</button></h2><div id="rdBox" class="note">불러오는 중…</div></div>';
-    if(j.yt)h+='<div class="card" id="cmCard"><h2>💬 댓글 질문 광산 <button class="chip" id="cmGo" style="float:right;font-size:12px;padding:3px 9px">캐기</button></h2><div id="cmBox" class="note">불러오는 중…</div></div>';
-    if(j.yt)h+='<div class="card"><h2>📈 내 채널 성적 <button class="chip" id="stRe" style="float:right;font-size:12px;padding:3px 9px">새로고침</button></h2><div id="stBox" class="note">불러오는 중…</div></div>';
-    h='<button class="big" id="avOpen" style="margin:0 0 12px;background:var(--ink)">🎙 숏츠용 내 목소리 · 🗣 캐릭터가 말하기</button>'+h;h='<a class="big" href="/cine" style="text-align:center;text-decoration:none;margin:0 0 12px;background:#6B4FA0">🎞 사진 한 장 → 시네마틱 영상</a>'+h;h='<a class="big" href="/toon" style="text-align:center;text-decoration:none;margin:0 0 12px;background:#1F7A4D">🎨 공감툰 만들기 (그림 + 자막 + 효과음)</a>'+h;h='<a class="big" href="/edit" style="text-align:center;text-decoration:none;background:var(--red);margin:0 0 12px">🎥 내가 찍은 영상으로 만들기 (편집실)</a>'+h;
-    if(j.list&&j.list.length)h+='<div class="card"><h2>내 숏츠</h2><div class="list">'+j.list.map(function(x){return '<a href="'+(x.kind==='mine'?'/edit?id='+x.id:x.kind==='toon'?'/toon':'#')+'"'+(x.kind==='mine'||x.kind==='toon'?'':' data-open="'+x.id+'"')+'>'+(x.kind==='mine'?'🎥 ':x.kind==='toon'?'🎨 ':'')+'<span>'+esc(x.title)+'</span><small>'+(x.yt?'▶ '+(x.yt.privacy==='public'?'공개':x.yt.privacy==='unlisted'?'일부공개':'비공개'):new Date(x.made).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}))+'</small></a>';}).join('')+'</div></div>';
-    $('main').innerHTML=h;
+    P.make='<a class="big" href="/edit" style="text-align:center;text-decoration:none;background:var(--red);margin:0">🎥 내가 찍은 영상으로 만들기 (편집실)</a>'
+      +'<div class="tools"><a href="/cine" style="background:#6B4FA0"><b>🎞</b>사진 → 영상</a><a href="/toon" style="background:#1F7A4D"><b>🎨</b>공감툰</a><button id="avOpen" style="background:var(--ink)"><b>🗣</b>캐릭터·내 목소리</button></div>'+h;h='';
+    X.yt='<div class="card" id="ytCard"><h2>유튜브 연결</h2><div id="ytBox" class="note">확인 중…</div></div>';
+    X.wk='<div class="card" id="wkCard"><h2>🗓 이번 주말 찍을 숏츠 <button class="chip" id="wkRe" style="float:right;font-size:12px;padding:3px 9px">다시 만들기</button></h2><textarea id="wkMemo" rows="2" placeholder="이번 주 일정 (예: 화 광저우→제남 출장, 수~목 제남→닝보, 월·금 광저우)" style="width:100%;box-sizing:border-box;margin:4px 0 6px;border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;background:var(--card);color:var(--ink)"></textarea><div id="wkBox" class="note">불러오는 중…</div></div>';
+    X.q='<div class="card" id="qCard" style="display:none"><h2>📅 예약 발행</h2><div id="qBox" class="note"></div></div>';
+    X.tm='';if(j.yt)X.tm='<div class="card" id="tmCard"><h2>⏰ 숏츠 타이밍 알림</h2><div id="tmBox" class="note">불러오는 중…</div></div>';
+    X.rd='';if(j.yt)X.rd='<div class="card" id="rdCard"><h2>📡 경쟁 채널 레이더 <button class="chip" id="rdGo" style="float:right;font-size:12px;padding:3px 9px">분석하기</button></h2><div id="rdBox" class="note">불러오는 중…</div></div>';
+    X.cm='';if(j.yt)X.cm='<div class="card" id="cmCard"><h2>💬 댓글 질문 광산 <button class="chip" id="cmGo" style="float:right;font-size:12px;padding:3px 9px">캐기</button></h2><div id="cmBox" class="note">불러오는 중…</div></div>';
+    X.st='';if(j.yt)X.st='<div class="card"><h2>📈 내 채널 성적 <button class="chip" id="stRe" style="float:right;font-size:12px;padding:3px 9px">새로고침</button></h2><div id="stBox" class="note">불러오는 중…</div></div>';
+
+    P.list='<div class="card note">아직 만든 숏츠가 없어요.</div>';if(j.list&&j.list.length)P.list='<div class="card"><h2>내 숏츠</h2><div class="list">'+j.list.map(function(x){return '<a href="'+(x.kind==='mine'?'/edit?id='+x.id:x.kind==='toon'?'/toon':'#')+'"'+(x.kind==='mine'||x.kind==='toon'?'':' data-open="'+x.id+'"')+'>'+(x.kind==='mine'?'🎥 ':x.kind==='toon'?'🎨 ':'')+'<span>'+esc(x.title)+'</span><small>'+(x.yt?'▶ '+(x.yt.privacy==='public'?'공개':x.yt.privacy==='unlisted'?'일부공개':'비공개'):new Date(x.made).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'}))+'</small></a>';}).join('')+'</div></div>';
+    P.idea=X.tm+X.wk+X.rd+X.cm+(j.yt?'':'<div class="card note">유튜브를 연결하면 타이밍 알림·레이더·댓글 광산이 열려요 — 📊 채널 탭에서 연결.</div>');P.ch=X.st+X.q+X.yt;
+    var TB=[['make','🎬 만들기'],['idea','💡 아이디어'],['ch','📊 채널'],['list','📁 내 숏츠']];
+    $('main').innerHTML='<div class="tabs">'+TB.map(function(t){return '<button data-tab="'+t[0]+'">'+t[1]+'</button>';}).join('')+'</div>'+TB.map(function(t){return '<div class="tabp" data-p="'+t[0]+'" style="display:none">'+P[t[0]]+'</div>';}).join('');
     document.querySelectorAll('[data-ang]').forEach(function(b){b.onclick=function(){ANG=b.getAttribute('data-ang');try{localStorage.setItem('sh-ang',ANG);}catch(e){}document.querySelectorAll('[data-ang]').forEach(function(x){x.classList.toggle('on',x===b);});};});
     document.querySelectorAll('[data-sec]').forEach(function(b){b.onclick=function(){SEC=+b.getAttribute('data-sec');document.querySelectorAll('[data-sec]').forEach(function(x){x.classList.toggle('on',x===b);});};});
     document.querySelectorAll('[data-open]').forEach(function(a){a.onclick=function(e){e.preventDefault();openDraft(a.getAttribute('data-open'));};});
     $('ideaBtn').onclick=function(){var b=this;b.disabled=true;b.innerHTML='<span class="spin">💡</span> 요즘 한국에서 궁금해하는 광저우 찾는 중…';api('/shorts/ideas',{angle:ANG}).then(function(r){b.disabled=false;b.textContent='💡 다시 추천받기';if(!r.ok){$('e1').textContent=r.detail||r.error;return;}
       $('ideas').innerHTML=r.ideas.map(function(x,i){return '<div class="idea"><b>'+esc(x.topic)+'</b><small>“'+esc(x.hook)+'” · '+esc(x.why)+'</small><br><button class="chip" data-idea="'+i+'">이걸로</button></div>';}).join('');
-      document.querySelectorAll('[data-idea]').forEach(function(c){c.onclick=function(){var x=r.ideas[+c.getAttribute('data-idea')];$('topic').value=x.topic+' — 첫마디: '+x.hook;$('topic').scrollIntoView({block:'center'});};});});};
+      document.querySelectorAll('[data-idea]').forEach(function(c){c.onclick=function(){var x=r.ideas[+c.getAttribute('data-idea')];$('topic').value=x.topic+' — 첫마디: '+x.hook;goTab('make');$('topic').scrollIntoView({block:'center'});};});});};
     function serNote(){var n=$('serNote');if(!n)return;n.innerHTML=SER==='cnet'?'시리즈: [중국 인터넷 1분] — 제목 번호 자동 <a href="#" id="serOff">빼기</a>':'';var o=$('serOff');if(o)o.onclick=function(e){e.preventDefault();SER='';serNote();};}
     serNote();
     $('cnetBtn').onclick=function(){var b=this;b.disabled=true;b.innerHTML='<span class="spin">🔥</span> 오늘 판 불러오는 중…';
@@ -1584,13 +1596,17 @@ function home(){
         $('ideas').innerHTML='<p class="lbl">오늘의 중국 인터넷 '+esc(r.day)+' — 하나 고르면 [중국 인터넷 1분] 대본으로</p>'+r.items.map(function(x,i){return '<div class="idea"><b>'+esc(x.emo)+' '+esc(x.ko)+'</b><small>'+esc(x.what)+(x.word?' · 유행어 '+esc(x.word.z):'')+'</small><br><button class="chip" data-cn="'+i+'">이걸로</button></div>';}).join('');
         document.querySelectorAll('[data-cn]').forEach(function(c){c.onclick=function(){var x=r.items[+c.getAttribute('data-cn')];
           $('topic').value=x.ko+' ('+x.zh+') — '+x.what+' 왜 뜨나: '+x.why+(x.word?' 오늘의 유행어: '+x.word.z+'('+x.word.p+', '+x.word.k+')':'');
-          SER='cnet';SEC=30;document.querySelectorAll('[data-sec]').forEach(function(y){y.classList.toggle('on',+y.getAttribute('data-sec')===30);});serNote();$('topic').scrollIntoView({block:'center'});toast('대본 쓰기를 누르세요');};});});};
+          SER='cnet';SEC=30;document.querySelectorAll('[data-sec]').forEach(function(y){y.classList.toggle('on',+y.getAttribute('data-sec')===30);});serNote();goTab('make');$('topic').scrollIntoView({block:'center'});toast('대본 쓰기를 누르세요');};});});};
     $('scriptBtn').onclick=function(){var t=$('topic').value.trim();if(!t){$('e1').textContent='주제를 적거나 추천에서 골라 주세요';return;}var b=this;b.disabled=true;b.innerHTML='<span class="spin">✍️</span> 대본 쓰는 중… (15초쯤)';
       api('/shorts/script',{topic:t,sec:SEC,angle:ANG,series:SER}).then(function(r){b.disabled=false;b.textContent='✍️ 대본 쓰기';if(!r.ok){$('e1').textContent=r.detail||r.error;return;}D=r.draft;F=r.files||{};editor();});};
     $('avOpen').onclick=ava;
-    ytBox();qLoad();wkLoad();$('wkRe').onclick=function(){wkLoad(true);};$('wkMemo').onchange=function(){api('/shorts/week',{memo:this.value});toast('일정 저장 — 다시 만들기를 누르면 반영돼요');};
+    $('wkRe').onclick=function(){wkLoad(true);};$('wkMemo').onchange=function(){api('/shorts/week',{memo:this.value});toast('일정 저장 — 다시 만들기를 누르면 반영돼요');};
     var qo=new URLSearchParams(location.search).get('open');if(qo){try{history.replaceState(null,'','/shorts');}catch(e){}openDraft(qo);return;}
-    if(j.yt){tim();radar(false);$('rdGo').onclick=function(){radar(true);};cmt(false);$('cmGo').onclick=function(){cmt(true);};stats(false);$('stRe').onclick=function(){stats(true);};}
+    // 탭은 처음 열 때만 불러옴(예전엔 첫 화면에서 카드 5개가 한꺼번에 불러와 느렸음)
+    TABLOAD={idea:function(){wkLoad();if(j.yt){tim();radar(false);$('rdGo').onclick=function(){radar(true);};cmt(false);$('cmGo').onclick=function(){cmt(true);};}},
+      ch:function(){ytBox();qLoad();if(j.yt){stats(false);$('stRe').onclick=function(){stats(true);};}}};TABDONE={};
+    document.querySelectorAll('[data-tab]').forEach(function(b){b.onclick=function(){goTab(b.getAttribute('data-tab'));window.scrollTo(0,0);};});
+    var t0='make';try{t0=localStorage.getItem('sh-tab')||'make';}catch(e){}if(!P[t0])t0='make';goTab(t0);
   }).catch(function(){gate('서버에 연결하지 못했어요');});
 }
 var AV={voice:'Cherry',res:'480P'};try{AV.voice=localStorage.getItem('av-voice')||'Cherry';}catch(e){}
