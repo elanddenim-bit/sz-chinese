@@ -28,7 +28,7 @@ import { HUB_HTML } from "./hub.js";
 import { signsApi, signsGet, SIGNS_HTML } from "./signs.js";
 import { novelApi, novelGet, NOVEL_HTML } from "./novel.js";
 import { trendApi, trendGet, TREND_HTML } from "./trend.js";
-import { shortsApi, shortsSave, shortsFile, ytCallback, legalPage, SHORTS_HTML, shortsCron, weekCron } from "./shorts.js";
+import { shortsApi, shortsSave, shortsFile, ytCallback, legalPage, SHORTS_HTML, shortsCron, weekCron, timingCron } from "./shorts.js";
 import { EDIT_HTML } from "./edit.js";
 import { TOON_HTML } from "./toon.js";
 import { CINE_HTML } from "./cine.js";
@@ -89,6 +89,7 @@ export default {
         ctx.waitUntil(shortsCron(env).catch((e) => console.log("shortsCron", e && e.message)));
         ctx.waitUntil(briefCron(env).catch((e) => console.log("briefCron", e && e.message))); // 🧳 출장 전날 브리핑(정한 시각에만 보냄)
       }
+      if (um < 15 && (uh === 1 || uh === 5 || uh === 11)) ctx.waitUntil(timingCron(env, uh).catch((e) => console.log("timingCron", e && e.message))); // ⏰ 숏츠 타이밍(중국 9·13·19시)
       if (uh >= 21 || uh <= 14) ctx.waitUntil(briefMorning(env).catch((e) => console.log("briefMorning", e && e.message))); // 중국 5~22시 '지금 출발'
     }
   },

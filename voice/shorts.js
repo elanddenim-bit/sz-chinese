@@ -1,3 +1,4 @@
+import { trendApi } from "./trend.js";
 // =========================================================
 // 🎬 숏츠 공방 — 광저우 생활 유튜브 숏츠를 AI 로 만들고 자동 업로드 (주인 전용)
 //  GET  /shorts                          화면
@@ -152,6 +153,7 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
   if (path === "/shorts/yt/queue") return ytQueueView(env, b, h);
   if (path === "/shorts/week") return weekView(env, b, h);
   if (path === "/shorts/radar") return radarView(env, b, h);
+  if (path === "/shorts/timing") return timView(env, b, h);
   if (path === "/shorts/cmt") return cmtView(env, b, h);
   if (path === "/shorts/cine/state") return cineView(env, h);
   if (path === "/shorts/cine/make") return cineMake(env, b, h);
@@ -1237,6 +1239,138 @@ async function ytRunOne(env, h, q, x) {
     return { ok: false, error: m };
   }
 }
+// ---------------- ⏰ 숏츠 타이밍 알림 (2026-10-12, Bark) ----------------
+// 두 가지 신호를 하루 세 번(중국 9·13·19시) 확인해, '지금 만들면 타이밍'인 것만 대본을 미리 써 두고 Bark 로 알림.
+//  ① 경쟁 채널 폭발: 레이더에 잡힌 중국 관련 한국 채널(최대 20곳)의 최근 72시간 영상 중 그 채널 평소(최근 10편 하루당 조회 중앙값)보다 몇 배 빠른 것
+//  ② 중국 인터넷 화제 × 한국: 오늘의 중국 인터넷 5개를 한국 유튜브(최근 48시간, 한국어 숏츠)에서 검색 — 한국에서도 뜨기 시작했는데 아직 영상이 적은 것(13시에만, 검색 100단위×5)
+// 숫자(하루당 조회·배수·영상 수)는 코드가 계산. 알림은 하루 2번까지, 같은 영상·화제는 한 번만. Bark 주소는 출장 브리핑에 넣은 것(brief:<해시>.bark)을 같이 씀.
+// KV shorts:timing:<해시> {on, sens, chs{at,ids[]}, seen{key:시각}, day{d,n}, log[20]}
+const TIM_SENS = { high: { lift: 2, d: 1500, kr: 1500 }, mid: { lift: 3, d: 3000, kr: 3000 }, low: { lift: 5, d: 10000, kr: 8000 } };
+const timKey = (h) => "shorts:timing:" + h;
+async function timDoc(env, h) { return (await env.KV.get(timKey(h), "json")) || { on: true, sens: "mid", seen: {}, log: [] }; }
+async function timBark(env, h) {
+  const b = await env.KV.get("brief:" + h, "json");
+  const m = b && String(b.bark || "").match(/^(https:\/\/[^/]+)\/([^/?#]+)/);
+  return m ? { origin: m[1], key: m[2] } : null;
+}
+async function timScan(env, h, doc, opt) {
+  const S = TIM_SENS[doc.sens] || TIM_SENS.mid;
+  const { token } = await ytToken(env, h);
+  const H = { authorization: "Bearer " + token };
+  const get = async (u) => { const r = await fetch("https://www.googleapis.com/youtube/v3/" + u, { headers: H }); const j = await r.json().catch(() => ({})); if (!r.ok) throw serr("유튜브 " + r.status + ": " + ((j.error && j.error.message) || "").slice(0, 120), 502); return j; };
+  const now = Date.now(), out = [];
+  // ① 경쟁 채널 — 레이더 표본에서 채널 목록(7일마다 새로)
+  const rd = await env.KV.get("shorts:radar:" + h, "json");
+  if (rd && rd.pool && rd.pool.length && (!doc.chs || now - doc.chs.at > 7 * 86400e3 || doc.chs.from !== rd.at)) {
+    const j = await get("videos?part=snippet&id=" + rd.pool.map((x) => x.id).slice(0, 50).join(",")).catch(() => ({}));
+    const cnt = {};
+    (j.items || []).forEach((x) => { const c = x.snippet.channelId; cnt[c] = (cnt[c] || 0) + 1; });
+    doc.chs = { at: now, from: rd.at, ids: Object.keys(cnt).sort((a, c) => cnt[c] - cnt[a]).slice(0, 20) };
+  }
+  const chIds = (doc.chs && doc.chs.ids) || [];
+  if (chIds.length) {
+    const cj = await get("channels?part=contentDetails,snippet,statistics&id=" + chIds.join(",")).catch(() => ({}));
+    const ups = (cj.items || []).map((c) => ({ cid: c.id, name: c.snippet.title, subs: +((c.statistics || {}).subscriberCount) || 0, up: c.contentDetails && c.contentDetails.relatedPlaylists && c.contentDetails.relatedPlaylists.uploads })).filter((c) => c.up);
+    const lists = await Promise.all(ups.map((c) => get("playlistItems?part=contentDetails&maxResults=12&playlistId=" + c.up).then((j) => ({ c, ids: (j.items || []).map((x) => x.contentDetails.videoId) })).catch(() => ({ c, ids: [] }))));
+    const allIds = [...new Set(lists.flatMap((l) => l.ids))];
+    const V = {};
+    for (let i = 0; i < allIds.length; i += 50) { const j = await get("videos?part=snippet,statistics,contentDetails&id=" + allIds.slice(i, i + 50).join(",")).catch(() => ({})); (j.items || []).forEach((x) => (V[x.id] = x)); }
+    for (const { c, ids } of lists) {
+      const vs = ids.map((id) => V[id]).filter(Boolean).map((x) => {
+        const at = Date.parse(x.snippet.publishedAt) || now, age = Math.max(1 / 24, (now - at) / 86400e3), v = +((x.statistics || {}).viewCount) || 0;
+        return { id: x.id, t: x.snippet.title, at, ageH: (now - at) / 3600e3, v, d: Math.round(v / age), sec: isoSec(x.contentDetails && x.contentDetails.duration) };
+      }).filter((x) => x.sec > 0 && x.sec <= 180);
+      const old = vs.filter((x) => x.ageH > 72);
+      if (old.length < 3) continue;
+      const base = Math.max(1, median(old.map((x) => x.d)));
+      for (const x of vs) {
+        if (x.ageH < 6 || x.ageH > 72 || !/[가-힣]/.test(x.t) || !CN_REL.test(x.t + " " + c.name)) continue;
+        const lift = Math.round((x.d / base) * 10) / 10;
+        if (lift >= S.lift && x.d >= S.d) out.push({ kind: "rival", key: "v:" + x.id, score: lift * Math.log10(x.d), title: x.t, ch: c.name, subs: c.subs, d: x.d, lift, ageH: Math.round(x.ageH), url: "https://youtube.com/shorts/" + x.id,
+          why: c.name + " 영상이 평소의 " + lift + "배 속도(하루 " + x.d.toLocaleString() + "회, 올린 지 " + Math.round(x.ageH) + "시간)" });
+      }
+    }
+  }
+  // ② 중국 인터넷 화제 × 한국 반응(13시 확인 또는 직접 확인 때)
+  if (opt.trend) {
+    let tr = null;
+    try { tr = await trendApi(env, { waitUntil() {} }, "/trend/today", {}, h); } catch {}
+    const after = new Date(now - 48 * 3600e3).toISOString();
+    for (const it of ((tr && tr.items) || []).slice(0, 5)) {
+      const q = String(it.ko || "").replace(/[^\w가-힣\s]/g, " ").trim().split(/\s+/).slice(0, 4).join(" ");
+      if (!q) continue;
+      const s = await get("search?part=snippet&type=video&videoDuration=short&order=viewCount&maxResults=15&regionCode=KR&relevanceLanguage=ko&publishedAfter=" + encodeURIComponent(after) + "&q=" + encodeURIComponent(q)).catch(() => null);
+      const ids = ((s && s.items) || []).map((x) => x.id && x.id.videoId).filter(Boolean);
+      if (!ids.length) { out.push({ kind: "trend", key: "t:" + (it.zh || it.ko), skip: true, title: it.ko, why: "한국 숏츠 아직 없음(너무 이를 수 있음)", n: 0 }); continue; }
+      const j = await get("videos?part=snippet,statistics&id=" + ids.join(",")).catch(() => ({}));
+      const ks = (j.items || []).filter((x) => /[가-힣]/.test(x.snippet.title)).map((x) => { const age = Math.max(1 / 24, (now - (Date.parse(x.snippet.publishedAt) || now)) / 86400e3); return { t: x.snippet.title, d: Math.round((+((x.statistics || {}).viewCount) || 0) / age) }; });
+      const top = ks.sort((a, c) => c.d - a.d)[0];
+      const hot = ks.filter((x) => x.d >= S.kr).length;
+      const row = { kind: "trend", key: "t:" + (it.zh || it.ko), title: it.ko, zh: it.zh, what: it.what, whyCn: it.why, word: it.word, n: ks.length, hot, top: top && top.t, topD: top ? top.d : 0 };
+      // 타이밍: 한국에서도 뜨는 영상이 있는데(하루 기준 이상 1개+) 아직 많지 않음(8편 이하)
+      if (hot >= 1 && ks.length <= 8) { row.score = 2 + Math.log10(top.d); row.why = "한국 숏츠 " + ks.length + "편뿐인데 '" + String(top.t).slice(0, 30) + "' 하루 " + top.d.toLocaleString() + "회"; }
+      else { row.skip = true; row.why = ks.length > 8 ? "한국에도 이미 " + ks.length + "편 — 늦음" : "한국 반응 아직 약함(최고 하루 " + (top ? top.d : 0) + "회)"; }
+      out.push(row);
+    }
+  }
+  return out;
+}
+async function timFire(env, h, doc, c) {
+  const topic = c.kind === "rival"
+    ? "지금 한국 숏츠에서 빠르게 뜨는 영상: '" + c.title + "' (" + c.ch + ", 하루 " + c.d + "회, 평소의 " + c.lift + "배). 같은 소재를 베끼지 말고 광저우에 사는 우리 부부가 직접 겪은 시각·현지 가격(위안·원)·한국과 다른 점으로 다르게 푼다. 첫마디는 그 영상이 건드린 궁금증을 더 구체적인 숫자로."
+    : c.title + " (" + c.zh + ") — " + c.what + " 왜 뜨나: " + c.whyCn + (c.word && c.word.z ? " 오늘의 유행어: " + c.word.z + "(" + c.word.p + ", " + c.word.k + ")" : "") + ". 한국에서도 '" + String(c.top || "").slice(0, 40) + "' 같은 영상이 뜨기 시작함.";
+  const r = await script(env, { topic, sec: 30, angle: c.kind === "rival" ? "mix" : "life", series: c.kind === "trend" ? "cnet" : "" }, h);
+  const id = r.draft.id;
+  const bark = await timBark(env, h);
+  if (bark) {
+    const br = await fetch(bark.origin + "/push", { method: "POST", headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ device_key: bark.key, title: "⏰ 지금 만들면 타이밍 — " + (c.kind === "rival" ? "경쟁 채널 폭발" : "중국 화제가 한국에서도"), body: String(c.title).slice(0, 60) + "\n" + c.why + "\n✍️ 30초 대본 준비됨 · 탭해서 열기", url: "https://voice.zhnote.net/shorts?open=" + id, group: "숏츠 타이밍", icon: "https://voice.zhnote.net/shorts-192.png" }) });
+    if (!br.ok) throw serr("Bark 전송 실패 " + br.status, 502);
+  }
+  doc.seen[c.key] = Date.now();
+  doc.log = [{ at: Date.now(), kind: c.kind, title: c.title, why: c.why, id, url: c.url || "", bark: !!bark }, ...(doc.log || [])].slice(0, 20);
+  return id;
+}
+async function timRun(env, h, opt) {
+  const doc = await timDoc(env, h);
+  if (opt.auto && doc.on === false) return { doc, cands: [] };
+  const cands = await timScan(env, h, doc, opt);
+  for (const k of Object.keys(doc.seen || {})) if (Date.now() - doc.seen[k] > 14 * 86400e3) delete doc.seen[k];
+  doc.seen = doc.seen || {};
+  const fresh = cands.filter((c) => !c.skip && !doc.seen[c.key]).sort((a, c) => c.score - a.score);
+  const today = cnDay();
+  if (!doc.day || doc.day.d !== today) doc.day = { d: today, n: 0 };
+  let fired = null;
+  if (opt.fire && fresh.length && doc.day.n < 2) { fired = await timFire(env, h, doc, fresh[0]); doc.day.n++; }
+  doc.last = { at: Date.now(), n: cands.length, fresh: fresh.length };
+  await env.KV.put(timKey(h), JSON.stringify(doc));
+  return { doc, cands, fired };
+}
+async function timView(env, b, h) {
+  const doc = await timDoc(env, h);
+  if (typeof b.on === "boolean" || TIM_SENS[b.sens]) {
+    if (typeof b.on === "boolean") doc.on = b.on;
+    if (TIM_SENS[b.sens]) doc.sens = b.sens;
+    await env.KV.put(timKey(h), JSON.stringify(doc));
+  }
+  let cands = null, fired = null;
+  if (b.check) {
+    const ck = "shorts:timing:chk:" + cnDay() + ":" + h, n = Number(await env.KV.get(ck)) || 0;
+    if (n >= 4) throw serr("직접 확인은 하루 4번까지예요(유튜브 검색 한도).", 429);
+    await env.KV.put(ck, String(n + 1), { expirationTtl: 2 * 86400 });
+    const r = await timRun(env, h, { trend: true, fire: !!b.fire });
+    cands = r.cands; fired = r.fired;
+    Object.assign(doc, r.doc);
+  }
+  return { ok: true, on: doc.on !== false, sens: doc.sens || "mid", bark: !!(await timBark(env, h)), radar: !!(await env.KV.get("shorts:radar:" + h)), chs: (doc.chs && doc.chs.ids || []).length, last: doc.last || null, log: doc.log || [], cands, fired };
+}
+// 크론: 중국 9·13·19시(UTC 1·5·11시 정각 틱) — 주인만
+export async function timingCron(env, utcH) {
+  const h = await env.KV.get("usage:owner");
+  if (!h || !(await env.KV.get("yt:" + h))) return;
+  await timRun(env, h, { auto: true, fire: true, trend: utcH === 5 });
+}
+
 export async function shortsCron(env) {
   let cur;
   do {
@@ -1394,6 +1528,29 @@ function qLoad(arg){api('/shorts/yt/queue',arg||{}).then(function(r){var c=$('qC
   bx.querySelectorAll('[data-qev]').forEach(function(b){b.onclick=function(){qLoad({every:+b.getAttribute('data-qev')});};});
   bx.querySelectorAll('[data-qdel]').forEach(function(b){b.onclick=function(e){e.preventDefault();qLoad({del:b.getAttribute('data-qdel')});};});
   bx.querySelectorAll('[data-qnow]').forEach(function(b){b.onclick=function(e){e.preventDefault();b.disabled=true;b.textContent='…';qLoad({now:b.getAttribute('data-qnow')});};});});}
+// ⏰ 숏츠 타이밍 알림 카드
+var TMC=null;
+function tim(arg){var bx=$('tmBox');if(!bx)return;if(arg&&arg.check)bx.innerHTML='<span class="spin">⏰</span> 경쟁 채널·오늘의 중국 화제를 유튜브에서 확인 중… (20~40초)';
+  api('/shorts/timing',arg||{}).then(function(r){bx=$('tmBox');if(!bx)return;if(!r.ok){bx.innerHTML='<span style="color:var(--red)">'+esc(r.detail||r.error)+'</span>';return;}
+    if(r.cands)TMC=r.cands;
+    var h='<p>경쟁 채널 영상이 평소보다 몇 배 빨리 뜨거나, 오늘의 중국 화제가 한국에서도 뜨기 시작하면 <b>30초 대본을 미리 써 두고</b> Bark로 알려요. 중국 9·13·19시 확인, 하루 최대 2번.</p>'
+      +'<div class="chips"><button class="chip'+(r.on?' on':'')+'" data-tmon="1">켜기</button><button class="chip'+(!r.on?' on':'')+'" data-tmon="0">끄기</button></div>'
+      +'<p class="lbl">얼마나 자주</p><div class="chips">'+[['high','자주(작은 것도)'],['mid','보통'],['low','큰 것만']].map(function(x){return '<button class="chip'+(r.sens===x[0]?' on':'')+'" data-tms="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>'
+      +(!r.bark?'<p style="color:var(--red)">Bark 주소가 없어요 — <a href="/brief">출장 브리핑</a>에서 넣으면 여기도 같이 써요.</p>':'')
+      +(!r.radar?'<p style="color:var(--red)">경쟁 채널 목록이 없어요 — 아래 📡 레이더를 한 번 분석해 주세요(중국 화제 신호는 그래도 동작).</p>':'<p>지켜보는 경쟁 채널 '+r.chs+'곳'+(r.last?' · 마지막 확인 '+new Date(r.last.at).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'')+'</p>')
+      +'<div class="mini"><button id="tmChk">🔍 지금 확인(알림 없이)</button></div>';
+    if(TMC){h+='<div class="list" style="margin-top:8px">'+(TMC.length?TMC.map(function(c,i){return '<a href="#" style="cursor:default'+(c.skip?';opacity:.55':'')+'"><span>'+(c.kind==='rival'?'📈 ':'🔥 ')+esc(c.title)+'<br><small>'+esc(c.why)+'</small>'+(c.skip?'':'<br><button class="chip" data-tmuse="'+i+'">✍️ 이걸로 대본</button>')+(c.url?' <button class="chip" data-tmurl="'+esc(c.url)+'">▶ 원본</button>':'')+'</span></a>';}).join(''):'<a href="#"><span>지금은 타이밍 신호가 없어요</span></a>')+'</div>';}
+    if(r.log&&r.log.length)h+='<p class="lbl">보낸 알림</p><div class="list">'+r.log.slice(0,6).map(function(l){return '<a href="#" data-open="'+esc(l.id)+'"><span>'+(l.kind==='rival'?'📈 ':'🔥 ')+esc(l.title)+'<br><small>'+esc(l.why)+'</small></span><small>'+new Date(l.at).toLocaleDateString('ko-KR',{month:'numeric',day:'numeric'})+'</small></a>';}).join('')+'</div>';
+    bx.innerHTML=h;
+    bx.querySelectorAll('[data-tmon]').forEach(function(b){b.onclick=function(){tim({on:b.getAttribute('data-tmon')==='1'});};});
+    bx.querySelectorAll('[data-tms]').forEach(function(b){b.onclick=function(){tim({sens:b.getAttribute('data-tms')});};});
+    bx.querySelectorAll('[data-open]').forEach(function(a){a.onclick=function(e){e.preventDefault();openDraft(a.getAttribute('data-open'));};});
+    bx.querySelectorAll('[data-tmurl]').forEach(function(b){b.onclick=function(e){e.preventDefault();window.open(b.getAttribute('data-tmurl'),'_blank');};});
+    bx.querySelectorAll('[data-tmuse]').forEach(function(b){b.onclick=function(e){e.preventDefault();var c=TMC[+b.getAttribute('data-tmuse')];
+      $('topic').value=c.kind==='rival'?'지금 뜨는 영상 \''+c.title+'\' ('+c.why+') — 같은 소재를 광저우 사는 우리 시각·현지 가격으로 다르게':c.title+' ('+(c.zh||'')+') — '+(c.what||'')+' 한국 반응: '+c.why;
+      if(c.kind==='trend'){SER='cnet';}SEC=30;document.querySelectorAll('[data-sec]').forEach(function(y){y.classList.toggle('on',+y.getAttribute('data-sec')===30);});$('topic').scrollIntoView({block:'center'});toast('대본 쓰기를 누르세요');};});
+    $('tmChk').onclick=function(){tim({check:true});};
+  });}
 function home(){
   if(!CODE)return gate();
   api('/shorts/list').then(function(j){
@@ -1407,6 +1564,7 @@ function home(){
     h+='<div class="card" id="ytCard"><h2>유튜브 연결</h2><div id="ytBox" class="note">확인 중…</div></div>';
     h+='<div class="card" id="wkCard"><h2>🗓 이번 주말 찍을 숏츠 <button class="chip" id="wkRe" style="float:right;font-size:12px;padding:3px 9px">다시 만들기</button></h2><textarea id="wkMemo" rows="2" placeholder="이번 주 일정 (예: 화 광저우→제남 출장, 수~목 제남→닝보, 월·금 광저우)" style="width:100%;box-sizing:border-box;margin:4px 0 6px;border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;background:var(--card);color:var(--ink)"></textarea><div id="wkBox" class="note">불러오는 중…</div></div>';
     h+='<div class="card" id="qCard" style="display:none"><h2>📅 예약 발행</h2><div id="qBox" class="note"></div></div>';
+    if(j.yt)h+='<div class="card" id="tmCard"><h2>⏰ 숏츠 타이밍 알림</h2><div id="tmBox" class="note">불러오는 중…</div></div>';
     if(j.yt)h+='<div class="card" id="rdCard"><h2>📡 경쟁 채널 레이더 <button class="chip" id="rdGo" style="float:right;font-size:12px;padding:3px 9px">분석하기</button></h2><div id="rdBox" class="note">불러오는 중…</div></div>';
     if(j.yt)h+='<div class="card" id="cmCard"><h2>💬 댓글 질문 광산 <button class="chip" id="cmGo" style="float:right;font-size:12px;padding:3px 9px">캐기</button></h2><div id="cmBox" class="note">불러오는 중…</div></div>';
     if(j.yt)h+='<div class="card"><h2>📈 내 채널 성적 <button class="chip" id="stRe" style="float:right;font-size:12px;padding:3px 9px">새로고침</button></h2><div id="stBox" class="note">불러오는 중…</div></div>';
@@ -1431,7 +1589,8 @@ function home(){
       api('/shorts/script',{topic:t,sec:SEC,angle:ANG,series:SER}).then(function(r){b.disabled=false;b.textContent='✍️ 대본 쓰기';if(!r.ok){$('e1').textContent=r.detail||r.error;return;}D=r.draft;F=r.files||{};editor();});};
     $('avOpen').onclick=ava;
     ytBox();qLoad();wkLoad();$('wkRe').onclick=function(){wkLoad(true);};$('wkMemo').onchange=function(){api('/shorts/week',{memo:this.value});toast('일정 저장 — 다시 만들기를 누르면 반영돼요');};
-    if(j.yt){radar(false);$('rdGo').onclick=function(){radar(true);};cmt(false);$('cmGo').onclick=function(){cmt(true);};stats(false);$('stRe').onclick=function(){stats(true);};}
+    var qo=new URLSearchParams(location.search).get('open');if(qo){try{history.replaceState(null,'','/shorts');}catch(e){}openDraft(qo);return;}
+    if(j.yt){tim();radar(false);$('rdGo').onclick=function(){radar(true);};cmt(false);$('cmGo').onclick=function(){cmt(true);};stats(false);$('stRe').onclick=function(){stats(true);};}
   }).catch(function(){gate('서버에 연결하지 못했어요');});
 }
 var AV={voice:'Cherry',res:'480P'};try{AV.voice=localStorage.getItem('av-voice')||'Cherry';}catch(e){}
