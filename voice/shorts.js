@@ -1040,11 +1040,11 @@ async function cloudSubmit(env, b, h) {
   main.sort(byIn);
   const VideoTracks = [{ VideoTrackClips: main }].concat(["base", "cap", "asr", "sub"].filter((l) => layers[l]).map((l) => ({ VideoTrackClips: layers[l].sort(byIn) })));
   const tracks = {};
-  for (const au of (Array.isArray(tl.audio) ? tl.audio : []).slice(0, 60)) {
+  for (const au of (Array.isArray(tl.audio) ? tl.audio : []).slice(0, 120)) {
     const fx = [{ Type: "Volume", Gain: Math.min(5, Math.max(0, Number(au.gain) || 1)) }];
     if (au.fade) fx.push({ Type: "AFade", SubType: "Out", Duration: Math.min(5, Number(au.fade) || 1), Curve: "tri" });
     const c = { MediaURL: url(au.k), TimelineIn: n3(au.tin), TimelineOut: n3(au.tout), Effects: fx };
-    if (au.loop) c.LoopMode = true; else { c.In = 0; c.Out = n3(au.tout - au.tin); }
+    if (au.loop) c.LoopMode = true; else { const i0 = Math.max(0, Number(au.in) || 0); c.In = n3(i0); c.Out = n3(i0 + au.tout - au.tin); }
     const t = au.track === "bgm" ? "bgm" : "narr";
     (tracks[t] = tracks[t] || []).push(c);
   }

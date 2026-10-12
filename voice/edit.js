@@ -284,6 +284,14 @@ async function ensureNarr(ac,prog){
   }
   return out;
 }
+// 클라우드 편집 배경음악: 음악 파일은 내레이션보다 원래 10dB 안팎 커서 기본을 낮추고(bgv×0.7), 내레이션 나오는 동안은 30%로 낮춘 조각으로 나눔(2026-10-12 '음악이 너무 크고 내레이션이 작다')
+function bgmPieces(key,T,talk,bgv){var base=bgv*0.7,dur=BGM&&BGM.buf?BGM.buf.duration:0,cuts=[0];
+  talk.forEach(function(r){cuts.push(Math.max(0,r[0]-0.15),Math.min(T,r[1]+0.25));});cuts.push(T);cuts=cuts.filter(function(x){return x>=0&&x<=T;}).sort(function(a,b){return a-b;});
+  var out=[];for(var i=0;i<cuts.length-1;i++){var a=cuts[i],b=cuts[i+1];if(b-a<0.05)continue;var mid=(a+b)/2,inTalk=talk.some(function(r){return mid>=r[0]-0.15&&mid<=r[1]+0.25;});
+    var g=inTalk?base*0.3:base;
+    if(!dur){out.push({k:key,tin:a,tout:b,gain:g,loop:true,track:'bgm'});continue;}
+    var t=a;while(t<b-0.02){var off=t%dur,len=Math.min(b-t,dur-off);out.push({k:key,tin:t,tout:t+len,in:off,gain:g,track:'bgm'});t+=len;}}
+  if(out.length)out[out.length-1].fade=Math.min(1.2,out[out.length-1].tout-out[out.length-1].tin);return out;}
 async function ensureBgm(ac){if(!BGM||BGM.buf||!D.opts.bgv)return;try{BGM.buf=await decode(ac,await BGM.file.arrayBuffer());}catch(e){toast('배경음악 파일을 읽지 못했어요');BGM=null;}}
 
 // ---------- 5) 렌더링 (미리보기 dry=true 는 녹화 없이 같은 화면·소리) ----------
@@ -296,6 +304,18 @@ function firstFrame(v){return new Promise(function(ok){var done=false;function f
 function sayChunks(t){t=String(t||'').trim();if(!t)return [];var parts=t.replace(/([,.!?…，。！？~]+)(?![0-9])\s*/g,'$1\n').split('\n').map(function(x){return x.trim();}).filter(Boolean),out=[];
   parts.forEach(function(x){while(x.length>18){var m=x.lastIndexOf(' ',Math.ceil(x.length/2)+3);if(m<6)m=x.indexOf(' ',6);if(m<0)break;out.push(x.slice(0,m));x=x.slice(m+1).trim();}if(x)out.push(x);});
   var tot=out.reduce(function(a,x){return a+x.length+2;},0);return out.map(function(x){return {t:x,w:(x.length+2)/tot};});}
+// 자막 토막을 실제 내레이션의 숨 쉬는 자리(무음)에 맞춤 — 글자 수 비례만 쓰면 말과 자막이 어긋남(2026-10-12 소유자 지적)
+function alignW(buf,chs){if(!buf||!chs||chs.length<2)return chs;try{
+  var d=buf.getChannelData(0),sr=buf.sampleRate,hop=Math.max(1,Math.round(sr*0.02)),n=Math.floor(d.length/hop),e=new Float32Array(n),mx=0,i,j;
+  for(i=0;i<n;i++){var q=0;for(j=i*hop;j<(i+1)*hop;j++)q+=d[j]*d[j];e[i]=Math.sqrt(q/hop);if(e[i]>mx)mx=e[i];}
+  if(!mx)return chs;var thr=mx*0.08,s0=0,s1=n-1;while(s0<n&&e[s0]<thr)s0++;while(s1>s0&&e[s1]<thr)s1--;if(s1-s0<10)return chs;
+  var cand=[],run=-1;for(i=s0;i<=s1;i++){if(e[i]<thr){if(run<0)run=i;}else{if(run>=0&&i-run>=4)cand.push((run+i)/2*0.02);run=-1;}}
+  var S=s0*0.02,E=(s1+1)*0.02,L=E-S,acc=0,b=[0],prev=S,tol=L/chs.length*0.6;
+  for(var k=0;k<chs.length-1;k++){acc+=chs[k].w;var want=S+acc*L,best=-1,bd=1e9;
+    for(var c=0;c<cand.length;c++){var x=cand[c];if(x<=prev+0.15)continue;var dd=Math.abs(x-want);if(dd<bd&&dd<=tol){bd=dd;best=x;}}
+    var at=best>=0?best:want;if(at<=prev+0.1)at=Math.min(E-0.1,prev+0.3);b.push(at);prev=at;}
+  b.push(buf.duration);var dur=buf.duration;return chs.map(function(ch,k){return {t:ch.t,w:Math.max(0.02,(b[k+1]-b[k])/dur)};});
+}catch(err){return chs;}}
 // 줄바꿈은 띄어쓰기 단위로(숫자·단어 중간에서 안 끊김: '2.5/6만원' 같은 오독 방지), 한 단어가 너무 길 때만 글자 단위
 function wrap(g,t,max){t=String(t||'');var out=[],cur='';function fits(x){return g.measureText(x).width<=max;}
   t.split(/ +/).forEach(function(w){if(!w)return;var n=cur?cur+' '+w:w;if(fits(n)){cur=n;return;}if(cur)out.push(cur);cur='';
@@ -338,9 +358,9 @@ async function render0(dry){
   out.innerHTML='<p class="prog" id="rp">'+(dry?'미리보기 중…':'녹화 중… 화면을 켜 두세요')+'</p><div class="bar"><i id="rb"></i></div>';out.appendChild(cv);cv.className='pv';
   if(dry)cv.scrollIntoView({block:'center',behavior:'smooth'});
   var END=D.opts.end?2:0;
-  var plan=D.scenes.map(function(s,i){var nd=narr[i]?narr[i].duration+0.4:0,c=CLIPS[s.clip],room=c?Math.max(0.3,(c.dur-s.s)/(s.sp||1)):segLen(s);return {s:s,i:i,sp:s.sp||1,seg:segLen(s),nd:narr[i]?narr[i].duration:0,ck:sayChunks(s.say),len:Math.max(Math.min(Math.max(segLen(s),nd),room),0.8)};}),total=plan.reduce(function(a,p){return a+p.len;},0)+END,doneT=0,bgmPos=0;
+  var plan=D.scenes.map(function(s,i){var nd=narr[i]?narr[i].duration+0.4:0,c=CLIPS[s.clip],room=c?Math.max(0.3,(c.dur-s.s)/(s.sp||1)):segLen(s);return {s:s,i:i,sp:s.sp||1,seg:segLen(s),nd:narr[i]?narr[i].duration:0,ck:alignW(narr[i],sayChunks(s.say)),len:Math.max(Math.min(Math.max(segLen(s),nd),room),0.8)};}),total=plan.reduce(function(a,p){return a+p.len;},0)+END,doneT=0,bgmPos=0;
   // 배경음악: 구간마다 이어지는 위치부터 짧게 페이드 인·아웃(녹화 일시정지 사이 끊김 없이 이어 붙음), 내레이션 땐 낮춤
-  function bgm(at,len,duck,fadeOut){var lv=D.opts.bgv;if(!BGM||!BGM.buf||!lv)return;var s=ac.createBufferSource(),gn=ac.createGain();s.buffer=BGM.buf;s.loop=true;s.connect(gn);gn.connect(BUS.comp);
+  function bgm(at,len,duck,fadeOut){var lv=D.opts.bgv*0.7;if(!BGM||!BGM.buf||!lv)return;var s=ac.createBufferSource(),gn=ac.createGain();s.buffer=BGM.buf;s.loop=true;s.connect(gn);gn.connect(BUS.comp);
     var l=lv*(duck?0.4:1),fo=Math.min(len,fadeOut||0.04);gn.gain.setValueAtTime(0,at);gn.gain.linearRampToValueAtTime(l,at+0.03);gn.gain.setValueAtTime(l,at+Math.max(0.03,len-fo));gn.gain.linearRampToValueAtTime(0,at+len);
     s.start(at,bgmPos%BGM.buf.duration);s.stop(at+len+0.05);bgmPos+=len;}
   function stroke(txt,x,y,font,fill,lw){g.font=font;g.textAlign='center';g.lineJoin='round';g.lineWidth=lw;g.strokeStyle='rgba(0,0,0,.85)';g.strokeText(txt,x,y);g.fillStyle=fill;g.fillText(txt,x,y);}
@@ -483,7 +503,7 @@ async function cloudRender(){
   var btn=$('cloudBtn'),out=$('out'),ac=getAC(),lbl=btn.textContent,o=D.opts;btn.disabled=true;$('renderBtn').disabled=true;$('pvAll').disabled=true;
   function prog(t,f){out.innerHTML='<p class="prog">'+t+'</p><div class="bar"><i id="cb" style="width:'+Math.round((f||0)*100)+'%"></i></div>';}
   try{
-    var narr=await ensureNarr(ac,function(t){prog(t);});
+    var narr=await ensureNarr(ac,function(t){prog(t);});await ensureBgm(ac);
     prog('📐 타임라인 짜는 중…');
     var T=0,nEnd=0,vid=[],ovs=[],aud=[],talk=[],used={};
     for(var k=0;k<D.scenes.length;k++){var sc=D.scenes[k],c=CLIPS[sc.clip];if(!c)continue;
@@ -495,7 +515,7 @@ async function cloudRender(){
       vid.push({clip:sc.clip,in:sc.s,out:Math.min(c.dur,sc.s+vl*sp),speed:sp,tin:t0,tout:t0+vl,gain:(o.orig||0)*(hasN||nEnd>t0+0.2?0.25:1)});
       if(len>vl+0.05)ovs.push({kind:'freeze',layer:'main',v:c.v,at:Math.min(c.dur,sc.s+vl*sp)-0.06,tin:t0+vl,tout:t0+len});
       if(sc.cap)ovs.push({kind:'cap',layer:'cap',txt:sc.cap,first:k===0,tin:t0,tout:t0+len});
-      if(o.subs){var chs=sayChunks(sc.say);if(chs.length&&(hasN||!o.narr||!sc.say)){var s0=hasN?ns:t0,span=hasN?nd:len,acc=0;chs.forEach(function(ch){var a=s0+acc*span;acc+=ch.w;ovs.push({kind:'sub',layer:'sub',txt:ch.t,tin:a,tout:Math.max(a+0.3,s0+acc*span)});});}}
+      if(o.subs){var chs=hasN?alignW(narr[k],sayChunks(sc.say)):sayChunks(sc.say);if(chs.length&&(hasN||!o.narr||!sc.say)){var s0=hasN?ns:t0,span=hasN?nd:len,acc=0;chs.forEach(function(ch){var a=s0+acc*span;acc+=ch.w;ovs.push({kind:'sub',layer:'sub',txt:ch.t,tin:a,tout:Math.max(a+0.3,s0+acc*span)});});}}
       var A=o.osub&&clipAsr(sc.clip);if(A)A.forEach(function(r){if(!r[3])return;var a=t0+(r[0]-sc.s)/sp,b=t0+(r[1]+0.3-sc.s)/sp;if(b<=t0||a>=t0+vl)return;ovs.push({kind:'asr',layer:'asr',ko:r[3],zh:r[2],tin:Math.max(t0,a),tout:Math.min(t0+vl,b)});});
       T+=len;}
     if(!vid.length)throw new Error('구간이 없어요');
@@ -521,7 +541,7 @@ async function cloudRender(){
       done+=u.size;if(u.clip){OSSUP[u.key]=Date.now();try{localStorage.setItem('ed-oss',JSON.stringify(OSSUP));}catch(e){}}}
     var tl={fit:o.fit,video:vid.map(function(v){return {k:clipKey[v.clip],in:v.in,out:v.out,speed:v.speed,tin:v.tin,tout:v.tout,gain:v.gain};}),
       images:ovs.map(function(x){return {k:x.key,layer:x.layer,tin:x.tin,tout:x.tout};}),
-      audio:aud.map(function(a){return {k:a.key,tin:a.tin,tout:a.tout,gain:2.2*(o.nv||1.5),track:'narr'};}).concat(bgmKey?[{k:bgmKey,tin:0,tout:T,gain:Math.min(0.6,o.bgv*2),loop:true,fade:1.2,track:'bgm'}]:[])};
+      audio:aud.map(function(a){return {k:a.key,tin:a.tin,tout:a.tout,gain:2.2*(o.nv||1.5),track:'narr'};}).concat(bgmKey?bgmPieces(bgmKey,T,talk,o.bgv):[])};
     prog('☁️ 알리바바에 편집 맡기는 중…');
     var s=await api('/shorts/cloud/submit',{id:D.id,tl:tl});if(!s.ok)throw new Error(s.detail||s.error);
     var t1=Date.now(),res=null;
