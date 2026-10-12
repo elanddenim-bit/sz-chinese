@@ -7,7 +7,7 @@ compatibility_date = "2026-09-01"
 workers_dev = true
 
 # 아이콘 PNG 를 바이너리로 불러오기(import ICON from "./icon-180.png")
-rules = [{ type = "Data", globs = ["**/*.png"], fallthrough = true }]
+rules = [{ type = "Data", globs = ["**/*.png", "**/*.woff2"], fallthrough = true }]   # woff2: 화면 글꼴(Pretendard, OFL — fonts/Pretendard-OFL.txt)
 
 # 중국에서 VPN 없이 열리도록 커스텀 도메인
 routes = [{ pattern = "voice.zhnote.net", custom_domain = true }]

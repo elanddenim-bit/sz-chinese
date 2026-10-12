@@ -312,7 +312,7 @@ export async function briefGet(req, env, url) {
     (x.leave ? '<span class="lv">' + esc(x.leave) + " 출발 권장(대략)</span>" : "") +
     (x.stay ? "<span>🏨 " + esc(x.stay) + "</span>" : "") + (x.meet ? '<p class="m">' + esc(x.meet) + "</p>" : "") + "</div>").join("");
   const wx = (o.ws || []).map((w) => "<tr><td>" + esc(w.city) + "</td><td>" + w.lo + "~" + w.hi + "°</td><td>" + esc(w.w) + "</td><td>" + (w.rain == null ? "-" : w.rain + "%") + "</td><td>" + w.wind + "km/h</td></tr>").join("");
-  const html = '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#1664B0"><title>' + esc(o.title) + '</title><style>' + VCSS + '</style></head><body>' +
+  const html = '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#1664B0"><title>' + esc(o.title) + '</title><script>try{var F=localStorage.getItem(\'bf-font\')||\'pre\',Z=localStorage.getItem(\'bf-size\')||\'m\';document.documentElement.setAttribute(\'data-f\',F);document.documentElement.setAttribute(\'data-s\',Z);}catch(e){document.documentElement.setAttribute(\'data-f\',\'pre\');}</script><style>' + VCSS + FCSS + '</style></head><body>' +
     '<header><a href="/brief">‹</a><div><small>' + esc(d) + ' 출장 브리핑</small><h1>' + esc(o.title) + "</h1></div></header><main>" +
     '<section><h2>이동</h2>' + legs + "</section>" +
     "<section><h2>날씨</h2><p class=\"big\">" + esc(o.wline) + "</p><table><tr><th>도시</th><th>기온</th><th>하늘</th><th>강수</th><th>바람</th></tr>" + wx + "</table>" + (o.wear ? "<p>👔 " + esc(o.wear) + "</p>" : "") + "</section>" +
@@ -325,6 +325,7 @@ export async function briefGet(req, env, url) {
   return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
 }
 
+const FCSS = "@font-face{font-family:Pretendard;font-weight:400;font-display:swap;src:url(/fonts/pretendard-400.woff2) format(\"woff2\")}\n@font-face{font-family:Pretendard;font-weight:700;font-display:swap;src:url(/fonts/pretendard-700.woff2) format(\"woff2\")}\nhtml[data-f=pre] body,html[data-f=pre] input,html[data-f=pre] select,html[data-f=pre] textarea,html[data-f=pre] button,html[data-f=pre] pre{font-family:Pretendard,-apple-system,\"Apple SD Gothic Neo\",system-ui,sans-serif}\nhtml[data-f=myeong] body,html[data-f=myeong] input,html[data-f=myeong] textarea,html[data-f=myeong] pre{font-family:AppleMyungjo,\"Nanum Myeongjo\",\"Noto Serif KR\",serif}\nhtml[data-s=l]{zoom:1.12}html[data-s=xl]{zoom:1.25}\n";
 const VCSS = ":root{--sky:#1664B0;--bg:#EFE8DE;--card:#F7F2EA;--ink:#1A2330;--ink2:#5E6672;--line:#D9CEBD;--red:#D21624}" +
   "@media (prefers-color-scheme:dark){:root{--bg:#141A22;--card:#1C2430;--ink:#EDE6DA;--ink2:#9AA3AE;--line:#2C3644}}" +
   "*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 -apple-system,'Apple SD Gothic Neo',system-ui,sans-serif}" +
@@ -342,10 +343,17 @@ export const BRIEF_HTML = String.raw`<!doctype html>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="apple-touch-icon" href="/icon-180.png">
 <title>출장 브리핑</title>
+<script>try{var F=localStorage.getItem('bf-font')||'pre',Z=localStorage.getItem('bf-size')||'m';document.documentElement.setAttribute('data-f',F);document.documentElement.setAttribute('data-s',Z);}catch(e){document.documentElement.setAttribute('data-f','pre');}</script>
 <style>
 :root{--sky:#1664B0;--bg:#EFE8DE;--card:#F7F2EA;--ink:#1A2330;--ink2:#5E6672;--line:#D9CEBD;--red:#D21624}
 @media (prefers-color-scheme:dark){:root{--bg:#141A22;--card:#1C2430;--ink:#EDE6DA;--ink2:#9AA3AE;--line:#2C3644}}
-*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,"Apple SD Gothic Neo",system-ui,sans-serif}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 -apple-system,"Apple SD Gothic Neo",system-ui,sans-serif;letter-spacing:-.01em}
+@font-face{font-family:Pretendard;font-weight:400;font-display:swap;src:url(/fonts/pretendard-400.woff2) format("woff2")}
+@font-face{font-family:Pretendard;font-weight:700;font-display:swap;src:url(/fonts/pretendard-700.woff2) format("woff2")}
+html[data-f=pre] body,html[data-f=pre] input,html[data-f=pre] select,html[data-f=pre] textarea,html[data-f=pre] button,html[data-f=pre] pre{font-family:Pretendard,-apple-system,"Apple SD Gothic Neo",system-ui,sans-serif}
+html[data-f=myeong] body,html[data-f=myeong] input,html[data-f=myeong] textarea,html[data-f=myeong] pre{font-family:AppleMyungjo,"Nanum Myeongjo","Noto Serif KR",serif}
+html[data-s=l]{zoom:1.12}html[data-s=xl]{zoom:1.25}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 8px}.chips button{background:transparent;color:var(--ink);border:1px solid var(--line);padding:6px 10px;font-weight:500}.chips button.on{background:var(--sky);color:#fff;border-color:var(--sky)}
 header{background:var(--sky);color:#fff;padding:calc(env(safe-area-inset-top) + 14px) 16px 14px;border-bottom:3px solid var(--red);display:flex;align-items:center;gap:12px}
 header h1{margin:0;font-size:19px}a.back{color:#fff;text-decoration:none;font-size:22px}
 main{max-width:640px;margin:0 auto;padding:12px 16px 60px}
@@ -410,6 +418,7 @@ function draw(){
   h+='<div class="card"><h2>출장 일정</h2>'+S.trips.map(tripHtml).join('')+'<div class="btns"><button class="ghost" id="add">+ 일정 추가</button><button id="st">일정 저장</button></div></div>';
   h+='<div class="card"><h2>미리 보기 · 바로 보내기</h2><div class="row"><input type="date" id="pd" value="'+tom+'"><span class="muted" style="align-self:center">'+(has?'내일 일정 있음 — 오늘 '+S.hour+'시 자동 발송':'내일 일정 없음')+'</span></div>'+
     '<div class="btns"><button class="ghost" id="pv">미리 보기</button><button id="sn">지금 보내기</button></div><div id="out"></div></div>';
+  h+=fontCard();
   if(S.log&&S.log.length)h+='<div class="card"><h2>보낸 기록</h2>'+S.log.map(function(l){return '<div class="muted">'+esc(l.d)+' · '+new Date(l.at).toLocaleString('ko-KR',{timeZone:'Asia/Shanghai',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})+' · '+(l.ok?'✓ '+(l.m?'아침 출발':(l.how||'')):'✕ '+esc(l.err||''))+'</div>';}).join('')+'</div>';
   $('m').innerHTML=h;
   $('sb').onclick=function(){var b={hour:$('hour').value};var v=$('bark').value.trim();if(v)b.bark=v;api('/brief/save',b).then(function(r){if(r.error)return toast(r.detail||r.error);S=r;draw();toast('저장했어요');});};
@@ -423,6 +432,11 @@ function draw(){
     navigator.geolocation.getCurrentPosition(function(p){api('/brief/save',{trips:collect(),home:{gps:p.coords.longitude.toFixed(6)+','+p.coords.latitude.toFixed(6)}}).then(function(r){if(r.error)return toast(r.detail||r.error);S=r;draw();toast('집 위치 저장');});},
       function(){toast('위치 권한을 허용해 주세요');},{enableHighAccuracy:true,timeout:15000});};
   $('pp').onclick=parse;
+  Array.prototype.forEach.call(document.querySelectorAll('[data-font],[data-size]'),function(b){b.onclick=function(){
+    var f=b.getAttribute('data-font'),z=b.getAttribute('data-size');
+    try{if(f)localStorage.setItem('bf-font',f);if(z)localStorage.setItem('bf-size',z);}catch(e){}
+    if(f)document.documentElement.setAttribute('data-f',f);if(z)document.documentElement.setAttribute('data-s',z);
+    S.trips=collect();draw();};});
 }
 function shrink(f){return new Promise(function(ok,no){var im=new Image();im.onload=function(){var k=Math.min(1,1600/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);
   c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(im.src);ok(c.toDataURL('image/jpeg',0.85));};im.onerror=no;im.src=URL.createObjectURL(f);});}
@@ -440,6 +454,10 @@ function parse(){var f=$('pf').files[0],t=$('pt').value.trim();if(!f&&!t)return 
     api('/brief/save',{trips:S.trips}).then(function(s){if(s.error)return toast(s.detail||s.error);S=s;draw();
       $('pout').innerHTML='<p class="ok">✓ 일정 '+upd+'개 채움 · '+add+'개 추가'+(stay?' · 숙소 '+esc(stay.name):'')+' — 아래에서 확인해 주세요</p>';});
   });}
+function fontCard(){var f=document.documentElement.getAttribute('data-f')||'pre',z=document.documentElement.getAttribute('data-s')||'m';
+  function c(k,v,cur,t,st){return '<button class="'+(v===cur?'on':'')+'" data-'+k+'="'+v+'"'+(st?' style="'+st+'"':'')+'>'+t+'</button>';}
+  return '<div class="card"><h2>글꼴 · 글자 크기 (이 기기에만 저장)</h2><div class="chips">'+c('font','pre',f,'프리텐다드','font-family:Pretendard')+c('font','sys',f,'아이폰 기본','font-family:-apple-system,sans-serif')+c('font','myeong',f,'명조','font-family:AppleMyungjo,serif')+'</div>'+
+    '<div class="chips">'+c('size','m',z,'보통')+c('size','l',z,'크게')+c('size','xl',z,'아주 크게')+'</div><p class="muted">알림을 눌러 여는 브리핑 화면에도 같이 적용돼요.</p></div>';}
 function collect(){return Array.prototype.map.call(document.querySelectorAll('.trip'),function(el){var o={id:(S.trips[+el.getAttribute('data-i')]||{}).id||''};
   Array.prototype.forEach.call(el.querySelectorAll('[data-k]'),function(f){o[f.getAttribute('data-k')]=f.value.trim();});return o;});}
 function saveTrips(){api('/brief/save',{trips:collect()}).then(function(r){if(r.error)return toast(r.detail||r.error);S=r;draw();toast('일정 저장');});}

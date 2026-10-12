@@ -39,6 +39,9 @@ import ICON512 from "./icon-512.png";
 import SH180 from "./shorts-180.png";
 import SH192 from "./shorts-192.png";
 import SH512 from "./shorts-512.png";
+import PRE400 from "./fonts/pretendard-400.woff2";
+import PRE700 from "./fonts/pretendard-700.woff2";
+const FONTS = { "/fonts/pretendard-400.woff2": PRE400, "/fonts/pretendard-700.woff2": PRE700 }; // 같은 도메인에서 받음 — 중국에서 외부 글꼴 CDN 막힘 대비
 
 // 박비서 홈 화면 아이콘(소유자 지정 일러스트) · PWA manifest
 const ICONS = { "/icon-180.png": ICON180, "/apple-touch-icon.png": ICON180, "/icon-192.png": ICON192, "/icon-512.png": ICON512, "/shorts-180.png": SH180, "/shorts-192.png": SH192, "/shorts-512.png": SH512 };
@@ -96,6 +99,7 @@ export default {
       if (url.pathname === "/ping") return json(req, { ok: true, host: host(env).replace(/^ws-[a-z0-9]{4}/, "ws-…"), key: !!env.DASHSCOPE_API_KEY });
       if (url.pathname === "/rt") return await realtime(req, env, ctx, url, false);
       if (url.pathname === "/agent") return await realtime(req, env, ctx, url, true);
+      if (FONTS[url.pathname]) return new Response(FONTS[url.pathname], { headers: { "content-type": "font/woff2", "cache-control": "public, max-age=31536000, immutable", "access-control-allow-origin": "*" } });
       if (ICONS[url.pathname]) return new Response(ICONS[url.pathname], { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (url.pathname === "/manifest.webmanifest") return new Response(MANIFEST, { headers: { "content-type": "application/manifest+json; charset=utf-8", "cache-control": "public, max-age=3600" } });
       if (url.pathname === "/u" && req.method === "POST") return await beacon(req, env, ctx);
