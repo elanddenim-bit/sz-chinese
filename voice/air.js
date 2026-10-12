@@ -41,8 +41,8 @@ async function qwen(env, models, messages, temperature = 0.9) {
       let r;
       try {
         r = await fetch("https://" + host(env) + "/compatible-mode/v1/chat/completions", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
-          body: JSON.stringify({ model, messages, temperature, response_format: { type: "json_object" }, enable_thinking: false, max_tokens: 8000 }) });
-      } catch (e) { last = String(e.message || e); continue; }
+          body: JSON.stringify({ model, messages, temperature, response_format: { type: "json_object" }, enable_thinking: false, max_tokens: 6000 }), signal: AbortSignal.timeout(Number(env.AIR_QWEN_MS) || 75000) });
+      } catch (e) { last = model + ": " + String(e.name === "TimeoutError" ? "응답 시간 초과" : e.message || e); break; }
       const t = await r.text();
       let j = {}; try { j = JSON.parse(t); } catch {}
       if (!r.ok) { last = model + " " + r.status + ": " + ((j.error && j.error.message) || t.slice(0, 120)); if (r.status >= 500 || r.status === 429) { await new Promise((ok) => setTimeout(ok, 1500)); continue; } break; }
@@ -106,8 +106,8 @@ async function newCase(env, ctx, b, h) {
   if (!env.DIDI || !env.DIDI_ACCESS_KEY) throw aerr("장소 검색 서버(디디 주소록) 연결이 없습니다", 500);
   const genre = GENRES[b.genre] ? b.genre : "classic";
   const gps = /^-?\d+\.\d+,-?\d+\.\d+$/.test(String(b.gps || "")) ? String(b.gps) : "113.2644,23.1291"; // 기본 광저우 시내
-  const poiRes = await env.DIDI.fetch("https://didi/api/poi", { method: "POST", headers: { "x-access-key": env.DIDI_ACCESS_KEY, "content-type": "application/json" }, body: JSON.stringify({ gps, radius: 15000, kw: KW }) }).then((r) => r.json());
-  if (!poiRes.ok) throw aerr("무대로 쓸 장소를 못 찾았어요: " + (poiRes.error || ""), 502);
+  const poiRes = await env.DIDI.fetch("https://didi/api/poi", { method: "POST", headers: { "x-access-key": env.DIDI_ACCESS_KEY, "content-type": "application/json" }, body: JSON.stringify({ gps, radius: 15000, kw: KW }), signal: AbortSignal.timeout(12000) }).then((r) => r.json()).catch((e) => ({ error: String(e.message || e) }));
+  if (!poiRes.ok) throw aerr("무대로 쓸 장소를 못 찾았어요(주소록 서버): " + (poiRes.error || ""), 502);
   const used = new Set(d.hist.flatMap((x) => x.pids || []).concat(Object.values(d.cases).flatMap((c) => c.pids || [])));
   const byKw = {};
   for (const p of (poiRes.pois || []).filter((p) => !used.has(p.id)).sort((a, c) => (c.rating || 3) - (a.rating || 3))) (byKw[p.kw] = byKw[p.kw] || []).push(p);
@@ -122,7 +122,7 @@ async function newCase(env, ctx, b, h) {
     "6) ending 揭晓真相(5~8句，逐条说明线索怎么指向真相)，wrong 猜错结局(2~3句，不剧透)，hints 2条(每条一句，越来越直接)。\n" +
     '只输出 JSON：{"title":"","intro":"3~5句开场，案件是什么、玩家为什么卷入","suspects":[{"name":"","korean":"","role":"","desc":"2句性格外貌","alibi":"本人声称的不在场说明1句","look":"","secret":""}],' +
     '"places":[{"i":候选编号,"title":"章节标题","story":"到达时的描写3~4句","scene":"","search":"调查后发现的东西2~3句","clue":"这条线索一句话"}],"culprit":0,"hints":["",""],"ending":"","wrong":""}';
-  const out = await qwen(env, [env.AIR_MODEL, env.MYST_MODEL, "qwen-plus", env.QUEST_MODEL || "qwen3.8-flash"], [{ role: "system", content: sys }, { role: "user", content: "候选地点：" + JSON.stringify(list) }]);
+  const out = await qwen(env, [env.AIR_MODEL, env.QUEST_MODEL || "qwen3.8-flash", "qwen-plus"], [{ role: "system", content: sys }, { role: "user", content: "候选地点：" + JSON.stringify(list) }]);
   const S = (x, n) => String(x == null ? "" : x).slice(0, n);
   const seen = new Set();
   const places = (Array.isArray(out.places) ? out.places : []).filter((x) => cands[Number(x.i)] && !seen.has(Number(x.i)) && seen.add(Number(x.i))).slice(0, 4).map((x, k) => {
@@ -159,7 +159,7 @@ async function newBook(env, ctx, b, h) {
   try {
     if (env.DIDI && env.DIDI_ACCESS_KEY) {
       const gps = /^-?\d+\.\d+,-?\d+\.\d+$/.test(String(b.gps || "")) ? String(b.gps) : "113.2644,23.1291";
-      const r = await env.DIDI.fetch("https://didi/api/poi", { method: "POST", headers: { "x-access-key": env.DIDI_ACCESS_KEY, "content-type": "application/json" }, body: JSON.stringify({ gps, radius: 15000, kw: KW }) }).then((x) => x.json());
+      const r = await env.DIDI.fetch("https://didi/api/poi", { method: "POST", headers: { "x-access-key": env.DIDI_ACCESS_KEY, "content-type": "application/json" }, body: JSON.stringify({ gps, radius: 15000, kw: KW }), signal: AbortSignal.timeout(12000) }).then((x) => x.json());
       const used = new Set(d.hist.flatMap((x) => x.pids || []).concat(Object.values(d.cases).flatMap((c) => c.pids || [])));
       const byKw = {}; for (const p of (r.pois || []).filter((p) => !used.has(p.id)).sort((a, c) => (c.rating || 3) - (a.rating || 3))) (byKw[p.kw] = byKw[p.kw] || []).push(p);
       places = Object.values(byKw).flatMap((l) => l.slice(0, 1)).slice(0, 8);
@@ -172,7 +172,7 @@ async function newBook(env, ctx, b, h) {
     "6) 真实地点(候选)只当背景舞台，人物、事件全部虚构，不能有凶杀、血腥、暴力、色情、政治。" +
     "7) 结局页 end 字段: good|half|bad，结局页没有 choices。所有 choices.to 必须是存在的 id，不能有循环，不能有到不了的页。\n" +
     '只输出 JSON：{"title":"","nodes":[{"id":"n1","s":"","choices":[{"t":"选项文字(韩语)","to":"n2"}]},{"id":"n9","s":"","end":"bad"}]}';
-  const out = await qwen(env, [env.AIR_MODEL, env.MYST_MODEL, "qwen-plus", env.QUEST_MODEL || "qwen3.8-flash"], [{ role: "system", content: sys }, { role: "user", content: "候选地点(可用作舞台)：" + JSON.stringify(places.map((p) => ({ name: p.name, type: p.type, area: p.area }))) }], 0.95);
+  const out = await qwen(env, [env.AIR_MODEL, env.QUEST_MODEL || "qwen3.8-flash", "qwen-plus"], [{ role: "system", content: sys }, { role: "user", content: "候选地点(可用作舞台)：" + JSON.stringify(places.map((p) => ({ name: p.name, type: p.type, area: p.area }))) }], 0.95);
   const S = (x, n) => String(x == null ? "" : x).slice(0, n);
   const raw = (Array.isArray(out.nodes) ? out.nodes : []).slice(0, 36);
   const ids = new Set(raw.map((x) => String(x.id)));
@@ -209,7 +209,7 @@ async function fill(env, ctx, b, h) {
   const d = await load(env, h), c = d.cases[String(b.id || "")];
   if (!c) throw aerr("사건을 찾지 못했어요.", 404);
   const S = (x, n) => String(x == null ? "" : x).slice(0, n);
-  const models = [env.AIR_MODEL, env.MYST_MODEL, "qwen-plus", env.QUEST_MODEL || "qwen3.8-flash"];
+  const models = [env.AIR_MODEL, env.QUEST_MODEL || "qwen3.8-flash", "qwen-plus"];
   if (c.kind === "book") {
     const todo = Object.values(c.nodes).filter((n) => !n.text).slice(0, 6);
     if (todo.length) {
@@ -392,7 +392,7 @@ function load(){
 function imgOf(c,k){return c.imgs&&c.imgs[k]?'<img src="'+esc(c.imgs[k])+'" alt="">':'<div class="ph"></div>';}
 function ready(c){var n=Object.keys(c.imgs||{}).length;return n+'/'+(c.nimg||8);}
 var FILLING={};
-function fillCase(c){if(FILLING[c.id]||!navigator.onLine||!c.left)return;FILLING[c.id]=true;api('/air/fill',{id:c.id}).then(function(j){FILLING[c.id]=false;if(!j.ok){toast(j.detail||j.error);return;}var i=S.cases.findIndex(function(x){return x.id===c.id;});if(i>=0)S.cases[i]=j['case'];ls('air-cases',S);if(!CUR)home();if(j.left)fillCase(j['case']);else pollAll();}).catch(function(){FILLING[c.id]=false;});}
+function fillCase(c){if(FILLING[c.id]||!navigator.onLine||!c.left)return;FILLING[c.id]=true;api('/air/fill',{id:c.id}).then(function(j){FILLING[c.id]=false;if(!j.ok){toast('이어 쓰기 실패: '+(j.detail||j.error)+' — 10초 뒤 다시');setTimeout(function(){fillCase(c);},10000);return;}var i=S.cases.findIndex(function(x){return x.id===c.id;});if(i>=0)S.cases[i]=j['case'];ls('air-cases',S);if(!CUR)home();if(j.left)fillCase(j['case']);else pollAll();}).catch(function(){FILLING[c.id]=false;});}
 function home(){
   CUR=null;$('ttl').textContent='🕵️ 미스터리 기내편';$('back').setAttribute('href','/hub');$('back').onclick=null;$('pts').textContent='누적 '+(S.total||0)+'점';
   var h='<div class="st"><span class="dot'+(navigator.onLine?'':' off')+'"></span>'+(navigator.onLine?'온라인':'오프라인 · 저장본')+' · 사건은 폰에 저장돼 비행기 모드에서도 돼요</div>';
@@ -410,8 +410,13 @@ function home(){
   $('mk').onclick=make;
   S.cases.forEach(function(c){if(c.left)fillCase(c);});
 }
-function make(){var b=$('mk');b.disabled=true;b.textContent='✍️ 사건 뼈대 쓰는 중… (30~60초)';
-  var go=function(gps){api('/air/new',{genre:ls('air-genre')||'classic',kind:ls('air-kind')||'case',gps:gps||''}).then(function(j){if(!j.ok){toast(j.detail||j.error);home();return;}S=j;ls('air-cases',S);home();toast('뼈대가 왔어요. 본문·심문 대본을 이어서 쓰고(1~2분), 그림은 그 뒤 2~3분 더.');});};
+var MKT=null;
+function make(){var b=$('mk');b.disabled=true;var t0=Date.now();b.textContent='✍️ 사건 뼈대 쓰는 중… 0초';clearInterval(MKT);MKT=setInterval(function(){var e=$('mk');if(e)e.textContent='✍️ 사건 뼈대 쓰는 중… '+Math.round((Date.now()-t0)/1000)+'초 (보통 30~60초)';},1000);
+  var go=function(gps){api('/air/new',{genre:ls('air-genre')||'classic',kind:ls('air-kind')||'case',gps:gps||''}).then(function(j){clearInterval(MKT);var sec=Math.round((Date.now()-t0)/1000);
+    if(!j.ok){toast((j.detail||j.error)+' ('+sec+'초 만에)');
+      // 연결이 끊겼어도 서버는 끝냈을 수 있음 → 잠시 뒤 목록 다시 확인
+      if(j.error==='network')setTimeout(function(){api('/air/state').then(function(k){if(k.ok){S=k;ls('air-cases',S);home();if(S.cases.length)toast('서버에는 사건이 만들어져 있었어요.');}});},4000);else home();return;}
+    S=j;ls('air-cases',S);home();toast('뼈대가 왔어요('+sec+'초). 본문·심문 대본을 이어서 쓰고(1~2분), 그림은 그 뒤 2~3분 더.');});};
   if(navigator.geolocation)navigator.geolocation.getCurrentPosition(function(p){go(p.coords.longitude.toFixed(6)+','+p.coords.latitude.toFixed(6));},function(){go('');},{timeout:4000});else go('');
 }
 function drop(id){api('/air/drop',{id:id}).then(function(j){if(j.ok){S=j;ls('air-cases',S);try{localStorage.removeItem('air-play:'+id);}catch(e){}home();}else toast(j.detail||j.error);});}
