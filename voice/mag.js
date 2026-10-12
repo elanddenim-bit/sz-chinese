@@ -91,8 +91,75 @@ async function makeBundle(env, h) {
   return out;
 }
 
-export async function magApi(env, ctx, path, b, h) {
+// ---------- 📻 라디오 드라마: 연재 소설 한 화를 대본(내레이션·남편·아내·그 외)으로 바꿔 줄마다 음성 → 화면이 효과음과 함께 이어 재생 ----------
+// 무료 플랜 요청당 외부 호출 50회 제한 → 대본은 한 번에, 음성은 화면이 줄마다 /mag/radio/line 로 하나씩 받아 둠(R2 tts/radio/<해시>/<n>/<i>)
+const RADIO_SFX = ["door", "rain", "street", "phone", "steps", "market", "night", "none"];
+async function qwenJson(env, sys, user, model) {
+  const r = await fetch("https://" + host(env) + "/compatible-mode/v1/chat/completions", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
+    body: JSON.stringify({ model, temperature: 0.7, enable_thinking: false, response_format: { type: "json_object" }, max_tokens: 6000, messages: [{ role: "system", content: sys }, { role: "user", content: user }] }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw merr("千问 " + r.status + ": " + ((j.error && j.error.message) || "").slice(0, 120), 502);
+  const c = String(j.choices[0].message.content).replace(/^```(?:json)?\s*|\s*```$/g, "");
+  try { return JSON.parse(c); } catch { const a = c.indexOf("{"), z = c.lastIndexOf("}"); return JSON.parse(c.slice(a, z + 1)); }
+}
+async function radioMake(env, ctx, b, h) {
+  const nv = await env.KV.get("nv:" + h, "json");
+  const chs = (nv && nv.chapters) || [];
+  if (!chs.length) throw merr("연재 소설이 아직 없어요. 도구함 → 우리 연재 소설에서 한 화 써 두세요.");
+  const ch = (b.n ? chs.find((x) => x.n === Number(b.n)) : null) || chs[chs.length - 1];
+  const key = "radio:" + h + ":" + ch.n;
+  let sc = b.fresh ? null : await env.KV.get(key, "json");
+  if (!sc) {
+    const names = (nv.names || ["남편", "아내"]);
+    const sys = "너는 라디오 드라마 각색 작가다. 아래 소설 한 화를 15분 안팎 오디오 드라마 대본으로 바꿔라. 화자 who: nar(내레이션, 소설의 지문을 1인칭 남편 시점이 아니라 3인칭 해설로 짧게), h(남편 '" + names[0] + "'의 대사), w(아내 '" + names[1] + "'의 대사), x(그 외 인물 — 가게 주인·행인 등, 중국어 한마디가 있으면 한글로 읽히게 '니하오' 식으로 적되 짧게). " +
+      "원작 문장과 사건 순서를 지키고 새 사건을 만들지 마라. 대사는 실제로 입으로 말하는 구어체, 내레이션은 그림이 떠오르게. 줄은 50~90개, 한 줄 120자 이내. 장면이 바뀌는 줄에는 sfx 를 " + RADIO_SFX.join("|") + " 중 하나로(없으면 none). 첫 줄은 nar 로 제목과 '몇 화'를 말한다. " +
+      '읽을 때 어색한 한자·영어는 한글 발음으로. JSON만: {"title":"","lines":[{"who":"nar|h|w|x","t":"","sfx":"none"}]}';
+    let out;
+    try { out = await qwenJson(env, sys, ch.n + "화 '" + ch.title + "'\n" + ch.text, env.RADIO_MODEL || "qwen-plus"); }
+    catch { out = await qwenJson(env, sys, ch.n + "화 '" + ch.title + "'\n" + ch.text, env.QUEST_MODEL || "qwen3.8-flash"); }
+    const lines = (Array.isArray(out.lines) ? out.lines : []).map((l) => ({ who: /^(nar|h|w|x)$/.test(l.who) ? l.who : "nar", t: String(l.t || "").trim().slice(0, 160), sfx: RADIO_SFX.includes(l.sfx) ? l.sfx : "none" })).filter((l) => l.t).slice(0, 110);
+    if (lines.length < 12) throw merr("대본이 너무 짧게 나왔어요. 다시 눌러 주세요.", 502);
+    const kr = await env.KV.get("voice:kr:" + h);
+    sc = { n: ch.n, title: String(out.title || ch.title).slice(0, 60), names, mine: !!kr, lines, made: Date.now() };
+    await env.KV.put(key, JSON.stringify(sc), { expirationTtl: 60 * 86400 });
+    if (ctx) ctx.waitUntil(logUse(env, "mag", { radio: 1 }, 0, h).catch(() => {}));
+  }
+  const urls = [];
+  for (let i = 0; i < sc.lines.length; i++) urls.push(await radioUrl(env, h, ch.n, i));
+  return { ok: true, radio: { ...sc, urls, chapters: chs.map((x) => ({ n: x.n, title: x.title })) } };
+}
+const radioUrl = async (env, h, n, i) => "/mag/radio/a?h=" + h + "&n=" + n + "&i=" + i + "&s=" + (await hmac16(env, "r|" + h + "|" + n + "|" + i));
+// 줄 하나 합성(이미 있으면 바로) — 화면이 순서대로 부름
+async function radioLine(env, b, h, synth) {
+  const n = Number(b.n), i = Number(b.i);
+  const sc = await env.KV.get("radio:" + h + ":" + n, "json");
+  if (!sc || !sc.lines[i]) throw merr("대본 줄이 없어요.", 404);
+  const pre = "tts/radio/" + h + "/" + n + "/" + i;
+  const hit = (await env.R2.head(pre + ".mp3")) || (await env.R2.head(pre + ".wav"));
+  if (hit) return { ok: true, i, url: await radioUrl(env, h, n, i), cached: true };
+  const l = sc.lines[i];
+  let bytes = null, ext = "wav", ct = "audio/wav";
+  // 내레이션은 내 목소리(한국어 복제), 남편 Ethan, 아내 Cherry, 그 외 Serena — 내 목소리가 없으면 내레이션은 Chelsie
+  const kr = await env.KV.get("voice:kr:" + h);
+  if (l.who === "nar" && kr) { try { bytes = await synth(env, kr, l.t, null, { language_hints: ["ko"], rate: 1.0, volume: 100 }); ext = "mp3"; ct = "audio/mpeg"; } catch { bytes = null; } }
+  if (!bytes) {
+    const voice = l.who === "h" ? "Ethan" : l.who === "w" ? "Cherry" : l.who === "x" ? "Serena" : "Chelsie";
+    const r = await fetch("https://" + host(env) + "/api/v1/services/aigc/multimodal-generation/generation", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
+      body: JSON.stringify({ model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text: l.t, voice, language_type: "Korean" } }) });
+    const j = await r.json().catch(() => ({}));
+    const u = j.output && j.output.audio && j.output.audio.url;
+    if (!u) throw merr("음성 합성 실패(" + (j.message || r.status) + ")", 502);
+    const a = await fetch(u); if (!a.ok) throw merr("오디오 받기 실패", 502);
+    bytes = new Uint8Array(await a.arrayBuffer());
+  }
+  await env.R2.put(pre + "." + ext, bytes, { httpMetadata: { contentType: ct } });
+  return { ok: true, i, url: await radioUrl(env, h, n, i) };
+}
+
+export async function magApi(env, ctx, path, b, h, synth) {
   await owner(env, h);
+  if (path === "/mag/radio/make") return radioMake(env, ctx, b, h);
+  if (path === "/mag/radio/line") return radioLine(env, b, h, synth);
   if (path !== "/mag/today") throw merr("not_found", 404);
   const key = "mag:" + h + ":" + cnDay();
   let d = await env.KV.get(key, "json");
@@ -135,6 +202,14 @@ export async function magGet(req, env, url, synth) {
   if (url.pathname === "/mag") return Response.redirect(new URL("/mag/", url).toString(), 302);
   if (url.pathname === "/mag/") return new Response(MAG_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
   if (url.pathname === "/mag/sw.js") return new Response(MAG_SW, { headers: { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-cache" } });
+  if (url.pathname === "/mag/radio/a") {
+    const h = String(url.searchParams.get("h") || ""), n = String(url.searchParams.get("n") || ""), i = String(url.searchParams.get("i") || "");
+    if (!/^[0-9a-f]{12}$/.test(h) || !/^\d+$/.test(n) || !/^\d+$/.test(i) || url.searchParams.get("s") !== (await hmac16(env, "r|" + h + "|" + n + "|" + i))) return new Response("forbidden", { status: 403 });
+    const pre = "tts/radio/" + h + "/" + n + "/" + i;
+    const o = (await env.R2.get(pre + ".mp3")) || (await env.R2.get(pre + ".wav"));
+    if (!o) return new Response("not yet", { status: 404 });
+    return new Response(o.body, { headers: { "content-type": o.httpMetadata?.contentType || "audio/mpeg", "cache-control": "private, max-age=31536000" } });
+  }
   if (url.pathname === "/mag/say") {
     const id = String(url.searchParams.get("id") || "");
     if (!/^[0-9a-f]{16}$/.test(id) || url.searchParams.get("s") !== (await hmac16(env, "s|" + id))) return new Response("forbidden", { status: 403 });
@@ -167,11 +242,11 @@ export async function magGet(req, env, url, synth) {
 }
 
 // 서비스워커: 화면은 네트워크 우선·실패 시 캐시, 음성은 캐시 우선. 범위 /mag/ 만.
-const MAG_SW = `const C='mag-v1';
+const MAG_SW = `const C='mag-v2';
 self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.add('/mag/')).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k.startsWith('mag-')&&k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
 self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET')return;
-  if(u.pathname==='/mag/say'){e.respondWith(caches.open(C).then(async c=>{const hit=await c.match(e.request);if(hit)return hit;const r=await fetch(e.request);if(r.ok)c.put(e.request,r.clone());return r;}));return;}
+  if(u.pathname==='/mag/say'||u.pathname==='/mag/radio/a'){e.respondWith(caches.open(C).then(async c=>{const hit=await c.match(e.request);if(hit)return hit;const r=await fetch(e.request);if(r.ok)c.put(e.request,r.clone());return r;}));return;}
   if(u.pathname==='/mag/'||u.pathname==='/mag'){e.respondWith(fetch(e.request).then(r=>{if(r.ok)caches.open(C).then(c=>c.put('/mag/',r.clone()));return r;}).catch(()=>caches.match('/mag/')));return;}
 });`;
 
@@ -261,7 +336,7 @@ function render(offline){
     +(P.cmt.mine&&P.cmt.mine.length?'<div class="lbl">우리 영상에 달린 질문(아직 답 없음)</div>'+P.cmt.mine.map(function(t){return '<div class="muted">“'+esc(t)+'”</div>';}).join(''):'')+'</div>';}
   if(P.week&&P.week.items){toc.push(['week','🗓 기획']);h+='<div class="card" id="week"><h2>🗓 이번에 찍을 숏츠</h2>'+P.week.items.map(function(x){return '<div class="it"><b>'+esc(KIND[x.kind]||'')+' '+esc(x.title)+'</b><div class="muted">📍 '+esc(x.where)+' · 첫마디 “'+esc(x.hook)+'”</div><div class="muted">'+esc(x.why)+'</div>'+(x.shots||[]).map(function(s,i){return '<div>'+(i+1)+'. '+esc(s.what)+' <span class="muted">— '+esc(s.how)+' ('+esc(s.sec)+'초)</span></div>';}).join('')+'</div>';}).join('')+'</div>';}
   if(P.yt){toc.push(['yt','📈 채널']);h+='<div class="card" id="yt"><h2>📈 내 채널</h2><div>구독 <b>'+esc(P.yt.subs)+'</b> · 영상 '+esc(P.yt.n)+'개 · 누적 조회 '+esc(P.yt.views)+'</div>'+(P.yt.top||[]).map(function(x){return '<div class="muted">'+esc(x.t)+' <span class="pill">'+esc(x.v)+'회 · 👍'+esc(x.l)+' · 💬'+esc(x.c)+'</span></div>';}).join('')+'</div>';}
-  if(P.novel){toc.push(['novel','📖 소설']);var nv=P.novel;h+='<div class="card novel" id="novel"><h2>📖 '+esc(nv.n)+'화 · '+esc(nv.title)+'</h2><div class="ab"><button id="abPlay">▶ 오디오북 듣기</button><span class="muted" id="abSt">'+nv.audio.length+'조각 · 내 목소리</span></div>'+nv.text.split(/\n+/).map(function(p){return '<p>'+esc(p)+'</p>';}).join('')+'</div>';}
+  if(P.novel){toc.push(['novel','📖 소설']);var nv=P.novel;h+='<div class="card novel" id="novel"><h2>📖 '+esc(nv.n)+'화 · '+esc(nv.title)+'</h2><div class="ab"><button id="abPlay">▶ 오디오북 듣기</button><span class="muted" id="abSt">'+nv.audio.length+'조각 · 내 목소리</span></div>'+radioHtml(nv.n)+nv.text.split(/\n+/).map(function(p){return '<p>'+esc(p)+'</p>';}).join('')+'</div>';}
   if(P.quest){toc.push(['quest','🧭 탐험']);h+='<div class="card" id="quest"><h2>🧭 주말 탐험 · '+esc(P.quest.pts)+'점</h2>'+P.quest.hist.map(function(x){return '<div class="it"><b>'+esc(x.name)+'</b> <span class="pill">'+esc(x.date)+' · +'+esc(x.pts)+'</span><div class="muted">'+esc(x.title)+(x.comment?' — '+esc(x.comment):'')+'</div></div>';}).join('')+'</div>';}
   if(P.signs){toc.push(['signs','🪧 간판']);h+='<div class="card" id="signs"><h2>🪧 간판 사냥 · '+esc(P.signs.pts)+'점</h2>'+P.signs.items.map(function(x){return '<div class="it"><b>'+esc(x.zh)+'</b> '+'★'.repeat(x.fun||0)+'<div>직역: '+esc(x.literal)+'</div><div class="muted">진짜 뜻: '+esc(x.real)+'</div></div>';}).join('')+'</div>';}
   if(!toc.length)h+='<div class="card muted">아직 담을 게 없어요. 출장 브리핑·레이더·소설 같은 걸 한 번 만들어 두면 여기 모여요.</div>';
@@ -274,6 +349,7 @@ function render(offline){
   document.querySelectorAll('[data-z]').forEach(function(b){b.onclick=function(){var z=b.getAttribute('data-z');document.documentElement.setAttribute('data-s',z);try{localStorage.setItem('mag-size',z);}catch(e){}render(offline);};});
   var re=$('re');if(re)re.onclick=function(){load(true);};
   var ab=$('abPlay');if(ab)ab.onclick=function(){playBook(P.novel.audio);};
+  radioBind();
 }
 var BOOK=null;
 function playBook(list){var b=$('abPlay'),st=$('abSt');
@@ -282,6 +358,45 @@ function playBook(list){var b=$('abPlay'),st=$('abSt');
   (function next(){if(i>=list.length){BOOK=null;b.textContent='▶ 오디오북 듣기';b.classList.remove('on');st.textContent='끝';return;}
     st.textContent=(i+1)+'/'+list.length+' 재생 중';BOOK=new Audio(list[i]);BOOK.onended=function(){i++;next();};BOOK.onerror=function(){st.textContent=(i+1)+'번 조각을 못 받았어요'+(navigator.onLine?'':' (오프라인)');i++;next();};
     var p=BOOK.play();if(p&&p.catch)p.catch(function(){st.textContent='재생 실패';});})();
+}
+
+// ---------- 📻 라디오 드라마 ----------
+var RD=null,RDP=null,RDAC=null;
+function rdCache(){try{return JSON.parse(localStorage.getItem('mag-radio')||'null');}catch(e){return null;}}
+function radioHtml(n){var r=rdCache();var ready=r&&r.n===n&&r.done>=r.lines.length;
+  return '<div class="ab" style="border-top:1px solid var(--line);padding-top:10px"><button id="rdBtn">'+(ready?'📻 라디오 드라마 듣기':'📻 라디오 드라마 만들기')+'</button><span class="muted" id="rdSt">'+(r&&r.n===n?(ready?r.lines.length+'줄 · 오프라인 준비 끝':'준비 '+r.done+'/'+r.lines.length):'소설을 성우 셋이 연기 · 15분쯤')+'</span></div><div id="rdBox"></div>';}
+function radioBind(){var b=$('rdBtn');if(!b)return;b.onclick=function(){var r=rdCache(),n=S.parts.novel.n;if(r&&r.n===n&&r.done>=r.lines.length)return rdPlay(r);if(!navigator.onLine)return toast('대본과 음성은 온라인에서 먼저 받아야 해요');rdMake(n,r&&r.n===n?r:null);};}
+function rdMake(n,prev){var b=$('rdBtn'),st=$('rdSt');b.disabled=true;
+  var go=function(r){RD=r;r.done=r.done||0;localStorage.setItem('mag-radio',JSON.stringify(r));
+    (function next(){if(r.done>=r.lines.length){localStorage.setItem('mag-radio',JSON.stringify(r));b.disabled=false;b.textContent='📻 라디오 드라마 듣기';st.textContent=r.lines.length+'줄 · 오프라인 준비 끝';return;}
+      st.textContent='🎙 음성 준비 '+(r.done+1)+'/'+r.lines.length+(r.lines[r.done].who==='nar'?' (내레이션)':'');
+      api('/mag/radio/line',{n:r.n,i:r.done}).then(function(j){if(!j.ok){st.textContent='실패: '+(j.detail||j.error)+' — 다시 누르면 이어서';b.disabled=false;b.textContent='📻 이어서 준비';return;}
+        return fetch(j.url).then(function(){r.done++;localStorage.setItem('mag-radio',JSON.stringify(r));next();});}).catch(function(){st.textContent='네트워크 오류 — 다시 누르면 이어서';b.disabled=false;});})();};
+  if(prev&&prev.lines){st.textContent='이어서 준비…';return go(prev);}
+  st.textContent='✍️ 대본 쓰는 중… (40초쯤)';
+  api('/mag/radio/make',{n:n}).then(function(j){if(!j.ok){st.textContent=j.detail||j.error;b.disabled=false;return;}go({n:j.radio.n,title:j.radio.title,names:j.radio.names,lines:j.radio.lines,urls:j.radio.urls,done:0});});
+}
+function getAC(){if(!RDAC){var A=window.AudioContext||window.webkitAudioContext;RDAC=new A();}if(RDAC.state==='suspended')RDAC.resume();return RDAC;}
+// 효과음은 전부 WebAudio 합성(저작권 없음): 비·거리 소음·문·발소리·전화·시장·밤
+function sfx(kind){if(kind==='none'||!kind)return 0;try{var ac=getAC(),t=ac.currentTime,g=ac.createGain();g.connect(ac.destination);
+  function noise(sec,vol,lp){var n=ac.createBufferSource(),b=ac.createBuffer(1,ac.sampleRate*sec,ac.sampleRate),d=b.getChannelData(0);for(var i=0;i<d.length;i++)d[i]=Math.random()*2-1;n.buffer=b;var f=ac.createBiquadFilter();f.type='lowpass';f.frequency.value=lp;n.connect(f);f.connect(g);g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+0.3);g.gain.setValueAtTime(vol,t+sec-0.6);g.gain.linearRampToValueAtTime(0,t+sec);n.start(t);n.stop(t+sec);}
+  function tone(f0,at,dur,vol,type){var o=ac.createOscillator(),gg=ac.createGain();o.type=type||'sine';o.frequency.value=f0;o.connect(gg);gg.connect(g);gg.gain.setValueAtTime(0,t+at);gg.gain.linearRampToValueAtTime(vol,t+at+0.01);gg.gain.exponentialRampToValueAtTime(0.001,t+at+dur);o.start(t+at);o.stop(t+at+dur);}
+  g.gain.value=1;
+  if(kind==='rain'){noise(2.6,0.22,1800);return 2.4;}
+  if(kind==='street'||kind==='market'){noise(2.4,0.12,900);for(var i=0;i<6;i++)tone(300+Math.random()*500,0.2+i*0.35,0.12,0.05,'triangle');return 2.2;}
+  if(kind==='night'){noise(2.4,0.05,400);for(var k=0;k<5;k++)tone(3800,0.3+k*0.4,0.08,0.03);return 2.2;}
+  if(kind==='door'){tone(120,0,0.12,0.5,'square');tone(90,0.16,0.12,0.5,'square');return 0.6;}
+  if(kind==='steps'){for(var j=0;j<4;j++)tone(80,j*0.42,0.08,0.4,'triangle');return 1.8;}
+  if(kind==='phone'){for(var m=0;m<2;m++){tone(880,m*1.0,0.18,0.15);tone(880,m*1.0+0.25,0.18,0.15);}return 2.0;}
+  }catch(e){}return 0;}
+var RDI=0,RDON=false;
+function rdPlay(r){var box=$('rdBox'),b=$('rdBtn');if(RDON){RDON=false;if(RDP)RDP.pause();b.textContent='📻 라디오 드라마 듣기';box.innerHTML='';return;}
+  if(AU)AU.pause();if(BOOK){BOOK.pause();BOOK=null;}RDON=true;RDI=0;b.textContent='■ 멈추기';getAC();
+  var W={nar:'🎙',h:'👨 '+(r.names?r.names[0]:'남편'),w:'👩 '+(r.names?r.names[1]:'아내'),x:'🗣'};
+  (function next(){if(!RDON)return;if(RDI>=r.lines.length){RDON=false;b.textContent='📻 라디오 드라마 듣기';box.innerHTML='<p class="muted">끝 — '+esc(r.title)+'</p>';return;}
+    var l=r.lines[RDI];box.innerHTML='<div class="muted" style="margin-bottom:4px">'+(RDI+1)+'/'+r.lines.length+' · '+esc(r.title)+'</div><div style="font-size:17px"><b>'+esc(W[l.who]||'')+'</b> '+esc(l.t)+'</div>';
+    var wait=sfx(l.sfx)*1000;
+    setTimeout(function(){if(!RDON)return;RDP=new Audio(r.urls[RDI]);RDP.onended=function(){RDI++;setTimeout(next,l.who==='nar'?250:120);};RDP.onerror=function(){RDI++;next();};var p=RDP.play();if(p&&p.catch)p.catch(function(){RDI++;next();});},wait);})();
 }
 window.addEventListener('online',stat);window.addEventListener('offline',stat);
 load(false);

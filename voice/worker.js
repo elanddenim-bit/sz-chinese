@@ -147,7 +147,7 @@ export default {
       if (url.pathname.startsWith("/signs/")) return json(req, await signsApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/novel/")) return json(req, await novelApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/brief/")) return json(req, await briefApi(env, ctx, url.pathname, b, h));
-      if (url.pathname.startsWith("/mag/")) return json(req, await magApi(env, ctx, url.pathname, b, h));
+      if (url.pathname.startsWith("/mag/")) return json(req, await magApi(env, ctx, url.pathname, b, h, synth));
       if (url.pathname.startsWith("/air/")) return json(req, await airApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/trend/")) return json(req, await trendApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/shorts/")) {
