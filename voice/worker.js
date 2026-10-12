@@ -34,6 +34,7 @@ import { TOON_HTML } from "./toon.js";
 import { CINE_HTML } from "./cine.js";
 import { briefApi, briefCron, briefMorning, briefGet, BRIEF_HTML } from "./brief.js";
 import { magApi, magCron, magGet } from "./mag.js";
+import { airApi, airGet, } from "./air.js";
 import ICON180 from "./icon-180.png";
 import ICON192 from "./icon-192.png";
 import ICON512 from "./icon-512.png";
@@ -126,6 +127,7 @@ export default {
       if (url.pathname.startsWith("/trend/") && req.method === "GET") return await trendGet(req, env, url, synth);
       if (url.pathname === "/brief" && req.method === "GET") return new Response(BRIEF_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname.startsWith("/brief/") && req.method === "GET") return await briefGet(req, env, url);
+      if ((url.pathname === "/air" || url.pathname.startsWith("/air/")) && req.method === "GET") return await airGet(req, env, url, synth);
       if ((url.pathname === "/mag" || url.pathname.startsWith("/mag/")) && req.method === "GET") return await magGet(req, env, url, synth);
       if (url.pathname === "/hub" && req.method === "GET") return new Response(HUB_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/timecam" && req.method === "GET") return new Response(TIMECAM_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
@@ -146,6 +148,7 @@ export default {
       if (url.pathname.startsWith("/novel/")) return json(req, await novelApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/brief/")) return json(req, await briefApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/mag/")) return json(req, await magApi(env, ctx, url.pathname, b, h));
+      if (url.pathname.startsWith("/air/")) return json(req, await airApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/trend/")) return json(req, await trendApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/shorts/")) {
         const out = await shortsApi(env, ctx, url.pathname, b, h, synth);

@@ -31,6 +31,7 @@ main{max-width:640px;margin:0 auto;padding:14px 16px 48px}h2{font-size:13px;colo
 <h2>놀기</h2><div class="g">
 <a href="/quest"><i>🧭</i><b>주말 탐험</b><small>오늘 갈 곳 3곳 미션</small></a>
 <a href="/mystery"><i>🕵️</i><b>광저우 미스터리</b><small>실제 장소 추리 게임</small></a>
+<a href="/air/"><i>✈️</i><b>미스터리 기내편</b><small>그림·심문, 비행기 모드 OK</small></a>
 <a href="/timecam"><i>🕰</i><b>타임머신 카메라</b><small>1930·1985·2080·눈</small></a>
 <a href="/signs"><i>🪧</i><b>간판 사냥</b><small>웃긴 중국어 간판 도감</small></a>
 <a href="/novel"><i>📖</i><b>우리 연재 소설</b><small>우리 기록이 한 화씩 소설로</small></a>

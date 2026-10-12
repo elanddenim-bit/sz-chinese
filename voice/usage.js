@@ -16,6 +16,7 @@ export const APPS = {
   spain: { name: "스페인 일정", icon: "🇪🇸", f: { pg_home: "일정 보기" } },
   shorts: { name: "숏츠 공방", icon: "🎬", f: { ideas: "주제 추천", script: "대본", plan: "편집실 AI 계획", asr: "영상 속 말 자막", upload: "유튜브 업로드", cine: "시네마틱 영상" } },
   quest: { name: "주말 탐험", icon: "🧭", f: { new: "퀘스트 받기", done: "사진 인증 성공", fail: "인증 실패", honor: "그래도 인정" } },
+  air: { name: "미스터리 기내편", icon: "✈️", f: { new: "사건 생성", solve: "해결", wrong: "오답" } },
   mag: { name: "기내 잡지", icon: "📰", f: { make: "묶음 생성", open: "열기", bark: "탑승 전 알림" } },
   brief: { name: "출장 브리핑", icon: "🧳", f: { send: "직접 보냄", auto: "자동 발송", preview: "미리 보기", morning: "아침 출발 알림" } },
   trend: { name: "오늘의 중국 인터넷", icon: "🔥", f: { open: "열어 봄", make: "새 판 만들기" } },
