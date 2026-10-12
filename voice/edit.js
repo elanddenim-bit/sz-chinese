@@ -437,7 +437,8 @@ async function render0(dry){
    +'<p class="lbl">유튜브 공개 범위</p><div class="chips">'+[['private','비공개(확인 후 공개)'],['unlisted','일부 공개'],['public','바로 공개'],['queue','📅 예약(하루 1개 자동)']].map(function(x,k){return '<button class="chip'+(k===0?' on':'')+'" data-pv="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>'
    +'<button class="big red" id="ytUp">▶ 유튜브에 올리기</button><div class="bar" id="ubw" style="display:none;margin-top:8px"><i id="ub"></i></div><p class="note">AI 내레이션을 썼으면 AI 합성 콘텐츠로 표시돼요. 제목에 #Shorts 가 붙어요. 배경음악은 저작권 걱정 없는 곡만 쓰세요.</p><div class="err" id="ue"></div>';
   var PV='private';document.querySelectorAll('[data-pv]').forEach(function(c){c.onclick=function(){PV=c.getAttribute('data-pv');document.querySelectorAll('[data-pv]').forEach(function(x){x.classList.toggle('on',x===c);});};});
-  $('dl').onclick=function(){var f=new File([blob],(D.title||'shorts').replace(/[\\/:*?"<>|#]/g,'').slice(0,40)+'.'+ext,{type:type});
+  $('dl').onclick=async function(){if(!blob){var b0=this;b0.disabled=true;b0.textContent='받는 중…';try{blob=await (await fetch(url)).blob();}catch(e){b0.disabled=false;b0.textContent='📥 기기에 저장';toast('받기 실패 — 다시 눌러 주세요');return;}b0.disabled=false;b0.textContent='📥 기기에 저장';}
+    var f=new File([blob],(D.title||'shorts').replace(/[\\/:*?"<>|#]/g,'').slice(0,40)+'.'+ext,{type:type});
     if(navigator.canShare&&navigator.canShare({files:[f]}))navigator.share({files:[f]}).catch(function(){});else{var a=document.createElement('a');a.href=url;a.download=f.name;a.click();}};
   $('ytUp').onclick=async function(){var b=this,ue=$('ue');b.disabled=true;ue.textContent='';
     try{var mb=(blob.size/1048576).toFixed(1);b.innerHTML='<span class="spin">⏫</span> 서버에 저장 중… 0% ('+mb+'MB)';$('ubw').style.display='block';
@@ -528,16 +529,24 @@ async function cloudRender(){
       if(p.status==='done'){res=p;break;}if(p.status==='failed')throw new Error('합성 실패(과금 없음): '+(p.detail||''));
       prog('☁️ 합성 중… '+(p.status==='Queuing'||p.status==='Init'?'차례 기다리는 중':'만드는 중')+' · '+Math.round((Date.now()-t1)/1000)+'초',Math.min(0.98,(p.progress||0)/100));
       if(Date.now()-t1>900000)throw new Error('15분이 지나도 안 끝났어요. 잠시 뒤 다시 눌러 주세요.');}
-    prog('⬇️ 완성본 받는 중…',1);
-    var r=await fetch(res.url);if(!r.ok)throw new Error('완성본 받기 실패 '+r.status);var vb=await r.blob();
-    cloudDone(vb,T);
+    // 완성본은 서버가 바로 R2 로 옮김 → 폰은 받지 않고 미리보기·업로드(폰이 OSS 에서 직접 받다 멈추던 문제, 2026-10-12)
+    prog('☁️ 완성본을 서버에 보관하는 중…',1);
+    var kp=await api('/shorts/cloud/keep',{id:D.id,out:s.out},1);
+    if(kp&&kp.ok){cloudDone(null,T,kp);return;}
+    prog('⬇️ 완성본 받는 중…',0);
+    var ctl=new AbortController(),r=await fetch(res.url,{signal:ctl.signal});if(!r.ok)throw new Error('완성본 받기 실패 '+r.status);
+    var tot=+r.headers.get('content-length')||0,rd=r.body.getReader(),parts=[],got=0,last=Date.now(),stall=setInterval(function(){if(Date.now()-last>30000)ctl.abort();},3000);
+    try{while(true){var c=await rd.read();if(c.done)break;parts.push(c.value);got+=c.value.length;last=Date.now();prog('⬇️ 완성본 받는 중… '+(got/1048576).toFixed(1)+(tot?'/'+(tot/1048576).toFixed(1):'')+'MB',tot?got/tot:0.5);}}
+    catch(e){throw new Error('완성본 받기가 30초 넘게 멈췄어요. VPN을 끄고 다시 눌러 주세요(이미 만든 건 다시 합성하지 않아도 되게 서버 보관을 먼저 시도해요).');}
+    finally{clearInterval(stall);}
+    cloudDone(new Blob(parts,{type:'video/mp4'}),T);
   }catch(e){out.insertAdjacentHTML('beforeend','<p class="err">'+esc(e&&e.message||e)+'</p>');}
   finally{btn.disabled=false;btn.textContent=lbl;$('renderBtn').disabled=false;$('pvAll').disabled=false;}
 }
-function cloudDone(blob,total){
-  var type='video/mp4',url=URL.createObjectURL(blob);
-  $('out').innerHTML='<video class="out" controls playsinline src="'+url+'"></video>'
-   +'<p class="note" style="text-align:center">'+fmt(total)+'초 · '+(blob.size/1048576).toFixed(1)+'MB · 클라우드 편집</p>'
+function cloudDone(blob,total,kept){
+  var type='video/mp4',url=kept?kept.url:URL.createObjectURL(blob),size=kept?kept.size:blob.size;
+  $('out').innerHTML='<video class="out" controls playsinline preload="metadata" src="'+url+'"></video>'
+   +'<p class="note" style="text-align:center">'+fmt(total)+'초 · '+(size/1048576).toFixed(1)+'MB · 클라우드 편집'+(kept?' · 서버 보관됨(유튜브 바로 올림)':'')+'</p>'
    +'<div class="mini" style="justify-content:center"><button id="dl">📥 기기에 저장</button></div>'
    +'<p class="lbl">유튜브 공개 범위</p><div class="chips">'+[['private','비공개(확인 후 공개)'],['unlisted','일부 공개'],['public','바로 공개'],['queue','📅 예약(하루 1개 자동)']].map(function(x,k){return '<button class="chip'+(k===0?' on':'')+'" data-pv="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>'
    +'<button class="big red" id="ytUp">▶ 유튜브에 올리기</button><div class="bar" id="ubw" style="display:none;margin-top:8px"><i id="ub"></i></div><div class="err" id="ue"></div>';
@@ -545,9 +554,9 @@ function cloudDone(blob,total){
   $('dl').onclick=function(){var f=new File([blob],(D.title||'shorts').replace(/[\\/:*?"<>|#]/g,'').slice(0,40)+'.mp4',{type:type});
     if(navigator.canShare&&navigator.canShare({files:[f]}))navigator.share({files:[f]}).catch(function(){});else{var a=document.createElement('a');a.href=url;a.download=f.name;a.click();}};
   $('ytUp').onclick=async function(){var b=this,ue=$('ue');b.disabled=true;ue.textContent='';
-    try{var mb=(blob.size/1048576).toFixed(1);$('ubw').style.display='block';
+    try{if(!kept){var mb=(blob.size/1048576).toFixed(1);$('ubw').style.display='block';
       var j=await upBlob(blob,type,function(f){b.innerHTML='<span class="spin">⏫</span> 서버에 저장 중… '+Math.round(f*100)+'% ('+mb+'MB)';$('ub').style.width=Math.round(f*100)+'%';});
-      if(!j.ok)throw new Error(j.detail||j.error);
+      if(!j.ok)throw new Error(j.detail||j.error);}
       b.innerHTML='<span class="spin">▶</span> 유튜브에 올리는 중…';readForm();
       var y=await api('/shorts/yt/upload',{id:D.id,privacy:PV,title:D.title,description:D.description,tags:D.tags,synthetic:!!(D.opts.narr&&D.opts.voice!=='rec'&&D.scenes.some(function(x){return (x.say||'').trim();}))});
       if(!y.ok)throw new Error(y.detail||y.error);

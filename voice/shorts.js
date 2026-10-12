@@ -136,6 +136,7 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
   if (path === "/shorts/cloud/policy") return cloudPolicy(env, b, h);
   if (path === "/shorts/cloud/submit") return cloudSubmit(env, b, h);
   if (path === "/shorts/cloud/poll") return cloudPoll(env, b, h);
+  if (path === "/shorts/cloud/keep") return cloudKeep(env, b, h);
   if (path === "/shorts/toon/idea") return toonIdea(env, b);
   if (path === "/shorts/toon/new") return toonNew(env, b, h);
   if (path === "/shorts/voice/enroll") return krEnroll(env, b, h);
@@ -1065,6 +1066,22 @@ async function cloudPoll(env, b, h) {
   if (m.Status === "Success") return { ok: true, status: "done", url: await ossSign(a, out, 7200), dur: m.Duration || 0 };
   if (m.Status === "Failed") return { ok: true, status: "failed", detail: ((m.Code || "") + " " + (m.Message || "")).trim().slice(0, 300) };
   return { ok: true, status: m.Status || "Processing", progress: m.Progress || 0 };
+}
+
+// 완성본을 폰이 받지 않고 서버가 OSS → R2(final.mp4)로 바로 옮김(2026-10-12: 폰이 VPN 등으로 OSS 에서 받다 '완성본 받는 중'에 멈춤).
+// 폰은 R2 주소로 미리보기(Range 스트리밍)·필요할 때만 저장, 유튜브 업로드는 다시 올릴 필요 없음
+async function cloudKeep(env, b, h) {
+  const a = ali(env), id = String(b.id || ""), dir = cloudDir(h, id), out = String(b.out || "");
+  if (!/^s[0-9a-z]{6,12}$/.test(id) || !out.startsWith(dir) || !/^[\w\/.\-]+$/.test(out)) throw serr("bad out");
+  const r = await fetch(await ossSign(a, out, 900), { signal: AbortSignal.timeout(90000) });
+  if (!r.ok) throw serr("완성본 가져오기 실패 HTTP " + r.status, 502);
+  const len = Number(r.headers.get("content-length") || 0);
+  if (len > 95 * 1048576) throw serr("완성본이 너무 커요(" + Math.round(len / 1048576) + "MB)", 413);
+  const buf = await r.arrayBuffer();
+  const pre = "shorts/" + h + "/" + id + "/final.";
+  await env.R2.delete(pre + "webm").catch(() => {});
+  await env.R2.put(pre + "mp4", buf, { httpMetadata: { contentType: "video/mp4" } });
+  return { ok: true, url: await fileUrl(env, pre + "mp4"), size: buf.byteLength };
 }
 
 // 완성 영상 저장(본문 그대로)
