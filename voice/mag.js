@@ -28,6 +28,17 @@ async function owner(env, h) {
 }
 
 // 읽어 주기 항목 등록: 글은 KV 에 두고(주소에 긴 글을 넣지 않음) 서명된 짧은 주소만 화면에
+// 그림: R2 키를 서명해 /mag/img 로(서비스워커가 캐시 → 오프라인), 유튜브 썸네일은 /mag/yt 로 중계
+const imgUrl = async (env, k) => k ? "/mag/img?k=" + encodeURIComponent(k) + "&s=" + (await hmac16(env, "i|" + k)) : "";
+const ytUrl = (v) => v ? "/mag/yt?v=" + encodeURIComponent(v) : "";
+const LINKS = { "微博": (q) => "https://s.weibo.com/weibo?q=" + encodeURIComponent(q), "抖音": (q) => "https://www.douyin.com/search/" + encodeURIComponent(q), "小红书": (q) => "https://www.xiaohongshu.com/search_result?keyword=" + encodeURIComponent(q), "B站": (q) => "https://search.bilibili.com/all?keyword=" + encodeURIComponent(q), "bilibili": (q) => "https://search.bilibili.com/all?keyword=" + encodeURIComponent(q) };
+function itemLinks(x) {
+  const q = x.zh || x.ko, out = [];
+  const srcKey = Object.keys(LINKS).find((k) => String(x.src || "").includes(k));
+  if (srcKey) out.push({ n: srcKey, u: LINKS[srcKey](q) });
+  for (const k of ["小红书", "抖音", "微博"]) if (k !== srcKey) out.push({ n: k, u: LINKS[k](q) });
+  return out;
+}
 async function sayReg(env, text, lang) {
   const t = String(text || "").trim().slice(0, 1500);
   if (!t) return "";
@@ -68,26 +79,29 @@ async function makeBundle(env, h) {
     const t = await trendApi(env, { waitUntil() {} }, "/trend/today", {}, h);
     const items = [];
     for (const x of (t.items || [])) items.push({ emo: x.emo, ko: x.ko, zh: x.zh, what: x.what, why: x.why, src: x.src, word: x.word ? { z: x.word.z, p: x.word.p, k: x.word.k, say: await sayReg(env, x.word.z, "zh") } : null });
-    out.parts.trend = { items, office: t.office ? { z: t.office.z, p: t.office.p, k: t.office.k, say: await sayReg(env, t.office.z, "zh") } : null };
+    for (const x of items) x.links = itemLinks(x);
+    out.parts.trend = { items, sources: (t.sources || []).slice(0, 8), office: t.office ? { z: t.office.z, p: t.office.p, k: t.office.k, say: await sayReg(env, t.office.z, "zh") } : null };
   } catch (e) { out.parts.trend = { err: String(e.message || e).slice(0, 120) }; }
   // 📡 레이더 · 💬 댓글 · 🗓 주간 기획 · 📈 채널 (있는 것만)
   const rd = await env.KV.get("shorts:radar:" + h, "json");
-  if (rd && rd.ai && !rd.ai.error) out.parts.radar = { at: rd.at, n: rd.n, oneline: rd.ai.oneline || "", patterns: (rd.ai.patterns || []).slice(0, 5), hooks: (rd.ai.hooks || []).slice(0, 3), topics: (rd.ai.topics || []).slice(0, 5), avoid: (rd.ai.avoid || []).slice(0, 2), sleepers: (rd.sleepers || []).slice(0, 4).map((x) => ({ t: x.t, d: x.d, r: x.r, subs: x.subs })) };
+  if (rd && rd.ai && !rd.ai.error) out.parts.radar = { at: rd.at, n: rd.n, oneline: rd.ai.oneline || "", patterns: (rd.ai.patterns || []).slice(0, 5), hooks: (rd.ai.hooks || []).slice(0, 3), topics: (rd.ai.topics || []).slice(0, 5), avoid: (rd.ai.avoid || []).slice(0, 2), sleepers: (rd.sleepers || []).slice(0, 4).map((x) => ({ t: x.t, d: x.d, r: x.r, subs: x.subs, th: ytUrl(x.id), u: x.id ? "https://youtube.com/shorts/" + x.id : "" })), top: (rd.top || []).slice(0, 6).map((x) => ({ t: x.t, d: x.d, th: ytUrl(x.id), u: x.id ? "https://youtube.com/shorts/" + x.id : "" })) };
   const cm = await env.KV.get("shorts:cmt:" + h, "json");
   if (cm && cm.groups) out.parts.cmt = { at: cm.at, groups: cm.groups.filter((g) => g.can).slice(0, 8).map((g) => ({ q: g.q, n: g.n, topic: g.topic, hook: g.hook, film: g.film })), mine: (cm.mine || []).filter((x) => !x.rep).slice(0, 5).map((x) => x.t) };
   const wk = await env.KV.get("shorts:week:" + h, "json");
   if (wk && wk.items) out.parts.week = { at: wk.at, items: wk.items.slice(0, 3).map((x) => ({ title: x.title, kind: x.kind, where: x.where, hook: x.hook, why: x.why, shots: (x.shots || []).slice(0, 7) })) };
   const st = await env.KV.get("yt:stats:" + h, "json");
-  if (st && st.items) out.parts.yt = { at: st.at, subs: st.subs, n: st.items.length, views: st.items.reduce((a, x) => a + (x.views || 0), 0), top: st.items.filter((x) => x.privacy === "public").sort((a, c) => c.views - a.views).slice(0, 5).map((x) => ({ t: x.title, v: x.views, l: x.likes, c: x.comments })) };
+  if (st && st.items) out.parts.yt = { at: st.at, subs: st.subs, n: st.items.length, views: st.items.reduce((a, x) => a + (x.views || 0), 0), top: st.items.filter((x) => x.privacy === "public").sort((a, c) => c.views - a.views).slice(0, 5).map((x) => ({ t: x.title, v: x.views, l: x.likes, c: x.comments, th: ytUrl(x.id) })) };
   // 📖 연재 소설 최신 화 — 내 목소리 오디오북(조각)
   const nv = await env.KV.get("nv:" + h, "json");
   const ch = nv && nv.chapters && nv.chapters[nv.chapters.length - 1];
-  if (ch) { const parts = []; for (const c of chunks(ch.text)) parts.push(await sayReg(env, c, "ko")); out.parts.novel = { n: ch.n, title: ch.title, text: ch.text, audio: parts }; }
+  if (ch) { const parts = []; for (const c of chunks(ch.text)) parts.push(await sayReg(env, c, "ko")); out.parts.novel = { n: ch.n, title: ch.title, text: ch.text, audio: parts, img: await imgUrl(env, ch.img || "") }; }
   // 🧭 주말 탐험 · 🪧 간판 최근(글만 — 사진은 오프라인에 안 담음)
   const q = await env.KV.get("quest:" + h, "json");
-  if (q && q.hist && q.hist.length) out.parts.quest = { pts: q.pts || 0, hist: q.hist.slice(0, 4).map((x) => ({ date: x.date, name: x.name, area: x.area, title: x.title, pts: x.pts, comment: x.comment })) };
+  if (q && q.hist && q.hist.length) out.parts.quest = { pts: q.pts || 0, hist: await Promise.all(q.hist.slice(0, 4).map(async (x) => ({ date: x.date, name: x.name, area: x.area, title: x.title, pts: x.pts, comment: x.comment, img: await imgUrl(env, x.img || "") }))) };
   const sg = await env.KV.get("sg:" + h, "json");
-  if (sg && sg.items && sg.items.length) out.parts.signs = { pts: sg.pts || 0, items: sg.items.slice(0, 4).map((x) => ({ zh: x.zh, literal: x.literal, real: x.real, fun: x.fun })) };
+  if (sg && sg.items && sg.items.length) out.parts.signs = { pts: sg.pts || 0, items: await Promise.all(sg.items.slice(0, 4).map(async (x) => ({ zh: x.zh, literal: x.literal, real: x.real, fun: x.fun, img: await imgUrl(env, x.img || "") }))) };
+  const tc = await env.KV.get("tc:" + h, "json");
+  if (Array.isArray(tc) && tc.length) out.parts.timecam = await Promise.all(tc.slice(0, 3).map(async (x) => ({ era: x.era, at: x.at, src: await imgUrl(env, x.src), out: await imgUrl(env, x.out) })));
   return out;
 }
 
@@ -245,6 +259,19 @@ export async function magGet(req, env, url, synth) {
     if (!o) return new Response("not yet", { status: 404 });
     return new Response(o.body, { headers: { "content-type": o.httpMetadata?.contentType || "audio/mpeg", "cache-control": "private, max-age=31536000" } });
   }
+  if (url.pathname === "/mag/img") {
+    const k = url.searchParams.get("k") || "";
+    if (!/^(nv|quest|sg|tc)\/[0-9a-f]{12}\/[\w.-]+\.(png|jpg)$/.test(k) || url.searchParams.get("s") !== (await hmac16(env, "i|" + k))) return new Response("forbidden", { status: 403 });
+    const o = await env.R2.get(k);
+    if (!o) return new Response("not found", { status: 404 });
+    return new Response(o.body, { headers: { "content-type": k.endsWith(".png") ? "image/png" : "image/jpeg", "cache-control": "private, max-age=31536000" } });
+  }
+  if (url.pathname === "/mag/yt") {
+    const v = url.searchParams.get("v") || "";
+    if (!/^[\w-]{6,20}$/.test(v)) return new Response("bad", { status: 400 });
+    const r = await fetch("https://i.ytimg.com/vi/" + v + "/mqdefault.jpg", { cf: { cacheTtl: 86400 } });
+    return new Response(r.body, { status: r.status, headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=86400" } });
+  }
   if (url.pathname === "/mag/say") {
     const id = String(url.searchParams.get("id") || "");
     if (!/^[0-9a-f]{16}$/.test(id) || url.searchParams.get("s") !== (await hmac16(env, "s|" + id))) return new Response("forbidden", { status: 403 });
@@ -258,11 +285,11 @@ export async function magGet(req, env, url, synth) {
 }
 
 // 서비스워커: 화면은 네트워크 우선·실패 시 캐시, 음성은 캐시 우선. 범위 /mag/ 만.
-const MAG_SW = `const C='mag-v2';
+const MAG_SW = `const C='mag-v3';
 self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>c.add('/mag/')).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k.startsWith('mag-')&&k!==C).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
 self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET')return;
-  if(u.pathname==='/mag/say'||u.pathname==='/mag/radio/a'){e.respondWith(caches.open(C).then(async c=>{const hit=await c.match(e.request);if(hit)return hit;const r=await fetch(e.request);if(r.ok)c.put(e.request,r.clone());return r;}));return;}
+  if(u.pathname==='/mag/say'||u.pathname==='/mag/radio/a'||u.pathname==='/mag/img'||u.pathname==='/mag/yt'){e.respondWith(caches.open(C).then(async c=>{const hit=await c.match(e.request);if(hit)return hit;const r=await fetch(e.request);if(r.ok)c.put(e.request,r.clone());return r;}));return;}
   if(u.pathname==='/mag/'||u.pathname==='/mag'){e.respondWith(fetch(e.request).then(r=>{if(r.ok)caches.open(C).then(c=>c.put('/mag/',r.clone()));return r;}).catch(()=>caches.match('/mag/')));return;}
 });`;
 
@@ -293,7 +320,7 @@ main{max-width:640px;margin:0 auto;padding:12px 16px 70px}
 .word{display:flex;align-items:center;gap:10px;margin-top:8px;background:var(--soft);border-radius:10px;padding:8px 10px}.word b{font-size:17px}.word small{display:block;color:var(--ink2);font-size:12.5px}
 button.say{margin-left:auto;border:0;background:var(--sky);color:#fff;border-radius:50%;width:36px;height:36px;font-size:16px;flex:none}
 .route div{padding:2px 0}.pill{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:999px;padding:0 8px;margin-right:4px;color:var(--ink2)}
-.novel p{margin:0 0 10px;white-space:pre-wrap}.ab{display:flex;gap:8px;align-items:center;margin:8px 0 12px;flex-wrap:wrap}.ab button{font:inherit;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 14px}.ab button.on{background:var(--sky);color:#fff;border-color:var(--sky)}
+.novel p{margin:0 0 10px;white-space:pre-wrap}.ill{width:100%;border-radius:12px;display:block;margin:0 0 10px;background:var(--soft)}.th{width:84px;height:47px;object-fit:cover;border-radius:6px;float:left;margin:2px 10px 4px 0;background:var(--soft)}.ph{width:72px;height:72px;object-fit:cover;border-radius:10px;float:left;margin:2px 10px 4px 0;background:var(--soft)}.lk{display:inline-block;font-size:12.5px;border:1px solid var(--line);border-radius:999px;padding:2px 9px;margin:6px 6px 0 0;color:var(--sky);text-decoration:none}.clr{clear:both}.tc2{display:flex;gap:6px}.tc2 img{width:50%;border-radius:10px}.ab{display:flex;gap:8px;align-items:center;margin:8px 0 12px;flex-wrap:wrap}.ab button{font:inherit;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 14px}.ab button.on{background:var(--sky);color:#fff;border-color:var(--sky)}
 .chips{display:flex;gap:6px;flex-wrap:wrap}.chip{font:inherit;font-size:13px;border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:transparent;color:var(--ink)}.chip.on{background:var(--sky);color:#fff;border-color:var(--sky)}
 .re{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:999px;padding:6px 12px;font:inherit;font-size:13px}
 .gate{padding:40px 0;text-align:center}.err{color:var(--red)}.spin{display:inline-block;animation:sp 1.2s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
@@ -325,10 +352,10 @@ function load(fresh){
   });
 }
 // 음성 전부 미리 받아 서비스워커 캐시에(오프라인에서도 🔊)
-function prefetch(){var us=[];document.querySelectorAll('[data-say]').forEach(function(b){var u=b.getAttribute('data-say');if(u&&us.indexOf(u)<0)us.push(u);});TOTAL=us.length;SAVED=0;FAIL=0;stat();
+function prefetch(){var us=[];document.querySelectorAll('[data-say]').forEach(function(b){var u=b.getAttribute('data-say');if(u&&us.indexOf(u)<0)us.push(u);});document.querySelectorAll('img[src^="/mag/"]').forEach(function(im){var u=im.getAttribute('src');if(u&&us.indexOf(u)<0)us.push(u);});TOTAL=us.length;SAVED=0;FAIL=0;stat();
   (function next(i){if(i>=us.length)return stat();fetch(us[i]).then(function(r){if(r.ok)SAVED++;else FAIL++;}).catch(function(){FAIL++;}).then(function(){stat();next(i+1);});})(0);}
 function stat(){var e=$('st');if(!e)return;var off=!navigator.onLine;
-  e.innerHTML='<span class="dot '+(off?'off':'ok')+'"></span>'+(off?'오프라인 · 저장본':'온라인')+(TOTAL?' · 🔊 음성 '+SAVED+'/'+TOTAL+(FAIL?' (실패 '+FAIL+')':'')+(SAVED+FAIL>=TOTAL&&!FAIL?' <b>✓ 오프라인 준비 끝</b>':''):'')+' · 만든 시각 '+new Date(S.at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});}
+  e.innerHTML='<span class="dot '+(off?'off':'ok')+'"></span>'+(off?'오프라인 · 저장본':'온라인')+(TOTAL?' · 🔊🖼 '+SAVED+'/'+TOTAL+(FAIL?' (실패 '+FAIL+')':'')+(SAVED+FAIL>=TOTAL&&!FAIL?' <b>✓ 오프라인 준비 끝</b>':''):'')+' · 만든 시각 '+new Date(S.at).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});}
 function say(u,btn){if(!u)return;try{if(AU){AU.pause();}AU=new Audio(u);var p=AU.play();if(p&&p.catch)p.catch(function(){toast('소리를 재생하지 못했어요'+(navigator.onLine?'':' (오프라인·미리 저장 안 됨)'));});}catch(e){}}
 function wordHtml(w){return w?'<div class="word"><div><b>'+esc(w.z)+'</b><small>'+esc(w.p)+' · '+esc(w.k)+'</small></div><button class="say" data-say="'+esc(w.say||'')+'" aria-label="듣기">🔊</button></div>':'';}
 var KIND={record:'📍 다녀온 곳',new:'🆕 새 장소',trend:'🔥 화제'};
@@ -340,22 +367,23 @@ function render(offline){
     +(b.wear?'<div class="lbl">👔 옷차림</div><div>'+esc(b.wear)+'</div>':'')+(b.pack&&b.pack.length?'<div class="lbl">🎒 챙길 것</div><div>'+b.pack.map(esc).join(' · ')+'</div>':'')
     +(b.meet&&b.meet.length?'<div class="lbl">✅ 미팅 체크</div><div>'+b.meet.map(function(m){return '☐ '+esc(m);}).join('<br>')+'</div>':'')+(b.tip?'<div class="lbl">💡 현지 팁</div><div>'+esc(b.tip)+'</div>':'')+wordHtml(b.zh);}).join('')
     +(P.trip.later&&P.trip.later.length?'<div class="lbl">다음 일정</div><div class="muted">'+P.trip.later.map(function(x){return esc(x.d.slice(5))+' '+esc(x.from)+'→'+esc(x.to)+(x.t?' '+esc(x.t):'')+(x.no?' '+esc(x.no):'');}).join('<br>')+'</div>':'')+'</div>';}
-  if(P.trend&&P.trend.items){toc.push(['trend','🔥 중국 인터넷']);h+='<div class="card" id="trend"><h2>🔥 오늘의 중국 인터넷</h2>'+P.trend.items.map(function(x,i){return '<div class="it"><b>'+(i+1)+'. '+esc(x.emo)+' '+esc(x.ko)+'</b><div class="zh">'+esc(x.zh)+(x.src?' <span class="pill">'+esc(x.src)+'</span>':'')+'</div><div>'+esc(x.what)+'</div><div class="muted">💡 '+esc(x.why)+'</div>'+wordHtml(x.word)+'</div>';}).join('')
+  if(P.trend&&P.trend.items){toc.push(['trend','🔥 중국 인터넷']);h+='<div class="card" id="trend"><h2>🔥 오늘의 중국 인터넷</h2>'+P.trend.items.map(function(x,i){return '<div class="it"><b>'+(i+1)+'. '+esc(x.emo)+' '+esc(x.ko)+'</b><div class="zh">'+esc(x.zh)+(x.src?' <span class="pill">'+esc(x.src)+'</span>':'')+'</div><div>'+esc(x.what)+'</div><div class="muted">💡 '+esc(x.why)+'</div>'+wordHtml(x.word)+((x.links||[]).length?'<div>'+x.links.map(function(l){return '<a class="lk" href="'+esc(l.u)+'" target="_blank" rel="noopener">🔗 '+esc(l.n)+'에서 보기</a>';}).join('')+'</div>':'')+'</div>';}).join('')+(P.trend.sources&&P.trend.sources.length?'<details><summary class="muted" style="cursor:pointer">📎 근거 기사·글 '+P.trend.sources.length+'개(온라인)</summary>'+P.trend.sources.map(function(sx){return '<a class="lk" href="'+esc(sx.u)+'" target="_blank" rel="noopener" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(sx.t||sx.u)+'</a>';}).join('')+'</details>':'')
     +(P.trend.office?'<div class="lbl">🏢 회사에서 한마디</div>'+wordHtml(P.trend.office):'')+'</div>';}
   if(P.radar){toc.push(['radar','📡 레이더']);var r=P.radar;h+='<div class="card" id="radar"><h2>📡 경쟁 채널 레이더</h2><div class="muted">'+esc(r.n)+'편 실측 · '+new Date(r.at).toLocaleDateString('ko-KR')+'</div>'+(r.oneline?'<div style="margin:8px 0;font-weight:700">'+esc(r.oneline)+'</div>':'')
     +(r.patterns.length?'<div class="lbl">잘 되는 패턴</div>'+r.patterns.map(function(p){return '<div class="it"><b>'+esc(p.name)+'</b><div class="muted">📊 '+esc(p.evidence)+'</div><div>👉 '+esc(p.apply)+'</div></div>';}).join(''):'')
     +(r.hooks.length?'<div class="lbl">첫 2초 훅 틀</div>'+r.hooks.map(function(x){return '<div>“'+esc(x)+'”</div>';}).join(''):'')
     +(r.topics.length?'<div class="lbl">해볼 주제</div>'+r.topics.map(function(x){return '<div class="it"><b>'+esc(x.topic)+'</b><div class="muted">첫마디 “'+esc(x.hook)+'” · '+esc(x.from)+'</div></div>';}).join(''):'')
     +(r.avoid.length?'<div class="lbl">피할 것</div>'+r.avoid.map(function(x){return '<div>✕ '+esc(x)+'</div>';}).join(''):'')
-    +(r.sleepers&&r.sleepers.length?'<div class="lbl">🌱 작은 채널인데 터진 영상</div>'+r.sleepers.map(function(x){return '<div class="muted">'+esc(x.t)+' <span class="pill">'+esc(x.d)+'/일 · 구독 '+esc(x.subs)+'</span></div>';}).join(''):'')+'</div>';}
+    +(r.top&&r.top.length?'<div class="lbl">🔥 하루당 조회 상위</div>'+r.top.map(function(x){return '<div class="it" style="padding:6px 0">'+(x.th?'<img class="th" src="'+esc(x.th)+'" alt="">':'')+'<div class="muted">'+(x.u?'<a href="'+esc(x.u)+'" target="_blank" rel="noopener" style="color:inherit">':'')+esc(x.t)+(x.u?'</a>':'')+' <span class="pill">'+esc(x.d)+'/일</span></div><div class="clr"></div></div>';}).join(''):'')+(r.sleepers&&r.sleepers.length?'<div class="lbl">🌱 작은 채널인데 터진 영상</div>'+r.sleepers.map(function(x){return '<div class="it" style="padding:6px 0">'+(x.th?'<img class="th" src="'+esc(x.th)+'" alt="">':'')+'<div class="muted">'+(x.u?'<a href="'+esc(x.u)+'" target="_blank" rel="noopener" style="color:inherit">':'')+esc(x.t)+(x.u?'</a>':'')+' <span class="pill">'+esc(x.d)+'/일 · 구독 '+esc(x.subs)+'</span></div><div class="clr"></div></div>';}).join(''):'')+'</div>';}
   if(P.cmt&&P.cmt.groups){toc.push(['cmt','💬 댓글']);h+='<div class="card" id="cmt"><h2>💬 사람들이 묻는 것</h2>'+P.cmt.groups.map(function(g){return '<div class="it"><b>'+esc(g.q)+'</b> <span class="pill">'+esc(g.n)+'명</span><div class="muted">🎬 '+esc(g.topic)+' · “'+esc(g.hook)+'”</div>'+(g.film?'<div class="muted">📷 '+esc(g.film)+'</div>':'')+'</div>';}).join('')
     +(P.cmt.mine&&P.cmt.mine.length?'<div class="lbl">우리 영상에 달린 질문(아직 답 없음)</div>'+P.cmt.mine.map(function(t){return '<div class="muted">“'+esc(t)+'”</div>';}).join(''):'')+'</div>';}
   if(P.week&&P.week.items){toc.push(['week','🗓 기획']);h+='<div class="card" id="week"><h2>🗓 이번에 찍을 숏츠</h2>'+P.week.items.map(function(x){return '<div class="it"><b>'+esc(KIND[x.kind]||'')+' '+esc(x.title)+'</b><div class="muted">📍 '+esc(x.where)+' · 첫마디 “'+esc(x.hook)+'”</div><div class="muted">'+esc(x.why)+'</div>'+(x.shots||[]).map(function(s,i){return '<div>'+(i+1)+'. '+esc(s.what)+' <span class="muted">— '+esc(s.how)+' ('+esc(s.sec)+'초)</span></div>';}).join('')+'</div>';}).join('')+'</div>';}
-  if(P.yt){toc.push(['yt','📈 채널']);h+='<div class="card" id="yt"><h2>📈 내 채널</h2><div>구독 <b>'+esc(P.yt.subs)+'</b> · 영상 '+esc(P.yt.n)+'개 · 누적 조회 '+esc(P.yt.views)+'</div>'+(P.yt.top||[]).map(function(x){return '<div class="muted">'+esc(x.t)+' <span class="pill">'+esc(x.v)+'회 · 👍'+esc(x.l)+' · 💬'+esc(x.c)+'</span></div>';}).join('')+'</div>';}
-  if(P.novel){toc.push(['novel','📖 소설']);var nv=P.novel;h+='<div class="card novel" id="novel"><h2>📖 '+esc(nv.n)+'화 · '+esc(nv.title)+'</h2><div class="ab"><button id="abPlay">▶ 오디오북 듣기</button><span class="muted" id="abSt">'+nv.audio.length+'조각 · 내 목소리</span></div>'+radioHtml(nv.n)+nv.text.split(/\n+/).map(function(p){return '<p>'+esc(p)+'</p>';}).join('')+'</div>';}
+  if(P.yt){toc.push(['yt','📈 채널']);h+='<div class="card" id="yt"><h2>📈 내 채널</h2><div>구독 <b>'+esc(P.yt.subs)+'</b> · 영상 '+esc(P.yt.n)+'개 · 누적 조회 '+esc(P.yt.views)+'</div>'+(P.yt.top||[]).map(function(x){return '<div class="it" style="padding:6px 0">'+(x.th?'<img class="th" src="'+esc(x.th)+'" alt="">':'')+'<div class="muted">'+esc(x.t)+' <span class="pill">'+esc(x.v)+'회 · 👍'+esc(x.l)+' · 💬'+esc(x.c)+'</span></div><div class="clr"></div></div>';}).join('')+'</div>';}
+  if(P.novel){toc.push(['novel','📖 소설']);var nv=P.novel;h+='<div class="card novel" id="novel"><h2>📖 '+esc(nv.n)+'화 · '+esc(nv.title)+'</h2><div class="ab"><button id="abPlay">▶ 오디오북 듣기</button><span class="muted" id="abSt">'+nv.audio.length+'조각 · 내 목소리</span></div>'+radioHtml(nv.n)+(nv.img?'<img class="ill" src="'+esc(nv.img)+'" alt="">':'')+nv.text.split(/\n+/).map(function(p){return '<p>'+esc(p)+'</p>';}).join('')+'</div>';}
   if(!P.novel)h+='<div class="card" id="novel"><h2>📖 소설 · 📻 라디오 드라마</h2><p class="muted">아직 연재 소설이 없어요. 소설 한 화가 있어야 오디오북·라디오 드라마를 만들 수 있어요.</p><p><a class="re" href="/novel" style="text-decoration:none;display:inline-block">📖 소설 한 화 쓰러 가기 (1분)</a> <span class="muted">→ 쓰고 나서 여기 아래 🔄 다시 만들기</span></p></div>';
-  if(P.quest){toc.push(['quest','🧭 탐험']);h+='<div class="card" id="quest"><h2>🧭 주말 탐험 · '+esc(P.quest.pts)+'점</h2>'+P.quest.hist.map(function(x){return '<div class="it"><b>'+esc(x.name)+'</b> <span class="pill">'+esc(x.date)+' · +'+esc(x.pts)+'</span><div class="muted">'+esc(x.title)+(x.comment?' — '+esc(x.comment):'')+'</div></div>';}).join('')+'</div>';}
-  if(P.signs){toc.push(['signs','🪧 간판']);h+='<div class="card" id="signs"><h2>🪧 간판 사냥 · '+esc(P.signs.pts)+'점</h2>'+P.signs.items.map(function(x){return '<div class="it"><b>'+esc(x.zh)+'</b> '+'★'.repeat(x.fun||0)+'<div>직역: '+esc(x.literal)+'</div><div class="muted">진짜 뜻: '+esc(x.real)+'</div></div>';}).join('')+'</div>';}
+  if(P.quest){toc.push(['quest','🧭 탐험']);h+='<div class="card" id="quest"><h2>🧭 주말 탐험 · '+esc(P.quest.pts)+'점</h2>'+P.quest.hist.map(function(x){return '<div class="it">'+(x.img?'<img class="ph" src="'+esc(x.img)+'" alt="">':'')+'<b>'+esc(x.name)+'</b> <span class="pill">'+esc(x.date)+' · +'+esc(x.pts)+'</span><div class="muted">'+esc(x.title)+(x.comment?' — '+esc(x.comment):'')+'</div><div class="clr"></div></div>';}).join('')+'</div>';}
+  if(P.timecam&&P.timecam.length){toc.push(['tc','🕰 타임머신']);var ERA={e1930:'1930 민국',e1985:'1985 개혁개방',e2080:'2080 미래',snow:'광저우 폭설'};h+='<div class="card" id="tc"><h2>🕰 타임머신 카메라</h2>'+P.timecam.map(function(x){return '<div class="it"><div class="muted" style="margin-bottom:4px">'+esc(ERA[x.era]||x.era)+'</div><div class="tc2"><img src="'+esc(x.src)+'" alt=""><img src="'+esc(x.out)+'" alt=""></div></div>';}).join('')+'</div>';}
+  if(P.signs){toc.push(['signs','🪧 간판']);h+='<div class="card" id="signs"><h2>🪧 간판 사냥 · '+esc(P.signs.pts)+'점</h2>'+P.signs.items.map(function(x){return '<div class="it">'+(x.img?'<img class="ph" src="'+esc(x.img)+'" alt="">':'')+'<b>'+esc(x.zh)+'</b> '+'★'.repeat(x.fun||0)+'<div>직역: '+esc(x.literal)+'</div><div class="muted">진짜 뜻: '+esc(x.real)+'</div><div class="clr"></div></div>';}).join('')+'</div>';}
   if(!toc.length)h+='<div class="card muted">아직 담을 게 없어요. 출장 브리핑·레이더·소설 같은 걸 한 번 만들어 두면 여기 모여요.</div>';
   h+='<div class="card"><div class="lbl">글자 크기</div><div class="chips">'+[['','보통'],['l','크게'],['xl','아주 크게']].map(function(z){return '<button class="chip'+((document.documentElement.getAttribute('data-s')||'')===z[0]?' on':'')+'" data-z="'+z[0]+'">'+z[1]+'</button>';}).join('')+'</div>'
     +'<p class="muted" style="margin:12px 0 0">비행기 모드에서도 이 화면·🔊 전부 돼요(한 번 온라인에서 열어 둔 뒤). 기록이 바뀌었으면 <button class="re" id="re"'+(offline?' disabled':'')+'>🔄 다시 만들기</button></p></div>';
