@@ -1151,7 +1151,9 @@ export async function shortsFile(req, env, url) {
   }
   const o = await env.R2.get(k);
   if (!o) return new Response("not found", { status: 404 });
-  return new Response(o.body, { headers: { "content-type": o.httpMetadata?.contentType || "application/octet-stream", "content-length": String(o.size), "accept-ranges": "bytes", "cache-control": "private, max-age=86400" } });
+  // 내레이션(<n>.wav|mp3)·시험 음성은 같은 이름으로 다시 만들어지므로 캐시 금지 — 폰이 예전 내레이션을 그대로 쓰던 문제(2026-10-12)
+  const fresh = /\/(\d+\.(wav|mp3)|try[\w]*\.mp3)$/.test(k);
+  return new Response(o.body, { headers: { "content-type": o.httpMetadata?.contentType || "application/octet-stream", "content-length": String(o.size), "accept-ranges": "bytes", "cache-control": fresh ? "no-store" : "private, max-age=86400", etag: '"' + (o.etag || o.httpEtag || "") + '"' } });
 }
 
 // ---------------- 유튜브 ----------------

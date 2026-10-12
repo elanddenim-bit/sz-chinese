@@ -290,7 +290,7 @@ async function ensureNarr(ac,prog){
     // 실패하면 한 번 더, 그래도 없으면 빠진 채로 만들지 않고 멈춤(예전엔 조용히 건너뛰어 내레이션이 날아갔음)
     if(!n||n.key!==key){var r=await api('/shorts/asset',{id:D.id,n:i,kind:'say',text:t,voice:vo});if(!r.ok){await new Promise(function(z){setTimeout(z,1500);});r=await api('/shorts/asset',{id:D.id,n:i,kind:'say',text:t,voice:vo});}
       if(!r.ok)throw new Error('#'+(i+1)+' 내레이션을 만들지 못했어요('+(r.detail||r.error)+'). 잠시 뒤 다시 눌러 주세요.');n=sc._narr={key:key,url:r.url,buf:null};}
-    for(var k=0;k<2&&!n.buf;k++){try{n.buf=await decode(ac,await (await fetch(n.url+'&v='+Date.now())).arrayBuffer());}catch(e){n.buf=null;await new Promise(function(z){setTimeout(z,800);});}}
+    for(var k=0;k<2&&!n.buf;k++){try{n.buf=await decode(ac,await (await fetch(n.url+'&v='+Date.now(),{cache:'no-store'})).arrayBuffer());}catch(e){n.buf=null;await new Promise(function(z){setTimeout(z,800);});}}
     if(!n.buf)throw new Error('#'+(i+1)+' 내레이션 파일을 읽지 못했어요. 다시 눌러 주세요.');
     out[i]=n.buf;
   }
@@ -540,7 +540,7 @@ async function cloudRender(){
     Object.keys(used).forEach(function(i){var c=CLIPS[i],f=c.file,key=dir+'clip-'+f.size+'-'+(f.lastModified||0)+'.'+extOf(f.name,f.type,'mp4');clipKey[i]=key;if(!OSSUP[key])ups.push({key:key,size:f.size,get:function(){return f;},clip:1});});
     var rid=Date.now().toString(36);
     aud.forEach(function(a,i){var sc=D.scenes[a.k];if(o.voice==='rec'&&sc._rec){var b=sc._rec.blob;a.key=dir+'n'+rid+'-'+i+'.'+extOf('',b.type,'m4a');ups.push({key:a.key,size:b.size,get:function(){return b;}});}
-      else if(sc._narr&&sc._narr.url){var u=sc._narr.url;a.key=dir+'n'+rid+'-'+i+'.'+(u.indexOf('.mp3')>=0?'mp3':'wav');ups.push({key:a.key,size:300000,get:function(){return fetch(u).then(function(r){if(!r.ok)throw new Error('내레이션 받기 실패 '+r.status);return r.blob();});}});}});
+      else if(sc._narr&&sc._narr.url){var u=sc._narr.url;a.key=dir+'n'+rid+'-'+i+'.'+(u.indexOf('.mp3')>=0?'mp3':'wav');ups.push({key:a.key,size:300000,get:function(){return fetch(u+'&v='+Date.now(),{cache:'no-store'}).then(function(r){if(!r.ok)throw new Error('내레이션 받기 실패 '+r.status);return r.blob();});}});}});
     aud=aud.filter(function(a){return a.key;});
     var bgmKey='';if(BGM&&o.bgv){bgmKey=dir+'bgm-'+BGM.file.size+'.'+extOf(BGM.file.name,BGM.file.type,'mp3');if(!OSSUP[bgmKey])ups.push({key:bgmKey,size:BGM.file.size,get:function(){return BGM.file;},clip:1});}
     ovs.forEach(function(x,i){x.key=dir+'o'+rid+'-'+i+(x.kind==='freeze'||x.kind==='end'?'.jpg':'.png');ups.push({key:x.key,size:40000,get:function(){
