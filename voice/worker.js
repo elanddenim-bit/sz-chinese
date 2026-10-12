@@ -32,7 +32,7 @@ import { shortsApi, shortsSave, shortsFile, ytCallback, legalPage, SHORTS_HTML, 
 import { EDIT_HTML } from "./edit.js";
 import { TOON_HTML } from "./toon.js";
 import { CINE_HTML } from "./cine.js";
-import { briefApi, briefCron, briefGet, BRIEF_HTML } from "./brief.js";
+import { briefApi, briefCron, briefMorning, briefGet, BRIEF_HTML } from "./brief.js";
 import ICON180 from "./icon-180.png";
 import ICON192 from "./icon-192.png";
 import ICON512 from "./icon-512.png";
@@ -80,8 +80,13 @@ export default {
   async scheduled(ev, env, ctx) {
     if (ev.cron === "0 0 * * 6") ctx.waitUntil(weekCron(env).catch((e) => console.log("weekCron", e && e.message)));
     else {
-      ctx.waitUntil(shortsCron(env).catch((e) => console.log("shortsCron", e && e.message)));
-      ctx.waitUntil(briefCron(env).catch((e) => console.log("briefCron", e && e.message))); // 🧳 출장 전날 브리핑(정한 시각에만 보냄)
+      // 15분마다 하나의 크론(무료 플랜 크론 개수 절약): 정각 UTC 10~13시 = 중국 18~21시에만 숏츠 예약·전날 브리핑
+      const t = new Date(ev.scheduledTime || Date.now()), uh = t.getUTCHours(), um = t.getUTCMinutes();
+      if (um < 15 && uh >= 10 && uh <= 13) {
+        ctx.waitUntil(shortsCron(env).catch((e) => console.log("shortsCron", e && e.message)));
+        ctx.waitUntil(briefCron(env).catch((e) => console.log("briefCron", e && e.message))); // 🧳 출장 전날 브리핑(정한 시각에만 보냄)
+      }
+      if (uh >= 21 || uh <= 14) ctx.waitUntil(briefMorning(env).catch((e) => console.log("briefMorning", e && e.message))); // 중국 5~22시 '지금 출발'
     }
   },
   async fetch(req, env, ctx) {

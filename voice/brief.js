@@ -5,6 +5,8 @@
 //  POST /brief/save  {code, trips?, bark?, hour?}
 //  POST /brief/send  {code, d, dry?}           → 그 날짜 브리핑을 만들어 보냄(dry 면 만들기만)
 //  POST /brief/ping  {code}                    → Bark 테스트 알림
+//  POST /brief/parse {code, image?|text?}       → 예약 캡처·문자를 千问 VL 이 읽어 일정 후보로
+// 당일 '지금 출발' 알림: 15분마다 크론 → 출발 5시간 전부터 집(GPS)·숙소 → 공항·역 차 시간(디디 주소록 /api/eta, 高德 지금 교통)으로 출발 시각 계산, 그 20분 전에 Bark
 //  GET  /brief/v?h&d&s                         → 알림을 누르면 열리는 전체 브리핑(HMAC 서명)
 // 숫자(기온·비 확률·광저우와 차이·권장 출발 시각)는 코드가 계산, 千问은 옷차림·챙길 것·미팅 체크·현지 한마디만 씀
 // 저장: KV brief:<해시> {trips[], bark, hour, sent{날짜:시각}, log[]}, brief:out:<해시>:<날짜>(14일)
@@ -55,6 +57,8 @@ function cleanTrips(a) {
     how: HOW[x.how] ? x.how : "plane",
     t: /^\d{1,2}:\d{2}$/.test(x.t || "") ? x.t : "",
     no: String(x.no || "").trim().slice(0, 20), stay: String(x.stay || "").trim().slice(0, 60),
+    arr: /^\d{1,2}:\d{2}$/.test(x.arr || "") ? x.arr : "",
+    dep: String(x.dep || "").trim().slice(0, 40), seat: String(x.seat || "").trim().slice(0, 30),
     meet: String(x.meet || "").trim().slice(0, 400),
   })).filter((x) => x.d && (x.to || x.from)).sort((a, b) => (a.d + a.t).localeCompare(b.d + b.t));
 }
@@ -108,11 +112,11 @@ function leaveAt(tr) {
   return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0");
 }
 
-async function qwen(env, sys, user) {
+async function qwen(env, sys, user, model) {
   const call = async (fmt) => {
     const r = await fetch("https://" + host(env) + "/compatible-mode/v1/chat/completions", {
       method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
-      body: JSON.stringify({ model: env.BRIEF_MODEL || env.QUEST_MODEL || "qwen3.8-flash", temperature: 0.4, enable_thinking: false, ...(fmt ? { response_format: { type: "json_object" } } : {}),
+      body: JSON.stringify({ model: model || env.BRIEF_MODEL || env.QUEST_MODEL || "qwen3.8-flash", temperature: 0.4, enable_thinking: false, ...(fmt ? { response_format: { type: "json_object" } } : {}),
         messages: [{ role: "system", content: sys }, { role: "user", content: user }] }),
     });
     if (r.status === 400 && fmt) return call(false);
@@ -147,7 +151,8 @@ async function build(env, doc, d) {
   try { ai = await qwen(env, sys, JSON.stringify(facts)); } catch (e) { ai = { title: "", err: String(e.message || e).slice(0, 120) }; }
   const pack = (Array.isArray(ai.pack) ? ai.pack : []).map(String).slice(0, 5);
   const meet = (Array.isArray(ai.meet) ? ai.meet : []).map(String).slice(0, 4);
-  const route = legs.map((x) => x.how === "stay" ? "📍 " + x.to + " 현지" : HOW[x.how] + " " + [x.t, x.no].filter(Boolean).join(" ") + " " + x.from + "→" + x.to + (x.leave ? " · " + x.leave + " 출발 권장" : ""));
+  const route = legs.map((x) => x.how === "stay" ? "📍 " + x.to + " 현지" : HOW[x.how] + " " + [x.t, x.no].filter(Boolean).join(" ") + " " + x.from + "→" + x.to + (x.arr ? "(" + x.arr + " 도착)" : "") +
+    (x.dep ? " · " + x.dep : "") + (x.seat ? " · " + x.seat : "") + (x.leave ? " · " + x.leave + " 출발 예상(아침에 교통 보고 다시 알림)" : ""));
   const wline = dest ? "🌡 " + dest.city + " " + dest.lo + "~" + dest.hi + "° " + dest.w + (dest.rain != null ? " · 강수 " + dest.rain + "%" : "") +
     (diff != null && Math.abs(diff) >= 2 ? " (광저우보다 " + Math.abs(diff) + "° " + (diff < 0 ? "낮음" : "높음") + ")" : "") : "🌡 날씨 정보 없음";
   const title = "내일(" + facts.weekday + ") " + (String(ai.title || "").slice(0, 26) || legs.map((x) => x.to).join("·") + " 일정");
@@ -173,7 +178,8 @@ async function sendFor(env, h, doc, d, dry) {
 export async function briefApi(env, ctx, path, b, h) {
   await owner(env, h);
   const doc = await load(env, h);
-  const view = () => ({ ok: true, trips: doc.trips, bark: !!barkOf(doc.bark), hour: doc.hour || 21, log: (doc.log || []).slice(0, 8), sent: doc.sent || {} });
+  const view = () => ({ ok: true, trips: doc.trips, bark: !!barkOf(doc.bark), hour: doc.hour || 21, log: (doc.log || []).slice(0, 8), sent: doc.sent || {},
+    home: !!(doc.home && doc.home.gps), morning: doc.morning !== false, msent: doc.msent || {} });
   if (path === "/brief/state") return view();
   if (path === "/brief/save") {
     if (b.trips) doc.trips = cleanTrips(b.trips);
@@ -183,6 +189,8 @@ export async function briefApi(env, ctx, path, b, h) {
       doc.bark = k ? k.origin + "/" + k.key : "";
     }
     if (b.hour) doc.hour = Math.min(21, Math.max(18, Number(b.hour) || 21));
+    if (b.home && /^-?\d+\.\d+,-?\d+\.\d+$/.test(String(b.home.gps || ""))) doc.home = { gps: String(b.home.gps), at: Date.now() };
+    if (typeof b.morning === "boolean") doc.morning = b.morning;
     await store(env, h, doc);
     return view();
   }
@@ -190,6 +198,7 @@ export async function briefApi(env, ctx, path, b, h) {
     await barkPush(doc.bark, "출장 브리핑 연결됨 ✅", "출장 전날 " + (doc.hour || 21) + "시에 이렇게 알려 드려요.", "https://voice.zhnote.net/brief");
     return { ok: true };
   }
+  if (path === "/brief/parse") return { ok: true, trips: await parseBooking(env, b) };
   if (path === "/brief/send") {
     const d = /^\d{4}-\d{2}-\d{2}$/.test(b.d || "") ? b.d : cnDay(Date.now() + 86400e3);
     const r = await sendFor(env, h, doc, d, !!b.dry);
@@ -197,6 +206,79 @@ export async function briefApi(env, ctx, path, b, h) {
     return r;
   }
   throw berr("not_found", 404);
+}
+
+// 예약 캡처(여행앱·항공사·12306 화면)나 문자를 읽어 일정 후보로 — 화면이 기존 일정과 합침
+async function parseBooking(env, b) {
+  const img = /^data:image\/(jpeg|png|webp);base64,/.test(String(b.image || "")) && String(b.image).length < 6e6 ? String(b.image) : "";
+  const text = String(b.text || "").slice(0, 3000);
+  if (!img && !text.trim()) throw berr("캡처나 예약 문자를 넣어 주세요.");
+  const sys = "你是行程单识别助手。从机票/火车票/酒店的预订截图或短信中提取每一段行程。今天是 " + cnDay() + "（年份缺省时取今天之后最近的日期）。" +
+    "只提取图里/文字里确实有的信息，没有的留空，不要猜。城市用简体城市名（如 广州、济南、宁波），不要带机场名。" +
+    'dep 是出发机场+航站楼或出发火车站（如 广州白云国际机场T2、广州南站），seat 是座位/舱位/车厢座号。how: plane|train。只输出 JSON：' +
+    '{"trips":[{"d":"YYYY-MM-DD","how":"plane","t":"HH:MM 出发时间","arr":"HH:MM 到达时间","no":"航班号/车次","from":"","to":"","dep":"","seat":""}],"stay":{"city":"","name":"酒店名"}}';
+  const content = img ? [{ type: "image_url", image_url: { url: img } }, { type: "text", text: text || "识别这张预订截图" }] : text;
+  const o = await qwen(env, sys, content, img ? (env.BRIEF_VL_MODEL || env.QUEST_VL_MODEL || "qwen3-vl-plus") : null);
+  const trips = cleanTrips((o.trips || []).map((x) => ({ ...x, how: x.how === "train" ? "train" : "plane" })));
+  if (o.stay && o.stay.name) trips.push({ stayOnly: true, city: String(o.stay.city || "").slice(0, 20), name: String(o.stay.name).slice(0, 60) });
+  if (!trips.length) throw berr("일정을 찾지 못했어요. 편명·날짜가 보이게 다시 찍어 주세요.");
+  return trips;
+}
+
+// 당일 '지금 출발' — 15분마다(중국 5~23시) 오늘 일정 중 비행기·고속철만
+const STATION_MIN = { plane: 90, train: 30 };
+async function eta(env, doc, tr) {
+  if (!env.DIDI || !env.DIDI_ACCESS_KEY) return null;
+  const gz = /广州|광저우/.test(tr.from);
+  const from = gz && doc.home && doc.home.gps ? { gps: doc.home.gps, name: "집" } : tr.stay0 ? { kw: tr.stay0, city: tr.from } : null;
+  if (!from) return null;
+  const to = { kw: tr.dep || tr.from + (tr.how === "plane" ? "机场" : "站"), city: tr.from };
+  try {
+    const r = await env.DIDI.fetch("https://didi/api/eta", { method: "POST", headers: { "x-access-key": env.DIDI_ACCESS_KEY, "content-type": "application/json" }, body: JSON.stringify({ from, to }) });
+    const j = await r.json();
+    return j && j.ok && j.sec ? j : null;
+  } catch { return null; }
+}
+const hm = (m) => { m = ((m % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
+export async function briefMorning(env) {
+  const h = await env.KV.get("usage:owner");
+  if (!h) return;
+  const doc = await env.KV.get(docKey(h), "json");
+  if (!doc || doc.morning === false || !barkOf(doc.bark)) return;
+  const now = cnNow(), day = now.toISOString().slice(0, 10), nm = now.getUTCHours() * 60 + now.getUTCMinutes();
+  doc.msent = doc.msent || {};
+  let dirty = false;
+  for (const tr of doc.trips) {
+    if (tr.d !== day || !tr.t || !STATION_MIN[tr.how] || doc.msent[tr.id + day]) continue;
+    const [H, M] = tr.t.split(":").map(Number), tm = H * 60 + M;
+    if (nm < tm - 300 || nm > tm - 20) continue;
+    // 숙소: 이 일정 출발 도시에 머문 전날 일정의 숙소
+    const prev = doc.trips.filter((x) => x.d < day && x.to === tr.from && x.stay).pop();
+    const e = await eta(env, doc, { ...tr, stay0: tr.stay0 || (prev && prev.stay) || "" });
+    const drive = e ? Math.ceil(e.sec / 60) : (/广州/.test(tr.from) ? 60 : 40);
+    const leave = tm - STATION_MIN[tr.how] - drive - 10;
+    if (nm < leave - 20) continue;
+    const late = nm > leave;
+    const title = (late ? "⚠️ 서둘러야 해요 — " : "🚕 ") + hm(leave) + " 출발 " + (tr.how === "plane" ? "(이륙 " : "(발차 ") + tr.t + ")";
+    const body = [HOW[tr.how] + " " + [tr.no, tr.from + "→" + tr.to].filter(Boolean).join(" ") + (tr.seat ? " · " + tr.seat : ""),
+      "📍 " + (e ? e.to.name : (tr.dep || tr.from)) + "까지 차로 " + drive + "분" + (e ? "(지금 교통)" : "(교통 정보 없음, 대략)"),
+      (tr.how === "plane" ? "공항 도착 목표 " : "역 도착 목표 ") + hm(tm - STATION_MIN[tr.how]) + " · 여권 챙기기"].join("\n");
+    const link = e ? "https://uri.amap.com/navigation?to=" + e.to.loc + "," + encodeURIComponent(e.to.name) + "&mode=car&callnative=1" : "https://voice.zhnote.net/brief";
+    try {
+      await barkPush(doc.bark, title, body, link);
+      doc.msent[tr.id + day] = Date.now();
+      doc.log = [{ d: day, at: Date.now(), ok: true, m: 1 }, ...(doc.log || [])].slice(0, 20);
+      await logUse(env, "brief", { morning: 1 }, 0, h).catch(() => {});
+    } catch (er) {
+      doc.msent[tr.id + day] = Date.now();
+      doc.log = [{ d: day, at: Date.now(), ok: false, err: "아침 알림: " + String(er.message || er).slice(0, 100) }, ...(doc.log || [])].slice(0, 20);
+    }
+    dirty = true;
+  }
+  if (dirty) {
+    for (const k of Object.keys(doc.msent)) if (Date.now() - doc.msent[k] > 7 * 86400e3) delete doc.msent[k];
+    await store(env, h, doc);
+  }
 }
 
 // 크론(중국 18~21시 매시): 주인 문서에서 내일 일정이 있고 아직 안 보냈으면 정한 시각에 보냄
@@ -302,7 +384,8 @@ function tripHtml(x,i){var past=x.d&&x.d<today();
   [['plane','✈️ 비행기'],['train','🚄 고속철'],['car','🚗 차'],['stay','📍 현지 일정']].map(function(o){return '<option value="'+o[0]+'"'+(x.how===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join('')+
   '</select><input type="time" data-k="t" value="'+esc(x.t)+'" placeholder="출발"></div>'+
   '<div class="row row3"><input data-k="from" value="'+esc(x.from)+'" placeholder="출발 도시(중문)"><input data-k="to" value="'+esc(x.to)+'" placeholder="도착 도시"><input data-k="no" value="'+esc(x.no)+'" placeholder="편명 CZ3xxx"></div>'+
-  '<input data-k="stay" value="'+esc(x.stay)+'" placeholder="숙소(선택)" style="margin-bottom:8px">'+
+  '<div class="row row3"><input data-k="dep" value="'+esc(x.dep||'')+'" placeholder="출발 공항·역(T2)"><input type="time" data-k="arr" value="'+esc(x.arr||'')+'" placeholder="도착"><input data-k="seat" value="'+esc(x.seat||'')+'" placeholder="좌석"></div>'+
+  '<input data-k="stay" value="'+esc(x.stay)+'" placeholder="그 도시 숙소(선택) — 다음 날 아침 출발 계산에 씀" style="margin-bottom:8px">'+
   '<textarea data-k="meet" placeholder="미팅·공장 메모(선택) — 예: 오후 2시 OO공장 샘플 확인, 단가 재협상">'+esc(x.meet)+'</textarea></div>';}
 function draw(){
   var tom=today(1), has=S.trips.some(function(x){return x.d===tom;});
@@ -310,6 +393,11 @@ function draw(){
     '<input id="bark" placeholder="'+(S.bark?'바꿀 때만 새 주소 붙여 넣기':'https://api.day.app/…')+'">'+
     '<div class="row" style="margin-top:8px"><select id="hour">'+[18,19,20,21].map(function(n){return '<option'+(S.hour==n?' selected':'')+'>'+n+'</option>';}).join('')+'</select><span class="muted" style="align-self:center">시에 보내기(전날, 중국 시간)</span></div>'+
     '<div class="btns"><button id="sb">저장</button>'+(S.bark?'<button class="ghost" id="ping">테스트 알림</button>':'')+'</div></div>';
+  h+='<div class="card"><h2>📋 예약 캡처로 채우기</h2><p class="muted">여행앱·항공사·12306 예약 화면 캡처나 예약 문자를 넣으면 날짜·시각·편명·공항·좌석을 읽어 일정에 채워요.</p>'+
+    '<input type="file" id="pf" accept="image/*" style="margin-bottom:8px"><textarea id="pt" placeholder="또는 예약 문자·메일 내용 붙여 넣기"></textarea><div class="btns"><button id="pp">읽어서 채우기</button></div><div id="pout"></div></div>';
+  h+='<div class="card"><h2>🚕 당일 아침 출발 알림</h2><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="mo" style="width:auto"'+(S.morning?' checked':'')+'> 출발 당일, 지금 교통 기준으로 나갈 시각 20분 전에 알림</label>'+
+    '<p class="muted">광저우 출발은 집에서, 다른 도시는 전날 숙소에서 공항·역까지 차 시간을 高德로 계산해요. 알림을 누르면 高德 길안내.</p>'+
+    '<p class="'+(S.home?'ok':'muted')+'">'+(S.home?'✓ 집 위치 저장됨':'집 위치가 없어요 — 집에서 아래 버튼을 눌러 주세요')+'</p><div class="btns"><button class="ghost" id="hm">📍 지금 위치를 집으로 저장</button></div></div>';
   h+='<div class="card"><h2>출장 일정</h2>'+S.trips.map(tripHtml).join('')+'<div class="btns"><button class="ghost" id="add">+ 일정 추가</button><button id="st">일정 저장</button></div></div>';
   h+='<div class="card"><h2>미리 보기 · 바로 보내기</h2><div class="row"><input type="date" id="pd" value="'+tom+'"><span class="muted" style="align-self:center">'+(has?'내일 일정 있음 — 오늘 '+S.hour+'시 자동 발송':'내일 일정 없음')+'</span></div>'+
     '<div class="btns"><button class="ghost" id="pv">미리 보기</button><button id="sn">지금 보내기</button></div><div id="out"></div></div>';
@@ -321,7 +409,28 @@ function draw(){
   $('st').onclick=saveTrips;
   Array.prototype.forEach.call(document.querySelectorAll('[data-del]'),function(b){b.onclick=function(){S.trips=collect();S.trips.splice(+b.getAttribute('data-del'),1);saveTrips();};});
   $('pv').onclick=function(){send(true);};$('sn').onclick=function(){send(false);};
+  $('mo').onchange=function(){api('/brief/save',{morning:$('mo').checked}).then(function(r){if(!r.error){S=r;toast(S.morning?'아침 알림 켬':'아침 알림 끔');}});};
+  $('hm').onclick=function(){if(!navigator.geolocation)return toast('위치를 쓸 수 없어요');toast('위치 확인 중…');
+    navigator.geolocation.getCurrentPosition(function(p){api('/brief/save',{trips:collect(),home:{gps:p.coords.longitude.toFixed(6)+','+p.coords.latitude.toFixed(6)}}).then(function(r){if(r.error)return toast(r.detail||r.error);S=r;draw();toast('집 위치 저장');});},
+      function(){toast('위치 권한을 허용해 주세요');},{enableHighAccuracy:true,timeout:15000});};
+  $('pp').onclick=parse;
 }
+function shrink(f){return new Promise(function(ok,no){var im=new Image();im.onload=function(){var k=Math.min(1,1600/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);
+  c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(im.src);ok(c.toDataURL('image/jpeg',0.85));};im.onerror=no;im.src=URL.createObjectURL(f);});}
+function same(a,b){return a&&b&&(a===b||a.indexOf(b)>=0||b.indexOf(a)>=0);}
+function parse(){var f=$('pf').files[0],t=$('pt').value.trim();if(!f&&!t)return toast('캡처나 문자를 넣어 주세요');
+  $('pout').innerHTML='<p class="muted">읽는 중… (10~20초)</p>';
+  (f?shrink(f):Promise.resolve('')).then(function(img){return api('/brief/parse',{image:img,text:t});}).then(function(r){
+    if(r.error){$('pout').innerHTML='<p style="color:var(--red)">'+esc(r.detail||r.error)+'</p>';return;}
+    S.trips=collect();var add=0,upd=0,stay=null;
+    r.trips.forEach(function(p){if(p.stayOnly){stay=p;return;}
+      var x=S.trips.filter(function(y){return y.d===p.d&&(same(y.to,p.to)||same(y.from,p.from));})[0];
+      if(x){['how','t','arr','no','from','to','dep','seat'].forEach(function(k){if(p[k])x[k]=p[k];});upd++;}else{p.id='';p.stay=p.stay||'';p.meet='';S.trips.push(p);add++;}});
+    if(stay){var s2=S.trips.filter(function(y){return same(y.to,stay.city);});if(s2.length){s2[s2.length-1].stay=stay.name;upd++;}}
+    S.trips.sort(function(a,b){return (a.d+a.t).localeCompare(b.d+b.t);});
+    api('/brief/save',{trips:S.trips}).then(function(s){if(s.error)return toast(s.detail||s.error);S=s;draw();
+      $('pout').innerHTML='<p class="ok">✓ 일정 '+upd+'개 채움 · '+add+'개 추가'+(stay?' · 숙소 '+esc(stay.name):'')+' — 아래에서 확인해 주세요</p>';});
+  });}
 function collect(){return Array.prototype.map.call(document.querySelectorAll('.trip'),function(el){var o={id:(S.trips[+el.getAttribute('data-i')]||{}).id||''};
   Array.prototype.forEach.call(el.querySelectorAll('[data-k]'),function(f){o[f.getAttribute('data-k')]=f.value.trim();});return o;});}
 function saveTrips(){api('/brief/save',{trips:collect()}).then(function(r){if(r.error)return toast(r.detail||r.error);S=r;draw();toast('일정 저장');});}
