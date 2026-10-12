@@ -897,12 +897,14 @@ async function krStatus(env, h) {
 async function krTry(env, b, h, synth) {
   const voice = (await env.KV.get(krKey(h))) || (await env.KV.get("voice:" + h));
   if (!voice) throw serr("아직 목소리가 없어요.");
-  const text = String(b.text || "광저우에서 아메리카노 한 잔, 얼마일까요? 한국 돈으로 3천 원이 안 돼요.").slice(0, 120);
+  // 비워 두면 중국어·숫자가 섞인 예문 — 읽기용 문장 변환을 바로 들어 보게(2026-10-12)
+  const text = String(b.text || "요즘 광저우에서 줄 서서 마시는 沙特咖啡, 한 잔에 18元이에요. 한국 돈으로 3,500원 정도!").slice(0, 120);
   const kr = await env.KV.get(krKey(h));
-  const bytes = await sayMine(env, synth, voice, await readable(env, text), voice === kr);
-  const k = "shorts/" + h + "/" + AVA + "/try" + (voice.slice(-6).replace(/[^\w]/g, "")) + ".mp3";
+  const read = await readable(env, text);
+  const bytes = await sayMine(env, synth, voice, read, voice === kr);
+  const k = "shorts/" + h + "/" + AVA + "/try" + (voice.slice(-6).replace(/[^\w]/g, "")) + "-" + Date.now().toString(36) + ".mp3";
   await env.R2.put(k, bytes, { httpMetadata: { contentType: "audio/mpeg" } });
-  return { ok: true, url: await fileUrl(env, k), which: voice === (await env.KV.get(krKey(h))) ? "kr" : "zh" };
+  return { ok: true, url: await fileUrl(env, k), which: voice === kr ? "kr" : "zh", text, read };
 }
 
 // ---------------- 🎨 공감툰 (그림 + 자막 + 효과음, /toon) ----------------
@@ -1459,7 +1461,7 @@ function krTry(){var b=this,t0=Date.now();b.disabled=true;
   var tk=setInterval(function(){b.textContent='만드는 중… '+Math.round((Date.now()-t0)/1000)+'초';},500);
   api('/shorts/voice/try',{text:($('avText')&&$('avText').value.trim())||''}).then(function(r){clearInterval(tk);b.disabled=false;b.textContent='▶ 들어보기';
     if(!r.ok){$('krErr').textContent=r.detail||r.error;return;}
-    $('krErr').innerHTML='<audio src="'+r.url+'" controls playsinline style="width:100%;margin-top:6px"></audio><span class="note">'+(r.which==='kr'?'한국어 목소리':'공부용 목소리')+' · '+Math.round((Date.now()-t0)/1000)+'초</span>';
+    $('krErr').innerHTML='<audio src="'+r.url+'" controls playsinline style="width:100%;margin-top:6px"></audio><span class="note">'+(r.which==='kr'?'한국어 목소리':'공부용 목소리')+' · '+Math.round((Date.now()-t0)/1000)+'초</span>'+(r.read&&r.read!==r.text?'<p class="note" style="margin-top:6px">자막: '+esc(r.text)+'<br>실제로 읽은 문장: <b>'+esc(r.read)+'</b></p>':'<p class="note" style="margin-top:6px">읽은 문장: '+esc(r.text||'')+'</p>');
     a.src=r.url;var p=a.play();if(p&&p.catch)p.catch(function(){toast('▶ 재생 버튼을 눌러 주세요');});
   }).catch(function(e){clearInterval(tk);b.disabled=false;b.textContent='▶ 들어보기';$('krErr').textContent='연결 실패: '+(e.message||e);});}
 async function krRecord(){var btn=$('krRec');if(KREC){KREC.stop();return;}
