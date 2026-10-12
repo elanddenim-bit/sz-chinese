@@ -77,9 +77,10 @@ const imgUrl = async (env, k) => "/air/img?k=" + encodeURIComponent(k) + "&s=" +
 async function viewCase(env, c) {
   const imgs = {};
   for (const im of c.imgs) if (im.key) imgs[im.k] = await imgUrl(env, im.key);
-  const base = { id: c.id, kind: c.kind || "case", made: c.made, genre: c.genre, title: c.title, intro: c.intro, imgs, pending: c.imgs.filter((x) => x.task).length, failed: c.imgs.filter((x) => !x.task && !x.key).length, nimg: c.imgs.length };
+  const left = c.kind === "book" ? Object.values(c.nodes).filter((n) => !n.text).length : c.suspects.filter((x) => !x.rounds || x.rounds.length < 2).length;
+  const base = { id: c.id, kind: c.kind || "case", made: c.made, genre: c.genre, title: c.title, intro: c.intro, imgs, pending: c.imgs.filter((x) => x.task).length, failed: c.imgs.filter((x) => !x.task && !x.key).length, nimg: c.imgs.length || (c.kind === "book" ? Math.min(Number(env.AIR_BOOK_IMG) || 12, Object.keys(c.nodes).length) : 8), left };
   if (c.kind === "book") return { ...base, start: c.start, nodes: c.nodes, ends: c.ends };
-  return { ...base, suspects: c.suspects, places: c.places, truth: c.truth };
+  return { ...base, suspects: c.suspects.map(({ secret, ...x }) => x), places: c.places, truth: c.truth };
 }
 async function view(env, d) {
   const cases = [];
@@ -91,6 +92,7 @@ export async function airApi(env, ctx, path, b, h) {
   if (path === "/air/state") return view(env, await load(env, h));
   if (path === "/air/new") return b.kind === "book" ? newBook(env, ctx, b, h) : newCase(env, ctx, b, h);
   if (path === "/air/poll") return poll(env, b, h);
+  if (path === "/air/fill") return fill(env, ctx, b, h);
   if (path === "/air/done") return done(env, ctx, b, h);
   if (path === "/air/drop") { const d = await load(env, h); await removeCase(env, h, d, String(b.id || "")); await save(env, h, d); return view(env, d); }
   throw aerr("not_found", 404);
@@ -114,11 +116,11 @@ async function newCase(env, ctx, b, h) {
   const list = cands.map((p, i) => ({ i, name: p.name, type: p.type, kw: p.kw, area: p.area }));
   const sys = "你是互动推理游戏的编剧。玩家是住在广州的韩国中年男性，在飞机上离线玩：读案情、到4个地点'调查'、审问4个嫌疑人（每轮只能选一个问题问，问了就不能问另外的）、最后指认一人。题材：" + GENRES[genre].d + "。\n" +
     "规则：1) 从候选真实地点选4个当舞台（类型不同），真实地点只当背景，所有人物、事件都是虚构的，不要暗示真实店铺有负面行为。2) 不能有凶杀、血腥、暴力、色情、政治。" +
-    "3) 4个嫌疑人：虚构中文名（korean 字段写韩语读法），职业、性格、外貌各不同、有记忆点；其中1人是真相（culprit 0~3）。每人3轮审问，每轮3个可选问题，每个问题有回答。回答要有人味（回避、生气、撒谎、无意说漏嘴），真相人物的谎言必须能被某条线索戳穿。" +
-    "4) 线索要公平：地点调查4条 + 审问里藏的线索(clue 字段，没线索就留空串)合起来能推理出唯一答案，也要有1~2条误导；单条不够。玩家每轮只能问一个问题，所以关键线索要在不同轮、不同人物之间分散并有冗余（至少两条路能到真相）。" +
-    "5) 全部用韩语写，第二人称'당신'，有画面感。嫌疑人的每个回答另给一句中文口语 az（10~20字，像真人说话）和它的韩语 a；问题也给中文 qz。look 是给绘图模型的中文人物外貌描述(40字内：年龄、性别、发型、服装、表情、职业感)，不要真实名人。scene 是地点插画的中文描述(40字内：时间、天气、氛围)。" +
+    "3) 4个嫌疑人：虚构中文名（korean 字段写韩语读法），职业、性格、外貌各不同、有记忆点；其中1人是真相（culprit 0~3）。secret 字段写这个人真正做了什么/隐瞒了什么(给后续审问编剧用，玩家看不到)。" +
+    "4) 线索要公平：地点调查4条线索合起来加上审问能推理出唯一答案，也要有1~2条误导；单条不够。" +
+    "5) 全部用韩语写，第二人称'당신'，有画面感。look 是给绘图模型的中文人物外貌描述(40字内：年龄、性别、发型、服装、表情、职业感)，不要真实名人。scene 是地点插画的中文描述(40字内：时间、天气、氛围)。" +
     "6) ending 揭晓真相(5~8句，逐条说明线索怎么指向真相)，wrong 猜错结局(2~3句，不剧透)，hints 2条(每条一句，越来越直接)。\n" +
-    '只输出 JSON：{"title":"","intro":"3~5句开场，案件是什么、玩家为什么卷入","suspects":[{"name":"","korean":"","role":"","desc":"2句性格外貌","alibi":"本人声称的不在场说明1句","look":"","rounds":[[{"q":"","qz":"","a":"","az":"","clue":""},{...},{...}],[...],[...]]}],' +
+    '只输出 JSON：{"title":"","intro":"3~5句开场，案件是什么、玩家为什么卷入","suspects":[{"name":"","korean":"","role":"","desc":"2句性格外貌","alibi":"本人声称的不在场说明1句","look":"","secret":""}],' +
     '"places":[{"i":候选编号,"title":"章节标题","story":"到达时的描写3~4句","scene":"","search":"调查后发现的东西2~3句","clue":"这条线索一句话"}],"culprit":0,"hints":["",""],"ending":"","wrong":""}';
   const out = await qwen(env, [env.AIR_MODEL, env.MYST_MODEL, "qwen-plus", env.QUEST_MODEL || "qwen3.8-flash"], [{ role: "system", content: sys }, { role: "user", content: "候选地点：" + JSON.stringify(list) }]);
   const S = (x, n) => String(x == null ? "" : x).slice(0, n);
@@ -129,16 +131,10 @@ async function newCase(env, ctx, b, h) {
   });
   const suspects = [];
   for (const [k, s] of (Array.isArray(out.suspects) ? out.suspects : []).slice(0, 4).entries()) {
-    const rounds = [];
-    for (const r of (Array.isArray(s.rounds) ? s.rounds : []).slice(0, 3)) {
-      const opts = [];
-      for (const o of (Array.isArray(r) ? r : []).slice(0, 3)) opts.push({ q: S(o.q, 120), qz: S(o.qz, 60), a: S(o.a, 400), az: S(o.az, 60), clue: S(o.clue, 200), say: await sayReg(env, S(o.az, 60)) });
-      if (opts.length >= 2) rounds.push(opts);
-    }
-    suspects.push({ k: "s" + k, name: S(s.name, 20), korean: S(s.korean, 20), role: S(s.role, 40), desc: S(s.desc, 240), alibi: S(s.alibi, 200), look: S(s.look, 80), rounds });
+    suspects.push({ k: "s" + k, name: S(s.name, 20), korean: S(s.korean, 20), role: S(s.role, 40), desc: S(s.desc, 240), alibi: S(s.alibi, 200), look: S(s.look, 80), secret: S(s.secret, 300), rounds: [] });
   }
   const culprit = Number(out.culprit);
-  if (places.length < 3 || suspects.length < 3 || suspects.some((s) => s.rounds.length < 2) || !(culprit >= 0 && culprit < suspects.length)) throw aerr("사건 설계가 엉성하게 나왔어요. 다시 눌러 주세요.", 502);
+  if (places.length < 3 || suspects.length < 3 || !(culprit >= 0 && culprit < suspects.length)) throw aerr("사건 설계가 엉성하게 나왔어요. 다시 눌러 주세요.", 502);
   const id = "a" + Date.now().toString(36);
   // 그림 8장 비동기 시작(초상 4·장소 4). 실패한 작업은 그림 없이 진행
   const imgs = [];
@@ -172,10 +168,10 @@ async function newBook(env, ctx, b, h) {
   const sys = "你是'漫画推理游戏书'(gamebook)的编剧。玩家是住在广州的韩国中年男性，在飞机上离线翻页玩：每页一幅漫画分镜+几句叙述+2~3个选择，选择决定剧情走向。题材：" + GENRES[genre].d + "。\n" +
     "结构要求：1) 共 22~28 页(节点)，起点 id 为 n1。2) 剧情是真正分支的：至少 3 条不同的调查路线，路线之间可以汇合。3) 至少 5 个结局：1 个'真相'结局(good，推理完全正确)、1~2 个'半对'结局(half，抓到人但动机/手法弄错或证据不足)、2~3 个'失败'结局(bad：被误导抓错人、证据被销毁、嫌疑人跑了、自己被套路 等)，失败结局要写得有趣、有点反转，让玩家想重来。" +
     "4) 关键在于选择有后果：早期一个看似合理的选择可能让后面少看到一条线索而走向失败；有的选择是陷阱(太冲动、太信某个人)。不要有'明显正确'的选择，每个选项都要像有道理。" +
-    "5) 页面叙述 3~5 句，第二人称'당신'，像漫画旁白+对话(对话用 「」)，有画面感；每页 img 是给绘图模型的中文分镜描述(40字内：场景、人物动作、情绪、镜头)，主角是一位戴眼镜的韩国中年男性(统一描述为 '戴黑框眼镜、穿深蓝夹克的中年男人')。" +
-    "6) 真实地点(候选)只当背景舞台，人物、事件全部虚构，不能有凶杀、血腥、暴力、色情、政治。全部用韩语写。" +
-    "7) 结局页 end 字段: good|half|bad，结局页没有 choices；结局页要有 verdict(1句：这条路为什么对/错)。所有 choices.to 必须是存在的 id，不能有循环，不能有到不了的页。\n" +
-    '只输出 JSON：{"title":"","nodes":[{"id":"n1","text":"","img":"","choices":[{"t":"选项文字(韩语)","to":"n2"}]},{"id":"n9","text":"","img":"","end":"bad","verdict":""}]}';
+    "5) 这一步只写大纲：每页 s 是这一页发生什么的1~2句韩语摘要(正文下一步再写)，选项文字 t 是韩语。" +
+    "6) 真实地点(候选)只当背景舞台，人物、事件全部虚构，不能有凶杀、血腥、暴力、色情、政治。" +
+    "7) 结局页 end 字段: good|half|bad，结局页没有 choices。所有 choices.to 必须是存在的 id，不能有循环，不能有到不了的页。\n" +
+    '只输出 JSON：{"title":"","nodes":[{"id":"n1","s":"","choices":[{"t":"选项文字(韩语)","to":"n2"}]},{"id":"n9","s":"","end":"bad"}]}';
   const out = await qwen(env, [env.AIR_MODEL, env.MYST_MODEL, "qwen-plus", env.QUEST_MODEL || "qwen3.8-flash"], [{ role: "system", content: sys }, { role: "user", content: "候选地点(可用作舞台)：" + JSON.stringify(places.map((p) => ({ name: p.name, type: p.type, area: p.area }))) }], 0.95);
   const S = (x, n) => String(x == null ? "" : x).slice(0, n);
   const raw = (Array.isArray(out.nodes) ? out.nodes : []).slice(0, 36);
@@ -184,8 +180,8 @@ async function newBook(env, ctx, b, h) {
   const nodes = {};
   for (const x of raw) {
     const id = String(x.id);
-    const n = { id, text: S(x.text, 700), img: S(x.img, 100) };
-    if (x.end && /^(good|half|bad)$/.test(String(x.end))) { n.end = String(x.end); n.verdict = S(x.verdict, 200); }
+    const n = { id, s: S(x.s, 200), text: "", img: "" };
+    if (x.end && /^(good|half|bad)$/.test(String(x.end))) { n.end = String(x.end); n.verdict = ""; }
     else {
       n.choices = (Array.isArray(x.choices) ? x.choices : []).filter((c) => ids.has(String(c.to)) && String(c.to) !== id).slice(0, 3).map((c) => ({ t: S(c.t, 80), to: String(c.to) }));
       if (!n.choices.length) { n.end = "bad"; n.verdict = "여기서 이야기가 끊겼어요. 다른 길을 찾아보세요."; }
@@ -199,16 +195,65 @@ async function newBook(env, ctx, b, h) {
   const ends = Object.values(nodes).filter((n) => n.end);
   if (Object.keys(nodes).length < 10 || !ends.some((n) => n.end === "good") || !ends.some((n) => n.end === "bad")) throw aerr("게임북이 너무 짧거나 결말이 부족하게 나왔어요. 다시 눌러 주세요.", 502);
   const id = "a" + Date.now().toString(36);
-  // 그림: 시작·결말 페이지는 꼭, 나머지는 선택지가 있는 페이지 순으로 합쳐 최대 AIR_BOOK_IMG(기본 12)장
-  const limit = Number(env.AIR_BOOK_IMG) || 12;
-  const order = ["n1", ...ends.map((n) => n.id), ...Object.keys(nodes).filter((k) => k !== "n1" && !nodes[k].end)];
+  // 본문·그림은 /air/fill 이 6쪽씩 채움(그림은 본문이 다 된 뒤 시작·결말·분기 순 최대 AIR_BOOK_IMG 장)
   const imgs = [];
-  for (const k of [...new Set(order)].slice(0, limit)) imgs.push({ k, task: await t2i(env, "漫画分镜，" + nodes[k].img + "，日式推理漫画风格，清晰线稿加淡彩，电影感构图，画面里没有文字", "1024*768"), key: "" });
   d.cases[id] = { id, kind: "book", made: Date.now(), genre, title: S(out.title || "광저우 게임북", 50), intro: "", start: "n1", nodes, ends: ends.map((n) => ({ id: n.id, end: n.end })), imgs, pids: places.map((p) => p.id) };
   d.gen = { [day]: (d.gen[day] || 0) + 1 };
   await save(env, h, d);
   ctx.waitUntil(logUse(env, "air", { book: 1 }, 0, h).catch(() => {}));
   return { ...(await view(env, d)), made: id };
+}
+
+// ---------- 2단계: 긴 생성은 요청 하나로 못 끝냄(폰·엣지 시간 제한) → 화면이 /air/fill 을 반복 호출해 조금씩 채움 ----------
+async function fill(env, ctx, b, h) {
+  const d = await load(env, h), c = d.cases[String(b.id || "")];
+  if (!c) throw aerr("사건을 찾지 못했어요.", 404);
+  const S = (x, n) => String(x == null ? "" : x).slice(0, n);
+  const models = [env.AIR_MODEL, env.MYST_MODEL, "qwen-plus", env.QUEST_MODEL || "qwen3.8-flash"];
+  if (c.kind === "book") {
+    const todo = Object.values(c.nodes).filter((n) => !n.text).slice(0, 6);
+    if (todo.length) {
+      const outline = Object.values(c.nodes).map((n) => ({ id: n.id, s: n.s, choices: (n.choices || []).map((x) => x.t + "→" + x.to), end: n.end || "" }));
+      const sys = "你是'漫画推理游戏书'的编剧。下面是整本书的分支大纲(每页摘要、选项、结局类型)。请把指定的几页写成正文：text 3~5句韩语，第二人称'당신'，像漫画旁白+对话(对话用 「」)，有画面感，和前后页衔接；img 是绘图用中文分镜描述(40字内：场景、人物动作、情绪、镜头)，主角统一描述为'戴黑框眼镜、穿深蓝夹克的中年男人'；结局页另写 verdict(1句：这条路为什么对/错)。" +
+        "真实地点只当背景，人物事件虚构，不能有凶杀、血腥、暴力、色情、政治。" + '只输出 JSON：{"pages":[{"id":"","text":"","img":"","verdict":""}]}';
+      const out = await qwen(env, models, [{ role: "system", content: sys }, { role: "user", content: "书名：" + c.title + "\n大纲：" + JSON.stringify(outline) + "\n这次要写的页：" + JSON.stringify(todo.map((n) => n.id)) }], 0.85);
+      for (const pg of (Array.isArray(out.pages) ? out.pages : [])) { const n = c.nodes[String(pg.id)]; if (n && !n.text) { n.text = S(pg.text, 700) || "…"; n.img = S(pg.img, 100); if (n.end) n.verdict = S(pg.verdict, 200) || n.verdict || ""; } }
+      for (const n of todo) if (!n.text) n.text = "(이 쪽은 쓰지 못했어요) " + (n.s || "");
+    }
+    const left = Object.values(c.nodes).filter((n) => !n.text).length;
+    if (!left && !c.imgs.length && !c.imgDone) {
+      const ends = Object.values(c.nodes).filter((n) => n.end), limit = Number(env.AIR_BOOK_IMG) || 12;
+      const order = ["n1", ...ends.map((n) => n.id), ...Object.keys(c.nodes).filter((k) => k !== "n1" && !c.nodes[k].end)];
+      for (const k of [...new Set(order)].slice(0, limit)) c.imgs.push({ k, task: await t2i(env, "漫画分镜，" + c.nodes[k].img + "，日式推理漫画风格，清晰线稿加淡彩，电影感构图，画面里没有文字", "1024*768"), key: "" });
+      c.imgDone = true;
+    }
+    await save(env, h, d);
+    return { ok: true, left, case: await viewCase(env, c) };
+  }
+  // 심문 추리: 용의자 한 명씩 3라운드×질문 3개
+  const sidx = c.suspects.findIndex((x) => !x.rounds || x.rounds.length < 2);
+  if (sidx >= 0) {
+    const s = c.suspects[sidx], truth = JSON.parse(decodeURIComponent(escape(atob(c.truth))));
+    const isC = truth.culprit === sidx;
+    const sys = "你是互动推理游戏的编剧，现在只写一个嫌疑人的审问台词。案情和所有嫌疑人、地点线索如下。玩家每轮只能从3个问题里问1个(问了就不能问另外的)，共3轮。" +
+      "要求：回答要有人味(回避、生气、撒谎、无意说漏嘴)，有的问题问了才会露出线索(clue 字段写一句韩语线索，大多数留空串)，至少2个问题带线索且分散在不同轮。" +
+      (isC ? "这个人是真相人物：他会撒谎，但谎言必须和某条地点线索矛盾，细心的玩家能发现；不要直接认罪。" : "这个人不是真相人物：他可能隐瞒别的小事(secret)而显得可疑，造成误导，但诚实的部分要和线索一致。") +
+      "全部用韩语写；每个回答另给一句中文口语 az(10~20字，像真人说话)，问题也给中文 qz。不能有凶杀、血腥、暴力、色情、政治。" +
+      '只输出 JSON：{"rounds":[[{"q":"","qz":"","a":"2~3句","az":"","clue":""},{...},{...}],[...],[...]]}';
+    const ctxTxt = "案情：" + c.intro + "\n嫌疑人：" + JSON.stringify(c.suspects.map((x, i) => ({ i, name: x.name, role: x.role, desc: x.desc, alibi: x.alibi, secret: x.secret }))) + "\n地点线索：" + JSON.stringify(c.places.map((p) => ({ place: p.title, clue: p.clue, found: p.search }))) + "\n真相：" + truth.ending + "\n这次写的嫌疑人编号：" + sidx + "(" + s.name + ")";
+    const out = await qwen(env, models, [{ role: "system", content: sys }, { role: "user", content: ctxTxt }], 0.85);
+    const rounds = [];
+    for (const r of (Array.isArray(out.rounds) ? out.rounds : []).slice(0, 3)) {
+      const opts = [];
+      for (const o of (Array.isArray(r) ? r : []).slice(0, 3)) opts.push({ q: S(o.q, 120), qz: S(o.qz, 60), a: S(o.a, 400), az: S(o.az, 60), clue: S(o.clue, 200), say: await sayReg(env, S(o.az, 60)) });
+      if (opts.length >= 2) rounds.push(opts);
+    }
+    if (rounds.length < 2) throw aerr(s.name + " 심문 대본이 엉성하게 나왔어요. 다시 눌러 주세요.", 502);
+    s.rounds = rounds;
+    await save(env, h, d);
+  }
+  const left = c.suspects.filter((x) => !x.rounds || x.rounds.length < 2).length;
+  return { ok: true, left, case: await viewCase(env, c) };
 }
 
 async function poll(env, b, h) {
@@ -331,7 +376,7 @@ var S=null,CUR=null,P=null,TAB='case',AU=null,ON=navigator.onLine;
 function $(i){return document.getElementById(i);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function toast(t){var d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(function(){d.remove();},3200);}
-function api(p,b){b=b||{};b.code=CODE;return fetch(p,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json().catch(function(){return {error:'서버 응답 오류 '+r.status};});},function(){return {error:'network'};});}
+function api(p,b){b=b||{};b.code=CODE;return fetch(p,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json().catch(function(){return {error:'서버 응답 오류 '+r.status};});},function(e){return {error:'network',detail:'연결이 끊겼어요(응답이 너무 오래 걸렸을 수 있어요). 다시 눌러 주세요.'};});}
 function gate(m){$('main').innerHTML='<div class="gate"><p>'+esc(m||'박비서 초대 코드를 넣어 주세요')+'</p><input id="cd" placeholder="초대 코드" style="font:inherit;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--soft);color:var(--ink)"> <button id="go" class="chip">열기</button></div>';$('go').onclick=function(){CODE=$('cd').value.trim();try{localStorage.setItem('pb-code',CODE);}catch(e){}load();};}
 if('serviceWorker' in navigator){navigator.serviceWorker.register('/air/sw.js',{scope:'/air/'}).catch(function(){});}
 function ls(k,v){try{if(v===undefined)return JSON.parse(localStorage.getItem(k)||'null');localStorage.setItem(k,JSON.stringify(v));}catch(e){}return v;}
@@ -345,14 +390,16 @@ function load(){
     S=j;ls('air-cases',S);syncPending();home();pollAll();});
 }
 function imgOf(c,k){return c.imgs&&c.imgs[k]?'<img src="'+esc(c.imgs[k])+'" alt="">':'<div class="ph"></div>';}
-function ready(c){var n=Object.keys(c.imgs||{}).length;return n+'/'+(c.nimg||(c.kind==='book'?0:(c.suspects.length+c.places.length)));}
+function ready(c){var n=Object.keys(c.imgs||{}).length;return n+'/'+(c.nimg||8);}
+var FILLING={};
+function fillCase(c){if(FILLING[c.id]||!navigator.onLine||!c.left)return;FILLING[c.id]=true;api('/air/fill',{id:c.id}).then(function(j){FILLING[c.id]=false;if(!j.ok){toast(j.detail||j.error);return;}var i=S.cases.findIndex(function(x){return x.id===c.id;});if(i>=0)S.cases[i]=j['case'];ls('air-cases',S);if(!CUR)home();if(j.left)fillCase(j['case']);else pollAll();}).catch(function(){FILLING[c.id]=false;});}
 function home(){
   CUR=null;$('ttl').textContent='🕵️ 미스터리 기내편';$('back').setAttribute('href','/hub');$('back').onclick=null;$('pts').textContent='누적 '+(S.total||0)+'점';
   var h='<div class="st"><span class="dot'+(navigator.onLine?'':' off')+'"></span>'+(navigator.onLine?'온라인':'오프라인 · 저장본')+' · 사건은 폰에 저장돼 비행기 모드에서도 돼요</div>';
   if(!S.cases.length)h+='<div class="card muted">담아 둔 사건이 없어요. 아래에서 만들어 두세요(사건 하나에 1분쯤, 그림 8장은 2~3분 더).</div>';
   S.cases.forEach(function(c){var p=ls('air-play:'+c.id)||{};var im=c.imgs&&(c.kind==='book'?c.imgs.n1:c.imgs.s0);
-    h+='<div class="card"><div class="cs">'+(im?'<img src="'+esc(im)+'" alt="">':'<div class="ph"></div>')+'<div style="flex:1"><b>'+(c.kind==='book'?'📚 ':'🕵️ ')+esc(c.title)+'</b><div class="muted">'+esc(S.genres[c.genre]||'')+(c.kind==='book'?' · 게임북 '+Object.keys(c.nodes).length+'쪽 · 결말 '+((p.seen||[]).length)+'/'+c.ends.length:'')+' · 그림 '+ready(c)+(c.pending?' <span class="spin">⏳</span>':'')+(c.kind==='book'?(p.good?' · ✅ 진상 도달':''):(p.done?' · '+(p.ok?'✅ 해결 '+p.score+'점':'❌ 오답'):p.started?' · 진행 중':''))+'</div>'
-      +'<div class="chips" style="margin-top:8px"><button class="chip on" data-play="'+c.id+'">'+(p.started?'이어서':'시작')+'</button><button class="chip" data-drop="'+c.id+'">지우기</button></div></div></div></div>';});
+    h+='<div class="card"><div class="cs">'+(im?'<img src="'+esc(im)+'" alt="">':'<div class="ph"></div>')+'<div style="flex:1"><b>'+(c.kind==='book'?'📚 ':'🕵️ ')+esc(c.title)+'</b><div class="muted">'+esc(S.genres[c.genre]||'')+(c.kind==='book'?' · 게임북 '+Object.keys(c.nodes).length+'쪽 · 결말 '+((p.seen||[]).length)+'/'+c.ends.length:'')+(c.left?' · <span class="spin">✍️</span> '+(c.kind==='book'?'본문 쓰는 중 '+(Object.keys(c.nodes).length-c.left)+'/'+Object.keys(c.nodes).length+'쪽':'심문 대본 '+(c.suspects.length-c.left)+'/'+c.suspects.length+'명')+'':' · 그림 '+ready(c))+(c.pending?' <span class="spin">⏳</span>':'')+(c.kind==='book'?(p.good?' · ✅ 진상 도달':''):(p.done?' · '+(p.ok?'✅ 해결 '+p.score+'점':'❌ 오답'):p.started?' · 진행 중':''))+'</div>'
+      +'<div class="chips" style="margin-top:8px">'+(c.left?'<button class="chip" disabled>준비 중…</button>':'<button class="chip on" data-play="'+c.id+'">'+(p.started?'이어서':'시작')+'</button>')+'<button class="chip" data-drop="'+c.id+'">지우기</button></div></div></div></div>';});
   var KD=ls('air-kind')||'case';h+='<div class="card"><h2>새 사건 만들기</h2><div class="chips" style="margin-bottom:8px"><button class="chip'+(KD==='case'?' on':'')+'" data-k="case">🕵️ 심문 추리</button><button class="chip'+(KD==='book'?' on':'')+'" data-k="book">📚 만화 게임북</button></div><p class="muted">'+(KD==='book'?'한 쪽마다 만화 컷+선택지. 선택에 따라 추리 방향이 갈리고, 잘못 고르면 엉뚱한 사람을 잡거나 단서를 놓치는 실패 결말(결말 5개 이상). 그림 12장.':'광저우 실제 장소 4곳이 무대, 용의자 4명 심문(라운드마다 질문 하나만!), 그림 8장.')+' 인터넷 될 때만.</p><div class="chips" id="gn">'+Object.keys(S.genres).map(function(k){return '<button class="chip'+(k===(ls('air-genre')||'classic')?' on':'')+'" data-g="'+k+'">'+esc(S.genres[k])+'</button>';}).join('')+'</div><button class="big" id="mk"'+(navigator.onLine?'':' disabled')+'>🕵️ 사건 만들기</button></div>';
   if(S.hist&&S.hist.length)h+='<div class="card"><h2>지난 사건</h2>'+S.hist.slice(0,10).map(function(x){return '<div class="muted">'+esc(x.date)+' · '+esc(x.title)+' · '+(x.kind==='book'?'📚 결말 '+(x.who||'')+(x.ok?' ✅':''):(x.ok?'✅ '+x.score+'점':'❌'))+'</div>';}).join('')+'</div>';
   $('main').innerHTML=h;
@@ -361,9 +408,10 @@ function home(){
   document.querySelectorAll('[data-g]').forEach(function(b){b.onclick=function(){ls('air-genre',b.getAttribute('data-g'));home();};});
   document.querySelectorAll('[data-k]').forEach(function(b){b.onclick=function(){ls('air-kind',b.getAttribute('data-k'));home();};});
   $('mk').onclick=make;
+  S.cases.forEach(function(c){if(c.left)fillCase(c);});
 }
-function make(){var b=$('mk');b.disabled=true;b.textContent='✍️ 사건 쓰는 중… (1분쯤)';
-  var go=function(gps){api('/air/new',{genre:ls('air-genre')||'classic',kind:ls('air-kind')||'case',gps:gps||''}).then(function(j){if(!j.ok){toast(j.detail||j.error);home();return;}S=j;ls('air-cases',S);home();toast('사건이 왔어요. 그림은 뒤에서 2~3분 더 만들어요.');pollAll();});};
+function make(){var b=$('mk');b.disabled=true;b.textContent='✍️ 사건 뼈대 쓰는 중… (30~60초)';
+  var go=function(gps){api('/air/new',{genre:ls('air-genre')||'classic',kind:ls('air-kind')||'case',gps:gps||''}).then(function(j){if(!j.ok){toast(j.detail||j.error);home();return;}S=j;ls('air-cases',S);home();toast('뼈대가 왔어요. 본문·심문 대본을 이어서 쓰고(1~2분), 그림은 그 뒤 2~3분 더.');});};
   if(navigator.geolocation)navigator.geolocation.getCurrentPosition(function(p){go(p.coords.longitude.toFixed(6)+','+p.coords.latitude.toFixed(6));},function(){go('');},{timeout:4000});else go('');
 }
 function drop(id){api('/air/drop',{id:id}).then(function(j){if(j.ok){S=j;ls('air-cases',S);try{localStorage.removeItem('air-play:'+id);}catch(e){}home();}else toast(j.detail||j.error);});}
