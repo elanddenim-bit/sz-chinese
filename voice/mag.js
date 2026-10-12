@@ -156,6 +156,41 @@ async function radioLine(env, b, h, synth) {
   return { ok: true, i, url: await radioUrl(env, h, n, i) };
 }
 
+// 소설 오디오북 조각은 길어서(420자) 처음 들을 때 합성 10~30초 → 묶음을 만든 직후 뒤에서 미리 합성해 R2 에 둠
+async function presynth(env, d, synth) {
+  const p = d.parts && d.parts.novel;
+  if (!p || !synth) return;
+  for (const u of p.audio || []) {
+    const id = (u.match(/id=([0-9a-f]{16})/) || [])[1];
+    if (!id) continue;
+    await sayFile(env, id, synth).catch(() => {});
+  }
+}
+// 읽어 주기 파일 만들기(있으면 그대로) — /mag/say 와 presynth 가 같이 씀
+async function sayFile(env, id, synth) {
+  const key = "tts/mag/" + id + ".mp3";
+  const head = await env.R2.head(key);
+  if (head) return { key, ct: head.httpMetadata?.contentType || "audio/mpeg" };
+  const it = await env.KV.get("mag:say:" + id, "json");
+  if (!it) throw new Error("expired");
+  let mp3 = null, ct = "audio/mpeg";
+  if (it.lang === "ko") {
+    const h = await env.KV.get("usage:owner");
+    const kr = h && (await env.KV.get("voice:kr:" + h));
+    if (kr) { try { mp3 = await synth(env, kr, it.t, null, { language_hints: ["ko"], rate: 1.0, volume: 100 }); } catch { mp3 = null; } }
+    if (!mp3) {
+      const r = await fetch("https://" + host(env) + "/api/v1/services/aigc/multimodal-generation/generation", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
+        body: JSON.stringify({ model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text: it.t, voice: "Cherry", language_type: "Korean" } }) });
+      const j = await r.json().catch(() => ({}));
+      const u = j.output && j.output.audio && j.output.audio.url;
+      if (!u) throw new Error("qwen-tts 결과 없음 " + (j.message || r.status));
+      const a = await fetch(u); if (!a.ok) throw new Error("오디오 받기 실패"); mp3 = new Uint8Array(await a.arrayBuffer()); ct = "audio/wav";
+    }
+  } else mp3 = await synth(env, env.QUEST_VOICE || "longxiaochun_v2", it.t, env.QUEST_TTS_MODEL || "cosyvoice-v2");
+  await env.R2.put(key, mp3, { httpMetadata: { contentType: ct } });
+  return { key, ct };
+}
+
 export async function magApi(env, ctx, path, b, h, synth) {
   await owner(env, h);
   if (path === "/mag/radio/make") return radioMake(env, ctx, b, h);
@@ -169,7 +204,7 @@ export async function magApi(env, ctx, path, b, h, synth) {
     await env.KV.put(rk, String(n + 1), { expirationTtl: 2 * 86400 });
     d = null;
   }
-  if (!d) { d = await makeBundle(env, h); await env.KV.put(key, JSON.stringify(d), { expirationTtl: 2 * 86400 }); if (ctx) ctx.waitUntil(logUse(env, "mag", { make: 1 }, 0, h).catch(() => {})); }
+  if (!d) { d = await makeBundle(env, h); await env.KV.put(key, JSON.stringify(d), { expirationTtl: 2 * 86400 }); if (ctx) { ctx.waitUntil(logUse(env, "mag", { make: 1 }, 0, h).catch(() => {})); ctx.waitUntil(presynth(env, d, synth).catch(() => {})); } }
   else if (ctx) ctx.waitUntil(logUse(env, "mag", { open: 1 }, 0, h).catch(() => {}));
   return { ok: true, mag: d };
 }
@@ -213,30 +248,11 @@ export async function magGet(req, env, url, synth) {
   if (url.pathname === "/mag/say") {
     const id = String(url.searchParams.get("id") || "");
     if (!/^[0-9a-f]{16}$/.test(id) || url.searchParams.get("s") !== (await hmac16(env, "s|" + id))) return new Response("forbidden", { status: 403 });
-    const key = "tts/mag/" + id + ".mp3", head = { "content-type": "audio/mpeg", "cache-control": "private, max-age=31536000" };
-    const hit = await env.R2.get(key);
-    if (hit) return new Response(hit.body, { headers: head });
-    const it = await env.KV.get("mag:say:" + id, "json");
-    if (!it) return new Response("expired", { status: 404 });
-    let mp3 = null;
-    try {
-      if (it.lang === "ko") {
-        const h = await env.KV.get("usage:owner");
-        const kr = h && (await env.KV.get("voice:kr:" + h));
-        if (kr) { try { mp3 = await synth(env, kr, it.t, null, { language_hints: ["ko"], rate: 1.0, volume: 100 }); } catch { mp3 = null; } }
-        if (!mp3) { // 내 목소리가 없거나 실패하면 qwen-tts 한국어
-          const r = await fetch("https://" + host(env) + "/api/v1/services/aigc/multimodal-generation/generation", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
-            body: JSON.stringify({ model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text: it.t, voice: "Cherry", language_type: "Korean" } }) });
-          const j = await r.json().catch(() => ({}));
-          const u = j.output && j.output.audio && j.output.audio.url;
-          if (!u) throw new Error("qwen-tts 결과 없음 " + (j.message || r.status));
-          const a = await fetch(u); if (!a.ok) throw new Error("오디오 받기 실패"); mp3 = new Uint8Array(await a.arrayBuffer());
-          head["content-type"] = "audio/wav";
-        }
-      } else mp3 = await synth(env, env.QUEST_VOICE || "longxiaochun_v2", it.t, env.QUEST_TTS_MODEL || "cosyvoice-v2");
-    } catch (e) { return new Response("tts: " + String(e.message || e).slice(0, 160), { status: 502 }); }
-    await env.R2.put(key, mp3, { httpMetadata: { contentType: head["content-type"] } });
-    return new Response(mp3, { headers: head });
+    let f;
+    try { f = await sayFile(env, id, synth); } catch (e) { return new Response("tts: " + String(e.message || e).slice(0, 160), { status: e.message === "expired" ? 404 : 502 }); }
+    const o = await env.R2.get(f.key);
+    if (!o) return new Response("not found", { status: 404 });
+    return new Response(o.body, { headers: { "content-type": f.ct, "cache-control": "private, max-age=31536000", "accept-ranges": "none" } });
   }
   return new Response("not found", { status: 404 });
 }
@@ -357,8 +373,12 @@ function playBook(list){var b=$('abPlay'),st=$('abSt');
   if(BOOK){BOOK.pause();BOOK=null;b.textContent='▶ 오디오북 듣기';b.classList.remove('on');st.textContent=list.length+'조각 · 내 목소리';return;}
   if(AU)AU.pause();var i=0;b.textContent='■ 멈추기';b.classList.add('on');
   (function next(){if(i>=list.length){BOOK=null;b.textContent='▶ 오디오북 듣기';b.classList.remove('on');st.textContent='끝';return;}
-    st.textContent=(i+1)+'/'+list.length+' 재생 중';BOOK=new Audio(list[i]);BOOK.onended=function(){i++;next();};BOOK.onerror=function(){st.textContent=(i+1)+'번 조각을 못 받았어요'+(navigator.onLine?'':' (오프라인)');i++;next();};
-    var p=BOOK.play();if(p&&p.catch)p.catch(function(){st.textContent='재생 실패';});})();
+    // '재생 중'은 소리가 실제로 나기 시작했을 때만 — 그 전엔 받는 중(처음 들을 땐 서버가 합성하느라 10~30초 걸릴 수 있음)
+    var me=new Audio(list[i]),t0=Date.now(),tm=null;BOOK=me;st.textContent=(i+1)+'/'+list.length+' 음성 받는 중…';
+    tm=setInterval(function(){if(BOOK!==me)return clearInterval(tm);var sec=Math.round((Date.now()-t0)/1000);if(me.paused||me.currentTime===0)st.textContent=(i+1)+'/'+list.length+' 음성 받는 중… '+sec+'초'+(sec>=8?' (처음엔 서버가 합성 중)':'');if(sec>=60){clearInterval(tm);st.textContent=(i+1)+'번 조각이 60초 넘게 안 와요 — 잠시 뒤 다시 눌러 주세요';me.pause();BOOK=null;b.textContent='▶ 오디오북 듣기';b.classList.remove('on');}},1000);
+    me.onplaying=function(){clearInterval(tm);st.textContent=(i+1)+'/'+list.length+' 재생 중';};
+    me.onended=function(){clearInterval(tm);i++;next();};me.onerror=function(){clearInterval(tm);st.textContent=(i+1)+'번 조각을 못 받았어요'+(navigator.onLine?' (서버 합성 실패 — 다시 눌러 보세요)':' (오프라인)');i++;next();};
+    var p=me.play();if(p&&p.catch)p.catch(function(){clearInterval(tm);st.textContent='재생 실패 — 다시 눌러 주세요';});})();
 }
 
 // ---------- 📻 라디오 드라마 ----------
@@ -397,7 +417,8 @@ function rdPlay(r){var box=$('rdBox'),b=$('rdBtn');if(RDON){RDON=false;if(RDP)RD
   (function next(){if(!RDON)return;if(RDI>=r.lines.length){RDON=false;b.textContent='📻 라디오 드라마 듣기';box.innerHTML='<p class="muted">끝 — '+esc(r.title)+'</p>';return;}
     var l=r.lines[RDI];box.innerHTML='<div class="muted" style="margin-bottom:4px">'+(RDI+1)+'/'+r.lines.length+' · '+esc(r.title)+'</div><div style="font-size:17px"><b>'+esc(W[l.who]||'')+'</b> '+esc(l.t)+'</div>';
     var wait=sfx(l.sfx)*1000;
-    setTimeout(function(){if(!RDON)return;RDP=new Audio(r.urls[RDI]);RDP.onended=function(){RDI++;setTimeout(next,l.who==='nar'?250:120);};RDP.onerror=function(){RDI++;next();};var p=RDP.play();if(p&&p.catch)p.catch(function(){RDI++;next();});},wait);})();
+    setTimeout(function(){if(!RDON)return;RDP=new Audio(r.urls[RDI]);var t0=Date.now(),gd=setInterval(function(){if(!RDON||RDP.currentTime>0)return clearInterval(gd);var sec=Math.round((Date.now()-t0)/1000);if(sec>=4)box.firstChild.textContent=(RDI+1)+'/'+r.lines.length+' · 음성 받는 중 '+sec+'초';if(sec>=40){clearInterval(gd);RDP.pause();RDI++;next();}},1000);
+      RDP.onended=function(){clearInterval(gd);RDI++;setTimeout(next,l.who==='nar'?250:120);};RDP.onerror=function(){clearInterval(gd);RDI++;next();};var p=RDP.play();if(p&&p.catch)p.catch(function(){clearInterval(gd);RDI++;next();});},wait);})();
 }
 window.addEventListener('online',stat);window.addEventListener('offline',stat);
 load(false);
