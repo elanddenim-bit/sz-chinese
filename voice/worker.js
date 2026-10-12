@@ -65,6 +65,19 @@ const cors = (req) => {
     vary: "origin",
   };
 };
+// 오래 걸리는 생성(미스터리 기내편 등)은 스트리밍으로 몇 초마다 공백을 흘려 보내 폰(iOS 60초 무응답 끊김)·중간 프록시가 연결을 끊지 않게 하고 마지막에 JSON
+const jsonStream = (req, work) => {
+  const { readable, writable } = new TransformStream();
+  const w = writable.getWriter(), enc = new TextEncoder();
+  const tick = setInterval(() => { w.write(enc.encode(" ")).catch(() => {}); }, 4000);
+  (async () => {
+    let out;
+    try { out = await work(); } catch (e) { out = { error: e.code || "server", detail: String(e.message || e).slice(0, 300) }; }
+    clearInterval(tick);
+    try { await w.write(enc.encode(JSON.stringify(out))); await w.close(); } catch {}
+  })();
+  return new Response(readable, { headers: { ...cors(req), "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-accel-buffering": "no" } });
+};
 const json = (req, o, status = 200) =>
   new Response(JSON.stringify(o), { status, headers: { ...cors(req), "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 
@@ -147,7 +160,9 @@ export default {
       if (url.pathname.startsWith("/signs/")) return json(req, await signsApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/novel/")) return json(req, await novelApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/brief/")) return json(req, await briefApi(env, ctx, url.pathname, b, h));
+      if (url.pathname === "/mag/today" || url.pathname === "/mag/radio/make") return jsonStream(req, () => magApi(env, ctx, url.pathname, b, h, synth));
       if (url.pathname.startsWith("/mag/")) return json(req, await magApi(env, ctx, url.pathname, b, h, synth));
+      if (url.pathname === "/air/new" || url.pathname === "/air/fill") return jsonStream(req, () => airApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/air/")) return json(req, await airApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/trend/")) return json(req, await trendApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/shorts/")) {
