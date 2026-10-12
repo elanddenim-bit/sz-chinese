@@ -62,7 +62,9 @@ function cleanTrips(a) {
 // Bark: https://api.day.app/<key>[/...] 형태의 주소(자체 서버도 됨) → {origin, key}
 function barkOf(s) {
   try {
-    const u = new URL(String(s || "").trim());
+    const m = String(s || "").match(/https:\/\/[^\s'"]+/); // curl 명령 통째로 붙여 넣어도 주소만 뽑음
+    if (!m) return null;
+    const u = new URL(m[0]);
     const key = u.pathname.split("/").filter(Boolean)[0];
     if (u.protocol !== "https:" || !key) return null;
     return { origin: u.origin, key };
@@ -177,7 +179,8 @@ export async function briefApi(env, ctx, path, b, h) {
     if (b.trips) doc.trips = cleanTrips(b.trips);
     if (typeof b.bark === "string") {
       if (b.bark && !barkOf(b.bark)) throw berr("Bark 주소 형식이 아니에요. 앱에서 복사한 https://api.day.app/… 주소를 그대로 붙여 넣어 주세요.");
-      doc.bark = b.bark.trim();
+      const k = barkOf(b.bark);
+      doc.bark = k ? k.origin + "/" + k.key : "";
     }
     if (b.hour) doc.hour = Math.min(21, Math.max(18, Number(b.hour) || 21));
     await store(env, h, doc);
