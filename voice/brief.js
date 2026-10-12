@@ -160,7 +160,7 @@ async function build(env, doc, d) {
   return { d, at: Date.now(), title, body, route, wline, ws, wear: ai.wear || "", pack, meet, tip: ai.tip || "", zh: ai.zh && ai.zh.z ? ai.zh : null, legs, err: ai.err || "" };
 }
 
-async function sendFor(env, h, doc, d, dry) {
+async function sendFor(env, h, doc, d, dry, auto) {
   const out = await build(env, doc, d);
   if (!out) throw berr(d + " 에 등록된 일정이 없어요.");
   await env.KV.put("brief:out:" + h + ":" + d, JSON.stringify(out), { expirationTtl: 14 * 86400 });
@@ -169,7 +169,8 @@ async function sendFor(env, h, doc, d, dry) {
     await barkPush(doc.bark, out.title, out.body, link);
     doc.sent = doc.sent || {};
     doc.sent[d] = Date.now();
-    doc.log = [{ d, at: Date.now(), ok: true }, ...(doc.log || [])].slice(0, 20);
+    if (auto) { doc.auto = doc.auto || {}; doc.auto[d] = Date.now(); }
+    doc.log = [{ d, at: Date.now(), ok: true, how: auto ? "자동" : "직접" }, ...(doc.log || [])].slice(0, 20);
     await store(env, h, doc);
   }
   return { ok: true, sent: !dry, link, brief: out };
@@ -289,8 +290,9 @@ export async function briefCron(env) {
   if (!doc || !barkOf(doc.bark)) return;
   if (cnNow().getUTCHours() !== (doc.hour || 21)) return;
   const d = cnDay(Date.now() + 86400e3);
-  if ((doc.sent || {})[d] || !doc.trips.some((x) => x.d === d)) return;
-  try { await sendFor(env, h, doc, d, false); await logUse(env, "brief", { auto: 1 }, 0, h).catch(() => {}); }
+  // 직접 보내기(시험)와 상관없이 정한 시각엔 최신 일정으로 한 번 보냄
+  if ((doc.auto || {})[d] || !doc.trips.some((x) => x.d === d)) return;
+  try { await sendFor(env, h, doc, d, false, true); await logUse(env, "brief", { auto: 1 }, 0, h).catch(() => {}); }
   catch (e) {
     doc.log = [{ d, at: Date.now(), ok: false, err: String(e.message || e).slice(0, 120) }, ...(doc.log || [])].slice(0, 20);
     await store(env, h, doc);
@@ -352,6 +354,9 @@ h2{font-size:13px;color:var(--ink2);margin:0 0 8px;font-weight:600}
 input,select,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:8px;width:100%}
 textarea{min-height:56px;resize:vertical}
 .row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}.row3{grid-template-columns:1.2fr 1fr 1fr}
+.row>*{min-width:0}input[type=date],input[type=time]{-webkit-appearance:none;appearance:none;min-width:0;display:block;min-height:40px;text-align:left}
+.lbl{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:8px;font-size:11.5px;color:var(--ink2);margin:0 0 2px 2px}
+.warn{color:var(--red);font-size:13px;margin:-4px 0 8px}
 button{font:inherit;border:0;border-radius:10px;padding:10px 14px;background:var(--sky);color:#fff;font-weight:600}
 button.ghost{background:transparent;color:var(--sky);border:1px solid var(--sky)}button.del{background:transparent;color:var(--red);padding:6px 8px}
 .btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
@@ -378,14 +383,18 @@ function wd(d){return WD[new Date(d+'T00:00:00Z').getUTCDay()];}
 function ask(){ $('m').innerHTML='<div class="card"><h2>초대 코드</h2><input id="cd" placeholder="박비서와 같은 코드"><div class="btns"><button id="go">확인</button></div></div>';
   $('go').onclick=function(){CODE=$('cd').value.trim();try{localStorage.setItem('pb-code',CODE);}catch(e){}load();};}
 function load(){ if(!CODE)return ask(); api('/brief/state').then(function(r){ if(r.error){ if(r.error==='not_allowed')return ask(); $('m').innerHTML='<div class="card">'+esc(r.detail||r.error)+'</div>';return;} S=r; draw(); }); }
+// 광저우 밖에서 비행기·고속철로 떠나는데 전날 숙소가 없으면 아침 알림이 대략 시간으로만 계산됨
+function noStay(x){if(!x.t||(x.how!=='plane'&&x.how!=='train')||/广州/.test(x.from))return '';
+  var p=S.trips.filter(function(y){return y.d<x.d&&y.to===x.from&&y.stay&&y.stay!=='미정';});
+  return p.length?'':'<p class="warn">⚠️ '+esc(x.from)+' 숙소가 비어 있어 이날 아침 출발 알림은 대략 시간(차 40분)으로 계산돼요. 전날 일정에 호텔 이름을 넣어 주세요.</p>';}
 function tripHtml(x,i){var past=x.d&&x.d<today();
   return '<div class="trip'+(past?' past':'')+'" data-i="'+i+'"><div class="th"><span>'+(x.d?esc(x.d.slice(5))+'('+wd(x.d)+')':'새 일정')+(S.sent[x.d]?' <span class="ok">✓ 보냄</span>':'')+'</span><button class="del" data-del="'+i+'">삭제</button></div>'+
-  '<div class="row row3"><input type="date" data-k="d" value="'+esc(x.d)+'"><select data-k="how">'+
+  '<div class="lbl"><span>날짜</span><span>수단</span><span>출발 시각</span></div><div class="row row3"><input type="date" data-k="d" value="'+esc(x.d)+'"><select data-k="how">'+
   [['plane','✈️ 비행기'],['train','🚄 고속철'],['car','🚗 차'],['stay','📍 현지 일정']].map(function(o){return '<option value="'+o[0]+'"'+(x.how===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join('')+
   '</select><input type="time" data-k="t" value="'+esc(x.t)+'" placeholder="출발"></div>'+
-  '<div class="row row3"><input data-k="from" value="'+esc(x.from)+'" placeholder="출발 도시(중문)"><input data-k="to" value="'+esc(x.to)+'" placeholder="도착 도시"><input data-k="no" value="'+esc(x.no)+'" placeholder="편명 CZ3xxx"></div>'+
-  '<div class="row row3"><input data-k="dep" value="'+esc(x.dep||'')+'" placeholder="출발 공항·역(T2)"><input type="time" data-k="arr" value="'+esc(x.arr||'')+'" placeholder="도착"><input data-k="seat" value="'+esc(x.seat||'')+'" placeholder="좌석"></div>'+
-  '<input data-k="stay" value="'+esc(x.stay)+'" placeholder="그 도시 숙소(선택) — 다음 날 아침 출발 계산에 씀" style="margin-bottom:8px">'+
+  '<div class="lbl"><span>출발 도시</span><span>도착 도시</span><span>편명·열차</span></div><div class="row row3"><input data-k="from" value="'+esc(x.from)+'" placeholder="출발 도시(중문)"><input data-k="to" value="'+esc(x.to)+'" placeholder="도착 도시"><input data-k="no" value="'+esc(x.no)+'" placeholder="편명 CZ3xxx"></div>'+
+  '<div class="lbl"><span>출발 공항·역</span><span>도착 시각</span><span>좌석</span></div><div class="row row3"><input data-k="dep" value="'+esc(x.dep||'')+'" placeholder="출발 공항·역(T2)"><input type="time" data-k="arr" value="'+esc(x.arr||'')+'" placeholder="도착"><input data-k="seat" value="'+esc(x.seat||'')+'" placeholder="좌석"></div>'+
+  noStay(x)+'<div class="lbl" style="grid-template-columns:1fr"><span>'+esc(x.to||'도착 도시')+' 숙소</span></div><input data-k="stay" value="'+esc(x.stay)+'" placeholder="호텔 이름 — 다음 날 아침 출발 계산에 씀" style="margin-bottom:8px">'+
   '<textarea data-k="meet" placeholder="미팅·공장 메모(선택) — 예: 오후 2시 OO공장 샘플 확인, 단가 재협상">'+esc(x.meet)+'</textarea></div>';}
 function draw(){
   var tom=today(1), has=S.trips.some(function(x){return x.d===tom;});
@@ -401,7 +410,7 @@ function draw(){
   h+='<div class="card"><h2>출장 일정</h2>'+S.trips.map(tripHtml).join('')+'<div class="btns"><button class="ghost" id="add">+ 일정 추가</button><button id="st">일정 저장</button></div></div>';
   h+='<div class="card"><h2>미리 보기 · 바로 보내기</h2><div class="row"><input type="date" id="pd" value="'+tom+'"><span class="muted" style="align-self:center">'+(has?'내일 일정 있음 — 오늘 '+S.hour+'시 자동 발송':'내일 일정 없음')+'</span></div>'+
     '<div class="btns"><button class="ghost" id="pv">미리 보기</button><button id="sn">지금 보내기</button></div><div id="out"></div></div>';
-  if(S.log&&S.log.length)h+='<div class="card"><h2>보낸 기록</h2>'+S.log.map(function(l){return '<div class="muted">'+esc(l.d)+' · '+new Date(l.at).toLocaleString('ko-KR',{timeZone:'Asia/Shanghai',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})+' · '+(l.ok?'✓':'✕ '+esc(l.err||''))+'</div>';}).join('')+'</div>';
+  if(S.log&&S.log.length)h+='<div class="card"><h2>보낸 기록</h2>'+S.log.map(function(l){return '<div class="muted">'+esc(l.d)+' · '+new Date(l.at).toLocaleString('ko-KR',{timeZone:'Asia/Shanghai',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})+' · '+(l.ok?'✓ '+(l.m?'아침 출발':(l.how||'')):'✕ '+esc(l.err||''))+'</div>';}).join('')+'</div>';
   $('m').innerHTML=h;
   $('sb').onclick=function(){var b={hour:$('hour').value};var v=$('bark').value.trim();if(v)b.bark=v;api('/brief/save',b).then(function(r){if(r.error)return toast(r.detail||r.error);S=r;draw();toast('저장했어요');});};
   if($('ping'))$('ping').onclick=function(){api('/brief/ping').then(function(r){toast(r.error?(r.detail||r.error):'보냈어요. 폰을 확인해 보세요');});};
@@ -425,7 +434,7 @@ function parse(){var f=$('pf').files[0],t=$('pt').value.trim();if(!f&&!t)return 
     S.trips=collect();var add=0,upd=0,stay=null;
     r.trips.forEach(function(p){if(p.stayOnly){stay=p;return;}
       var x=S.trips.filter(function(y){return y.d===p.d&&(same(y.to,p.to)||same(y.from,p.from));})[0];
-      if(x){['how','t','arr','no','from','to','dep','seat'].forEach(function(k){if(p[k])x[k]=p[k];});upd++;}else{p.id='';p.stay=p.stay||'';p.meet='';S.trips.push(p);add++;}});
+      if(x){['how','t','arr','no','from','to','dep','seat'].forEach(function(k){if(p[k])x[k]=p[k];});if(x.meet==='돌아오는 편 확인')x.meet='';upd++;}else{p.id='';p.stay=p.stay||'';p.meet='';S.trips.push(p);add++;}});
     if(stay){var s2=S.trips.filter(function(y){return same(y.to,stay.city);});if(s2.length){s2[s2.length-1].stay=stay.name;upd++;}}
     S.trips.sort(function(a,b){return (a.d+a.t).localeCompare(b.d+b.t);});
     api('/brief/save',{trips:S.trips}).then(function(s){if(s.error)return toast(s.detail||s.error);S=s;draw();
