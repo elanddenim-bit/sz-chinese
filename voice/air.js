@@ -77,7 +77,9 @@ const imgUrl = async (env, k) => "/air/img?k=" + encodeURIComponent(k) + "&s=" +
 async function viewCase(env, c) {
   const imgs = {};
   for (const im of c.imgs) if (im.key) imgs[im.k] = await imgUrl(env, im.key);
-  return { id: c.id, made: c.made, genre: c.genre, title: c.title, intro: c.intro, suspects: c.suspects, places: c.places, imgs, pending: c.imgs.filter((x) => x.task).length, failed: c.imgs.filter((x) => !x.task && !x.key).length, truth: c.truth };
+  const base = { id: c.id, kind: c.kind || "case", made: c.made, genre: c.genre, title: c.title, intro: c.intro, imgs, pending: c.imgs.filter((x) => x.task).length, failed: c.imgs.filter((x) => !x.task && !x.key).length, nimg: c.imgs.length };
+  if (c.kind === "book") return { ...base, start: c.start, nodes: c.nodes, ends: c.ends };
+  return { ...base, suspects: c.suspects, places: c.places, truth: c.truth };
 }
 async function view(env, d) {
   const cases = [];
@@ -87,7 +89,7 @@ async function view(env, d) {
 
 export async function airApi(env, ctx, path, b, h) {
   if (path === "/air/state") return view(env, await load(env, h));
-  if (path === "/air/new") return newCase(env, ctx, b, h);
+  if (path === "/air/new") return b.kind === "book" ? newBook(env, ctx, b, h) : newCase(env, ctx, b, h);
   if (path === "/air/poll") return poll(env, b, h);
   if (path === "/air/done") return done(env, ctx, b, h);
   if (path === "/air/drop") { const d = await load(env, h); await removeCase(env, h, d, String(b.id || "")); await save(env, h, d); return view(env, d); }
@@ -150,6 +152,65 @@ async function newCase(env, ctx, b, h) {
   return { ...(await view(env, d)), made: id };
 }
 
+// ---------- 📚 만화 게임북: 선택지로 갈라지는 추리 — 잘못 고르면 추리가 막히거나 엉뚱한 사람을 잡는 실패 결말 ----------
+async function newBook(env, ctx, b, h) {
+  const d = await load(env, h);
+  if (Object.keys(d.cases).length >= 4) throw aerr("담아 둔 사건이 4개예요. 하나 풀거나 지우고 다시 만들어요.");
+  const day = cnDay(), max = Number(env.AIR_DAY_MAX) || 3;
+  if ((d.gen[day] || 0) >= max) throw aerr("오늘은 사건을 " + max + "건 만들었어요. 내일 다시!", 429);
+  const genre = GENRES[b.genre] ? b.genre : "classic";
+  let places = [];
+  try {
+    if (env.DIDI && env.DIDI_ACCESS_KEY) {
+      const gps = /^-?\d+\.\d+,-?\d+\.\d+$/.test(String(b.gps || "")) ? String(b.gps) : "113.2644,23.1291";
+      const r = await env.DIDI.fetch("https://didi/api/poi", { method: "POST", headers: { "x-access-key": env.DIDI_ACCESS_KEY, "content-type": "application/json" }, body: JSON.stringify({ gps, radius: 15000, kw: KW }) }).then((x) => x.json());
+      const used = new Set(d.hist.flatMap((x) => x.pids || []).concat(Object.values(d.cases).flatMap((c) => c.pids || [])));
+      const byKw = {}; for (const p of (r.pois || []).filter((p) => !used.has(p.id)).sort((a, c) => (c.rating || 3) - (a.rating || 3))) (byKw[p.kw] = byKw[p.kw] || []).push(p);
+      places = Object.values(byKw).flatMap((l) => l.slice(0, 1)).slice(0, 8);
+    }
+  } catch {}
+  const sys = "你是'漫画推理游戏书'(gamebook)的编剧。玩家是住在广州的韩国中年男性，在飞机上离线翻页玩：每页一幅漫画分镜+几句叙述+2~3个选择，选择决定剧情走向。题材：" + GENRES[genre].d + "。\n" +
+    "结构要求：1) 共 22~28 页(节点)，起点 id 为 n1。2) 剧情是真正分支的：至少 3 条不同的调查路线，路线之间可以汇合。3) 至少 5 个结局：1 个'真相'结局(good，推理完全正确)、1~2 个'半对'结局(half，抓到人但动机/手法弄错或证据不足)、2~3 个'失败'结局(bad：被误导抓错人、证据被销毁、嫌疑人跑了、自己被套路 等)，失败结局要写得有趣、有点反转，让玩家想重来。" +
+    "4) 关键在于选择有后果：早期一个看似合理的选择可能让后面少看到一条线索而走向失败；有的选择是陷阱(太冲动、太信某个人)。不要有'明显正确'的选择，每个选项都要像有道理。" +
+    "5) 页面叙述 3~5 句，第二人称'당신'，像漫画旁白+对话(对话用 「」)，有画面感；每页 img 是给绘图模型的中文分镜描述(40字内：场景、人物动作、情绪、镜头)，主角是一位戴眼镜的韩国中年男性(统一描述为 '戴黑框眼镜、穿深蓝夹克的中年男人')。" +
+    "6) 真实地点(候选)只当背景舞台，人物、事件全部虚构，不能有凶杀、血腥、暴力、色情、政治。全部用韩语写。" +
+    "7) 结局页 end 字段: good|half|bad，结局页没有 choices；结局页要有 verdict(1句：这条路为什么对/错)。所有 choices.to 必须是存在的 id，不能有循环，不能有到不了的页。\n" +
+    '只输出 JSON：{"title":"","nodes":[{"id":"n1","text":"","img":"","choices":[{"t":"选项文字(韩语)","to":"n2"}]},{"id":"n9","text":"","img":"","end":"bad","verdict":""}]}';
+  const out = await qwen(env, [env.AIR_MODEL, env.MYST_MODEL, "qwen-plus", env.QUEST_MODEL || "qwen3.8-flash"], [{ role: "system", content: sys }, { role: "user", content: "候选地点(可用作舞台)：" + JSON.stringify(places.map((p) => ({ name: p.name, type: p.type, area: p.area }))) }], 0.95);
+  const S = (x, n) => String(x == null ? "" : x).slice(0, n);
+  const raw = (Array.isArray(out.nodes) ? out.nodes : []).slice(0, 36);
+  const ids = new Set(raw.map((x) => String(x.id)));
+  if (!ids.has("n1")) throw aerr("게임북 구조가 이상하게 나왔어요(시작 페이지 없음). 다시 눌러 주세요.", 502);
+  const nodes = {};
+  for (const x of raw) {
+    const id = String(x.id);
+    const n = { id, text: S(x.text, 700), img: S(x.img, 100) };
+    if (x.end && /^(good|half|bad)$/.test(String(x.end))) { n.end = String(x.end); n.verdict = S(x.verdict, 200); }
+    else {
+      n.choices = (Array.isArray(x.choices) ? x.choices : []).filter((c) => ids.has(String(c.to)) && String(c.to) !== id).slice(0, 3).map((c) => ({ t: S(c.t, 80), to: String(c.to) }));
+      if (!n.choices.length) { n.end = "bad"; n.verdict = "여기서 이야기가 끊겼어요. 다른 길을 찾아보세요."; }
+    }
+    nodes[id] = n;
+  }
+  // 닿을 수 있는 페이지만 남김(순환은 방문 집합으로 끊음)
+  const reach = new Set(); const stack = ["n1"];
+  while (stack.length) { const id = stack.pop(); if (reach.has(id) || !nodes[id]) continue; reach.add(id); for (const c of nodes[id].choices || []) stack.push(c.to); }
+  for (const id of Object.keys(nodes)) if (!reach.has(id)) delete nodes[id];
+  const ends = Object.values(nodes).filter((n) => n.end);
+  if (Object.keys(nodes).length < 10 || !ends.some((n) => n.end === "good") || !ends.some((n) => n.end === "bad")) throw aerr("게임북이 너무 짧거나 결말이 부족하게 나왔어요. 다시 눌러 주세요.", 502);
+  const id = "a" + Date.now().toString(36);
+  // 그림: 시작·결말 페이지는 꼭, 나머지는 선택지가 있는 페이지 순으로 합쳐 최대 AIR_BOOK_IMG(기본 12)장
+  const limit = Number(env.AIR_BOOK_IMG) || 12;
+  const order = ["n1", ...ends.map((n) => n.id), ...Object.keys(nodes).filter((k) => k !== "n1" && !nodes[k].end)];
+  const imgs = [];
+  for (const k of [...new Set(order)].slice(0, limit)) imgs.push({ k, task: await t2i(env, "漫画分镜，" + nodes[k].img + "，日式推理漫画风格，清晰线稿加淡彩，电影感构图，画面里没有文字", "1024*768"), key: "" });
+  d.cases[id] = { id, kind: "book", made: Date.now(), genre, title: S(out.title || "광저우 게임북", 50), intro: "", start: "n1", nodes, ends: ends.map((n) => ({ id: n.id, end: n.end })), imgs, pids: places.map((p) => p.id) };
+  d.gen = { [day]: (d.gen[day] || 0) + 1 };
+  await save(env, h, d);
+  ctx.waitUntil(logUse(env, "air", { book: 1 }, 0, h).catch(() => {}));
+  return { ...(await view(env, d)), made: id };
+}
+
 async function poll(env, b, h) {
   const d = await load(env, h), c = d.cases[String(b.id || "")];
   if (!c) throw aerr("사건을 찾지 못했어요.", 404);
@@ -182,9 +243,9 @@ async function done(env, ctx, b, h) {
   const d = await load(env, h), id = String(b.id || ""), c = d.cases[id];
   const ok = !!b.ok, score = ok ? Math.max(0, Math.min(100, Number(b.score) || 0)) : 0;
   if (c && !d.hist.some((x) => x.id === id)) {
-    d.hist.unshift({ id, title: c.title, genre: c.genre, date: cnDay(), ok, score, who: String(b.who || "").slice(0, 20), pids: c.pids });
+    d.hist.unshift({ id, title: c.title, kind: c.kind || "case", genre: c.genre, date: cnDay(), ok, score, who: String(b.who || "").slice(0, 20), pids: c.pids });
     d.hist = d.hist.slice(0, 60); d.total += score;
-    await removeCase(env, h, d, id);
+    if (!b.keep) await removeCase(env, h, d, id); // 게임북은 다른 결말도 보게 남겨 둠(지우기는 직접)
     await save(env, h, d);
     ctx.waitUntil(logUse(env, "air", { [ok ? "solve" : "wrong"]: 1 }, 0, h).catch(() => {}));
   }
@@ -197,7 +258,7 @@ export async function airGet(req, env, url, synth) {
   if (url.pathname === "/air/sw.js") return new Response(AIR_SW, { headers: { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-cache" } });
   if (url.pathname === "/air/img") {
     const k = url.searchParams.get("k") || "";
-    if (!/^air\/[0-9a-f]{12}\/a[0-9a-z]+\/[sp]\d\.png$/.test(k) || url.searchParams.get("s") !== (await hmac16(env, k))) return new Response("forbidden", { status: 403 });
+    if (!/^air\/[0-9a-f]{12}\/a[0-9a-z]+\/[a-z]\d{1,2}\.png$/.test(k) || url.searchParams.get("s") !== (await hmac16(env, k))) return new Response("forbidden", { status: 403 });
     const o = await env.R2.get(k);
     if (!o) return new Response("not found", { status: 404 });
     return new Response(o.body, { headers: { "content-type": "image/png", "cache-control": "private, max-age=31536000" } });
@@ -284,24 +345,25 @@ function load(){
     S=j;ls('air-cases',S);syncPending();home();pollAll();});
 }
 function imgOf(c,k){return c.imgs&&c.imgs[k]?'<img src="'+esc(c.imgs[k])+'" alt="">':'<div class="ph"></div>';}
-function ready(c){var n=Object.keys(c.imgs||{}).length;return n+'/'+(c.suspects.length+c.places.length);}
+function ready(c){var n=Object.keys(c.imgs||{}).length;return n+'/'+(c.nimg||(c.kind==='book'?0:(c.suspects.length+c.places.length)));}
 function home(){
   CUR=null;$('ttl').textContent='🕵️ 미스터리 기내편';$('back').setAttribute('href','/hub');$('back').onclick=null;$('pts').textContent='누적 '+(S.total||0)+'점';
   var h='<div class="st"><span class="dot'+(navigator.onLine?'':' off')+'"></span>'+(navigator.onLine?'온라인':'오프라인 · 저장본')+' · 사건은 폰에 저장돼 비행기 모드에서도 돼요</div>';
   if(!S.cases.length)h+='<div class="card muted">담아 둔 사건이 없어요. 아래에서 만들어 두세요(사건 하나에 1분쯤, 그림 8장은 2~3분 더).</div>';
-  S.cases.forEach(function(c){var p=ls('air-play:'+c.id)||{};var im=c.imgs&&c.imgs.s0;
-    h+='<div class="card"><div class="cs">'+(im?'<img src="'+esc(im)+'" alt="">':'<div class="ph"></div>')+'<div style="flex:1"><b>'+esc(c.title)+'</b><div class="muted">'+esc(S.genres[c.genre]||'')+' · 그림 '+ready(c)+(c.pending?' <span class="spin">⏳</span>':'')+(p.done?' · '+(p.ok?'✅ 해결 '+p.score+'점':'❌ 오답'):p.started?' · 진행 중':'')+'</div>'
+  S.cases.forEach(function(c){var p=ls('air-play:'+c.id)||{};var im=c.imgs&&(c.kind==='book'?c.imgs.n1:c.imgs.s0);
+    h+='<div class="card"><div class="cs">'+(im?'<img src="'+esc(im)+'" alt="">':'<div class="ph"></div>')+'<div style="flex:1"><b>'+(c.kind==='book'?'📚 ':'🕵️ ')+esc(c.title)+'</b><div class="muted">'+esc(S.genres[c.genre]||'')+(c.kind==='book'?' · 게임북 '+Object.keys(c.nodes).length+'쪽 · 결말 '+((p.seen||[]).length)+'/'+c.ends.length:'')+' · 그림 '+ready(c)+(c.pending?' <span class="spin">⏳</span>':'')+(c.kind==='book'?(p.good?' · ✅ 진상 도달':''):(p.done?' · '+(p.ok?'✅ 해결 '+p.score+'점':'❌ 오답'):p.started?' · 진행 중':''))+'</div>'
       +'<div class="chips" style="margin-top:8px"><button class="chip on" data-play="'+c.id+'">'+(p.started?'이어서':'시작')+'</button><button class="chip" data-drop="'+c.id+'">지우기</button></div></div></div></div>';});
-  h+='<div class="card"><h2>새 사건 만들기</h2><p class="muted">인터넷 될 때만. 광저우 실제 장소 4곳이 무대, 용의자 4명 심문(라운드마다 질문 하나만!), 그림 8장.</p><div class="chips" id="gn">'+Object.keys(S.genres).map(function(k){return '<button class="chip'+(k===(ls('air-genre')||'classic')?' on':'')+'" data-g="'+k+'">'+esc(S.genres[k])+'</button>';}).join('')+'</div><button class="big" id="mk"'+(navigator.onLine?'':' disabled')+'>🕵️ 사건 만들기</button></div>';
-  if(S.hist&&S.hist.length)h+='<div class="card"><h2>지난 사건</h2>'+S.hist.slice(0,10).map(function(x){return '<div class="muted">'+esc(x.date)+' · '+esc(x.title)+' · '+(x.ok?'✅ '+x.score+'점':'❌')+'</div>';}).join('')+'</div>';
+  var KD=ls('air-kind')||'case';h+='<div class="card"><h2>새 사건 만들기</h2><div class="chips" style="margin-bottom:8px"><button class="chip'+(KD==='case'?' on':'')+'" data-k="case">🕵️ 심문 추리</button><button class="chip'+(KD==='book'?' on':'')+'" data-k="book">📚 만화 게임북</button></div><p class="muted">'+(KD==='book'?'한 쪽마다 만화 컷+선택지. 선택에 따라 추리 방향이 갈리고, 잘못 고르면 엉뚱한 사람을 잡거나 단서를 놓치는 실패 결말(결말 5개 이상). 그림 12장.':'광저우 실제 장소 4곳이 무대, 용의자 4명 심문(라운드마다 질문 하나만!), 그림 8장.')+' 인터넷 될 때만.</p><div class="chips" id="gn">'+Object.keys(S.genres).map(function(k){return '<button class="chip'+(k===(ls('air-genre')||'classic')?' on':'')+'" data-g="'+k+'">'+esc(S.genres[k])+'</button>';}).join('')+'</div><button class="big" id="mk"'+(navigator.onLine?'':' disabled')+'>🕵️ 사건 만들기</button></div>';
+  if(S.hist&&S.hist.length)h+='<div class="card"><h2>지난 사건</h2>'+S.hist.slice(0,10).map(function(x){return '<div class="muted">'+esc(x.date)+' · '+esc(x.title)+' · '+(x.kind==='book'?'📚 결말 '+(x.who||'')+(x.ok?' ✅':''):(x.ok?'✅ '+x.score+'점':'❌'))+'</div>';}).join('')+'</div>';
   $('main').innerHTML=h;
   document.querySelectorAll('[data-play]').forEach(function(b){b.onclick=function(){play(b.getAttribute('data-play'));};});
   document.querySelectorAll('[data-drop]').forEach(function(b){b.onclick=function(){if(!b.getAttribute('data-sure')){b.setAttribute('data-sure','1');b.textContent='정말 지우기';return;}drop(b.getAttribute('data-drop'));};});
   document.querySelectorAll('[data-g]').forEach(function(b){b.onclick=function(){ls('air-genre',b.getAttribute('data-g'));home();};});
+  document.querySelectorAll('[data-k]').forEach(function(b){b.onclick=function(){ls('air-kind',b.getAttribute('data-k'));home();};});
   $('mk').onclick=make;
 }
 function make(){var b=$('mk');b.disabled=true;b.textContent='✍️ 사건 쓰는 중… (1분쯤)';
-  var go=function(gps){api('/air/new',{genre:ls('air-genre')||'classic',gps:gps||''}).then(function(j){if(!j.ok){toast(j.detail||j.error);home();return;}S=j;ls('air-cases',S);home();toast('사건이 왔어요. 그림은 뒤에서 2~3분 더 만들어요.');pollAll();});};
+  var go=function(gps){api('/air/new',{genre:ls('air-genre')||'classic',kind:ls('air-kind')||'case',gps:gps||''}).then(function(j){if(!j.ok){toast(j.detail||j.error);home();return;}S=j;ls('air-cases',S);home();toast('사건이 왔어요. 그림은 뒤에서 2~3분 더 만들어요.');pollAll();});};
   if(navigator.geolocation)navigator.geolocation.getCurrentPosition(function(p){go(p.coords.longitude.toFixed(6)+','+p.coords.latitude.toFixed(6));},function(){go('');},{timeout:4000});else go('');
 }
 function drop(id){api('/air/drop',{id:id}).then(function(j){if(j.ok){S=j;ls('air-cases',S);try{localStorage.removeItem('air-play:'+id);}catch(e){}home();}else toast(j.detail||j.error);});}
@@ -312,11 +374,11 @@ function pollAll(){clearTimeout(POLLT);if(!navigator.onLine||!S)return;var pend=
   Promise.all(jobs).then(function(){ls('air-cases',S);prefetch();if(!CUR)home();if(S.cases.some(function(c){return c.pending;}))POLLT=setTimeout(pollAll,12000);});
 }
 var PF={};
-function prefetch(){var us=[];S.cases.forEach(function(c){Object.keys(c.imgs||{}).forEach(function(k){us.push(c.imgs[k]);});c.suspects.forEach(function(s){s.rounds.forEach(function(r){r.forEach(function(o){if(o.say)us.push(o.say);});});});});
+function prefetch(){var us=[];S.cases.forEach(function(c){Object.keys(c.imgs||{}).forEach(function(k){us.push(c.imgs[k]);});(c.suspects||[]).forEach(function(s){s.rounds.forEach(function(r){r.forEach(function(o){if(o.say)us.push(o.say);});});});});
   (function next(i){if(i>=us.length)return;var u=us[i];if(PF[u])return next(i+1);fetch(u).then(function(r){PF[u]=r.ok;}).catch(function(){}).then(function(){next(i+1);});})(0);}
 function syncPending(){var q=ls('air-done')||[];if(!q.length)return;(function next(){var x=q.shift();if(!x){ls('air-done',[]);return;}api('/air/done',x).then(function(j){if(j.ok){S=j;ls('air-cases',S);}ls('air-done',q);next();});})();}
 // ---------- 플레이 ----------
-function play(id){CUR=S.cases.find(function(c){return c.id===id;});if(!CUR)return;P=ls('air-play:'+id)||{started:true,score:100,found:[],asked:{},searched:[],hints:0,done:false};P.started=true;ls('air-play:'+id,P);TAB=P.done?'accuse':'case';
+function play(id){CUR=S.cases.find(function(c){return c.id===id;});if(!CUR)return;if(CUR.kind==='book')return playBook();P=ls('air-play:'+id)||{started:true,score:100,found:[],asked:{},searched:[],hints:0,done:false};P.started=true;ls('air-play:'+id,P);TAB=P.done?'accuse':'case';
   $('ttl').textContent=CUR.title;$('back').setAttribute('href','#');$('back').onclick=function(e){e.preventDefault();home();};draw();}
 function savePlay(){ls('air-play:'+CUR.id,P);}
 function clue(text,from){if(!text)return;if(P.found.some(function(f){return f.t===text;}))return;P.found.push({t:text,from:from});savePlay();toast('📒 단서 추가: '+text.slice(0,30)+'…');}
@@ -350,6 +412,27 @@ function draw(){
   var rv=$('reveal');if(rv)rv.onclick=function(){P.reveal=true;savePlay();draw();};
   var hm=$('homeBtn');if(hm)hm.onclick=function(){if(navigator.onLine){load();}else home();};
 }
+// ---------- 📚 게임북 ----------
+var B=null;
+function playBook(){B=ls('air-play:'+CUR.id)||{started:true,at:'n1',path:['n1'],seen:[],tries:0,good:false};B.started=true;ls('air-play:'+CUR.id,B);
+  $('ttl').textContent='📚 '+CUR.title;$('back').setAttribute('href','#');$('back').onclick=function(e){e.preventDefault();home();};drawBook();}
+function saveBook(){ls('air-play:'+CUR.id,B);}
+function drawBook(){
+  var n=CUR.nodes[B.at]||CUR.nodes.n1;var pg=B.path.length;
+  $('pts').innerHTML='<span class="score">'+pg+'쪽 · 결말 '+B.seen.length+'/'+CUR.ends.length+'</span>';
+  var im=(CUR.imgs||{})[n.id];
+  var h='<div class="card" style="padding:0;overflow:hidden">'+(im?'<img class="scene" src="'+esc(im)+'" alt="" style="border-radius:0;margin:0;aspect-ratio:4/3">':'')+'<div style="padding:14px"><p class="story" style="margin:0">'+esc(n.text)+'</p></div></div>';
+  if(n.end){var E={good:['✅ 진상에 도달했다','end'],half:['🟡 반쯤 맞았다','end'],bad:['❌ 추리 실패','end']}[n.end];
+    h+='<div class="card end"><h2>'+E[0]+'</h2>'+(n.verdict?'<p>'+esc(n.verdict)+'</p>':'')+'<p class="muted">'+pg+'쪽 만에 결말 · 이 사건 결말 '+B.seen.length+'/'+CUR.ends.length+' 발견'+(B.tries?' · 다시 읽기 '+B.tries+'번':'')+'</p>'
+      +(B.path.length>1?'<button class="big ghost" id="undo">⟲ 직전 선택으로 돌아가기</button>':'')+'<button class="big ghost" id="restart">처음부터</button><button class="big" id="homeBtn">목록으로</button></div>';}
+  else h+='<div class="card"><div class="lbl">어떻게 할까?</div>'+n.choices.map(function(c,i){return '<button class="opt" data-go="'+esc(c.to)+'">'+(i+1)+'. '+esc(c.t)+'</button>';}).join('')+(B.path.length>1?'<p class="muted" style="margin:10px 0 0"><button class="chip" id="undo">⟲ 직전 선택 취소</button></p>':'')+'</div>';
+  $('main').innerHTML=h;window.scrollTo(0,0);
+  document.querySelectorAll('[data-go]').forEach(function(b){b.onclick=function(){var to=b.getAttribute('data-go');if(!CUR.nodes[to])return;B.at=to;B.path.push(to);var nn=CUR.nodes[to];if(nn.end){if(B.seen.indexOf(to)<0)B.seen.push(to);if(nn.end==='good'&&!B.good){B.good=true;var q=ls('air-done')||[];q.push({id:CUR.id,ok:true,who:'good',score:Math.max(40,100-B.tries*15),keep:true});ls('air-done',q);}}saveBook();drawBook();};});
+  var u=$('undo');if(u)u.onclick=function(){if(B.path.length<2)return;B.path.pop();B.at=B.path[B.path.length-1];B.tries++;saveBook();drawBook();};
+  var r=$('restart');if(r)r.onclick=function(){B.at='n1';B.path=['n1'];B.tries++;saveBook();drawBook();};
+  var hm=$('homeBtn');if(hm)hm.onclick=function(){if(navigator.onLine){syncPending();load();}else home();};
+}
+
 function say(u){if(!u)return;try{if(AU)AU.pause();AU=new Audio(u);var p=AU.play();if(p&&p.catch)p.catch(function(){});}catch(e){}}
 window.addEventListener('online',function(){if(!CUR)load();});
 load();
