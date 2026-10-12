@@ -106,10 +106,11 @@ async function readable(env, text) {
   } catch { return text; }
 }
 // 한국어로 복제한 내 목소리는 한국어 힌트·보통 속도로(공부용 중국어 목소리는 기존 그대로)
+// 숏츠 내레이션은 CosyVoice volume 100(기본 50 — 2026-10-12 '내레이션이 너무 작다')
 async function sayMine(env, synth, voice, text, kr) {
-  if (!kr) return await synth(env, voice, text);
-  try { return await synth(env, voice, text, null, { language_hints: ["ko"], rate: 1.0 }); }
-  catch (e) { return await synth(env, voice, text); }
+  if (!kr) { try { return await synth(env, voice, text, null, { volume: 100 }); } catch (e) { return await synth(env, voice, text); } }
+  try { return await synth(env, voice, text, null, { language_hints: ["ko"], rate: 1.0, volume: 100 }); }
+  catch (e) { return await synth(env, voice, text, null, { volume: 100 }).catch(() => synth(env, voice, text)); }
 }
 
 async function costDay(env) { return (await env.KV.get("shorts:cost:" + cnDay(), "json")) || { img: 0, vid: 0, tts: 0 }; }
@@ -508,7 +509,7 @@ async function update(env, b, h) {
     return o;
   });
   if (d.kind === "mine" && u.asr && typeof u.asr === "object" && Array.isArray(d.clips)) for (const k of Object.keys(u.asr)) { const c = d.clips[Number(k)]; if (c && Array.isArray(u.asr[k])) c.asr = cleanAsr(u.asr[k]); }
-  if (u.opts && typeof u.opts === "object") d.opts = { fit: u.opts.fit === "full" ? "full" : "crop", orig: [0, 0.3, 1].includes(Number(u.opts.orig)) ? Number(u.opts.orig) : 0.3, narr: u.opts.narr !== false, subs: u.opts.subs !== false, voice: ["Cherry", "Ethan", "mine", "rec"].includes(u.opts.voice) ? u.opts.voice : "Cherry", end: u.opts.end !== false, tag: typeof u.opts.tag === "string" ? u.opts.tag.slice(0, 20) : "📍 광저우 广州", bgv: [0, 0.07, 0.12, 0.22].includes(Number(u.opts.bgv)) ? Number(u.opts.bgv) : 0.12 };
+  if (u.opts && typeof u.opts === "object") d.opts = { fit: u.opts.fit === "full" ? "full" : "crop", orig: [0, 0.3, 1].includes(Number(u.opts.orig)) ? Number(u.opts.orig) : 0.3, narr: u.opts.narr !== false, subs: u.opts.subs !== false, voice: ["Cherry", "Ethan", "mine", "rec"].includes(u.opts.voice) ? u.opts.voice : "Cherry", end: u.opts.end !== false, tag: typeof u.opts.tag === "string" ? u.opts.tag.slice(0, 20) : "📍 광저우 广州", bgv: [0, 0.07, 0.12, 0.22].includes(Number(u.opts.bgv)) ? Number(u.opts.bgv) : 0.12, nv: [1, 1.5, 2].includes(Number(u.opts.nv)) ? Number(u.opts.nv) : 1.5 };
   if (b.yt) d.yt = b.yt;
   await env.KV.put(draftKey(h, id), JSON.stringify(d), { expirationTtl: 120 * 86400 });
   if (u.title || b.yt) {
@@ -1040,7 +1041,7 @@ async function cloudSubmit(env, b, h) {
   const VideoTracks = [{ VideoTrackClips: main }].concat(["base", "cap", "asr", "sub"].filter((l) => layers[l]).map((l) => ({ VideoTrackClips: layers[l].sort(byIn) })));
   const tracks = {};
   for (const au of (Array.isArray(tl.audio) ? tl.audio : []).slice(0, 60)) {
-    const fx = [{ Type: "Volume", Gain: Math.min(3, Math.max(0, Number(au.gain) || 1)) }];
+    const fx = [{ Type: "Volume", Gain: Math.min(5, Math.max(0, Number(au.gain) || 1)) }];
     if (au.fade) fx.push({ Type: "AFade", SubType: "Out", Duration: Math.min(5, Number(au.fade) || 1), Curve: "tri" });
     const c = { MediaURL: url(au.k), TimelineIn: n3(au.tin), TimelineOut: n3(au.tout), Effects: fx };
     if (au.loop) c.LoopMode = true; else { c.In = 0; c.Out = n3(au.tout - au.tin); }

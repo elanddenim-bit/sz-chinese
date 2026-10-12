@@ -156,6 +156,7 @@ function editor(){
    +'<p class="lbl">원본 소리 <span style="font-weight:400">(내레이션 나올 땐 자동으로 줄어요)</span></p>'+chipRow('orig',[[0,'끄기'],[0.3,'작게'],[1,'그대로']],o.orig)
    +'<p class="lbl">내레이션 목소리</p>'+chipRow('voice',[['Cherry','👩 AI 여성'],['Ethan','👨 AI 남성'],['mine','🗣 내 목소리(AI 복제)'],['rec','🎙 직접 녹음']],o.voice||'Cherry')
    +((o.voice==='rec')?'<p class="note">구간마다 🎙 녹음을 눌러 직접 말하세요. 녹음은 이 화면을 닫으면 사라져요.</p>':(o.voice==='mine')?'<p class="note">실전 중국어 발음 탭에서 등록한 목소리로 한국어를 읽어요. 등록 전이면 AI 여성 목소리로 나와요.</p>':'')
+   +'<p class="lbl">내레이션 크기</p>'+chipRow('nv',[[1,'보통'],[1.5,'크게'],[2,'아주 크게']],o.nv||1.5)
    +'<p class="lbl">내레이션 · 자막 · 끝 화면</p><div class="chips"><button class="chip'+(o.narr?' on':'')+'" data-o="narr">🔊 내레이션</button><button class="chip'+(o.subs?' on':'')+'" data-o="subs">💬 자막</button><button class="chip'+(o.end?' on':'')+'" data-o="end">🔔 끝에 구독 카드(2초)</button></div>'
    +'<p class="lbl">영상 속 말 자막 <span style="font-weight:400">(현지인 중국어·광둥어 → 한국어)</span></p><div class="chips"><button class="chip'+(o.osub?' on':'')+'" data-o="osub">🗣 영상 속 말 자막</button></div>'+(o.osub?osubHtml():'')
    +'<p class="lbl">배경음악</p><label class="pick" style="padding:12px"><input type="file" id="bgmIn" accept=".mp3,.m4a,.aac,.wav,audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,audio/aac"><b style="font-size:14.5px">🎵 '+(BGM?esc(BGM.name):'폰에 있는 음악 고르기')+'</b>'+(BGM?'눌러서 다른 곡으로':'유튜브 오디오 보관함처럼 저작권 걱정 없는 곡만')+'</label>'
@@ -202,7 +203,7 @@ function bind(){
     editor();saveSoon();};});
   $('addSeg').onclick=function(){readForm();if(D.scenes.length>=15)return;var c=CLIPS.length-1;D.scenes.push({clip:c,s:0,e:Math.min(3,CLIPS[c].dur),sp:1,cap:'',say:''});editor();saveSoon();};
   document.querySelectorAll('[data-o]').forEach(function(b){b.onclick=function(){var k=b.getAttribute('data-o'),v=b.getAttribute('data-v');
-    if(k==='fit'||k==='voice')D.opts[k]=v;else if(k==='orig'||k==='bgv')D.opts[k]=+v;else D.opts[k]=!D.opts[k];readForm();editor();saveSoon();};});
+    if(k==='fit'||k==='voice')D.opts[k]=v;else if(k==='orig'||k==='bgv'||k==='nv')D.opts[k]=+v;else D.opts[k]=!D.opts[k];readForm();editor();saveSoon();};});
   $('bgmIn').onchange=function(){var f=this.files&&this.files[0];this.value='';if(!f)return;readForm();BGM={file:f,name:f.name.replace(/\.[^.]+$/,'').slice(0,30),buf:null};if(!D.opts.bgv)D.opts.bgv=0.12;editor();saveSoon();};
   if($('asrBtn'))$('asrBtn').onclick=makeAsr;
   $('renderBtn').onclick=function(){render(false);};
@@ -273,7 +274,7 @@ async function ensureNarr(ac,prog){
     prog('🔊 내레이션 '+(i+1)+'/'+D.scenes.length);
     var sc=D.scenes[i],vo=D.opts.voice||'Cherry';
     if(vo==='rec'){if(!sc._rec)continue;try{out[i]=await decode(ac,await sc._rec.blob.arrayBuffer());}catch(e){toast('#'+(i+1)+' 녹음을 읽지 못했어요');}continue;}
-    var key='r2|'+vo+'|'+t,n=sc._narr; // r2: 읽기용 문장 다듬기(2026-10-12) 이후 내레이션 — 예전 것은 다시 만듦
+    var key='r3|'+vo+'|'+t,n=sc._narr; // r3: 소리 크게(volume 100) 다시 만든 내레이션 // r2: 읽기용 문장 다듬기(2026-10-12) 이후 내레이션 — 예전 것은 다시 만듦
     // 실패하면 한 번 더, 그래도 없으면 빠진 채로 만들지 않고 멈춤(예전엔 조용히 건너뛰어 내레이션이 날아갔음)
     if(!n||n.key!==key){var r=await api('/shorts/asset',{id:D.id,n:i,kind:'say',text:t,voice:vo});if(!r.ok){await new Promise(function(z){setTimeout(z,1500);});r=await api('/shorts/asset',{id:D.id,n:i,kind:'say',text:t,voice:vo});}
       if(!r.ok)throw new Error('#'+(i+1)+' 내레이션을 만들지 못했어요('+(r.detail||r.error)+'). 잠시 뒤 다시 눌러 주세요.');n=sc._narr={key:key,url:r.url,buf:null};}
@@ -406,7 +407,7 @@ async function render0(dry){
     // 원본 소리: 컷마다 60ms 페이드(툭 소리 방지), 내레이션 나올 땐 40%로 낮춤
     if(v._gain){var lv=D.opts.orig*(hasN||narrEnd>t0+0.2?0.4:1),gg=v._gain.gain;gg.cancelScheduledValues(t0);gg.setValueAtTime(0,t0);gg.linearRampToValueAtTime(lv,t0+0.06);gg.setValueAtTime(lv,t0+Math.max(0.06,aud-0.06));gg.linearRampToValueAtTime(0,t0+aud);}
     // 내레이션: 앞 내레이션이 아직 말하는 중이면 끝난 뒤에(겹치지 않게). 컷이 바뀌어도 말은 이어짐
-    if(hasN){var ns=Math.max(t0+0.1,narrEnd+0.08),bs=ac.createBufferSource();bs.buffer=narr[p.i];bs.connect(BUS.comp);bs.start(ns);SPK={ck:p.ck,nd:p.nd,t0:ns};narrEnd=ns+p.nd;}
+    if(hasN){var ns=Math.max(t0+0.1,narrEnd+0.08),bs=ac.createBufferSource();bs.buffer=narr[p.i];var ng=ac.createGain();ng.gain.value=D.opts.nv||1.5;bs.connect(ng);ng.connect(BUS.comp);bs.start(ns);SPK={ck:p.ck,nd:p.nd,t0:ns};narrEnd=ns+p.nd;}
     if(last&&narrEnd>t0+p.len-0.3){p.len=narrEnd-t0+0.4;stopAt=Math.min(c.dur-0.05,vs0+p.len*p.sp);}
     bgm(t0,p.len,hasN,last&&!END?1.2:0.04);
     var nv=EL[k+1],nk=k+1,lead=false;
@@ -520,7 +521,7 @@ async function cloudRender(){
       done+=u.size;if(u.clip){OSSUP[u.key]=Date.now();try{localStorage.setItem('ed-oss',JSON.stringify(OSSUP));}catch(e){}}}
     var tl={fit:o.fit,video:vid.map(function(v){return {k:clipKey[v.clip],in:v.in,out:v.out,speed:v.speed,tin:v.tin,tout:v.tout,gain:v.gain};}),
       images:ovs.map(function(x){return {k:x.key,layer:x.layer,tin:x.tin,tout:x.tout};}),
-      audio:aud.map(function(a){return {k:a.key,tin:a.tin,tout:a.tout,gain:2.2,track:'narr'};}).concat(bgmKey?[{k:bgmKey,tin:0,tout:T,gain:Math.min(0.6,o.bgv*2),loop:true,fade:1.2,track:'bgm'}]:[])};
+      audio:aud.map(function(a){return {k:a.key,tin:a.tin,tout:a.tout,gain:2.2*(o.nv||1.5),track:'narr'};}).concat(bgmKey?[{k:bgmKey,tin:0,tout:T,gain:Math.min(0.6,o.bgv*2),loop:true,fade:1.2,track:'bgm'}]:[])};
     prog('☁️ 알리바바에 편집 맡기는 중…');
     var s=await api('/shorts/cloud/submit',{id:D.id,tl:tl});if(!s.ok)throw new Error(s.detail||s.error);
     var t1=Date.now(),res=null;
