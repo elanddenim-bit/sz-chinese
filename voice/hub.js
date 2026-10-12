@@ -23,6 +23,7 @@ main{max-width:640px;margin:0 auto;padding:14px 16px 48px}h2{font-size:13px;colo
 <main>
 <h2>업무</h2><div class="g">
 <a href="/brief"><i>🧳</i><b>출장 브리핑</b><small>전날 밤 날씨·출발·챙길 것 알림</small></a>
+<a href="/mag/"><i>📰</i><b>기내 잡지</b><small>탑승 전 한 번 열면 오프라인으로</small></a>
 </div>
 <h2>읽기</h2><div class="g">
 <a href="/trend"><i>🔥</i><b>오늘의 중국 인터넷</b><small>지금 뜨는 이슈·유행어</small></a>

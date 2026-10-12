@@ -33,6 +33,7 @@ import { EDIT_HTML } from "./edit.js";
 import { TOON_HTML } from "./toon.js";
 import { CINE_HTML } from "./cine.js";
 import { briefApi, briefCron, briefMorning, briefGet, BRIEF_HTML } from "./brief.js";
+import { magApi, magCron, magGet } from "./mag.js";
 import ICON180 from "./icon-180.png";
 import ICON192 from "./icon-192.png";
 import ICON512 from "./icon-512.png";
@@ -91,6 +92,7 @@ export default {
       }
       if (um < 15 && (uh === 1 || uh === 5 || uh === 11)) ctx.waitUntil(timingCron(env, uh).catch((e) => console.log("timingCron", e && e.message))); // ⏰ 숏츠 타이밍(중국 9·13·19시)
       if (uh >= 21 || uh <= 14) ctx.waitUntil(briefMorning(env).catch((e) => console.log("briefMorning", e && e.message))); // 중국 5~22시 '지금 출발'
+      if (uh >= 21 || uh <= 14) ctx.waitUntil(magCron(env).catch((e) => console.log("magCron", e && e.message))); // 📰 출발 2시간 전 기내 잡지
     }
   },
   async fetch(req, env, ctx) {
@@ -124,6 +126,7 @@ export default {
       if (url.pathname.startsWith("/trend/") && req.method === "GET") return await trendGet(req, env, url, synth);
       if (url.pathname === "/brief" && req.method === "GET") return new Response(BRIEF_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname.startsWith("/brief/") && req.method === "GET") return await briefGet(req, env, url);
+      if ((url.pathname === "/mag" || url.pathname.startsWith("/mag/")) && req.method === "GET") return await magGet(req, env, url, synth);
       if (url.pathname === "/hub" && req.method === "GET") return new Response(HUB_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/timecam" && req.method === "GET") return new Response(TIMECAM_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname.startsWith("/timecam/") && req.method === "GET") return await timecamGet(req, env, url);
@@ -142,6 +145,7 @@ export default {
       if (url.pathname.startsWith("/signs/")) return json(req, await signsApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/novel/")) return json(req, await novelApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/brief/")) return json(req, await briefApi(env, ctx, url.pathname, b, h));
+      if (url.pathname.startsWith("/mag/")) return json(req, await magApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/trend/")) return json(req, await trendApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/shorts/")) {
         const out = await shortsApi(env, ctx, url.pathname, b, h, synth);

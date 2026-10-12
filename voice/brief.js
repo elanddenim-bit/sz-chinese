@@ -74,7 +74,7 @@ function barkOf(s) {
     return { origin: u.origin, key };
   } catch { return null; }
 }
-async function barkPush(bark, title, body, url) {
+export async function barkPush(bark, title, body, url) {
   const b = barkOf(bark);
   if (!b) throw berr("Bark 주소를 먼저 넣어 주세요.");
   const r = await fetch(b.origin + "/push", {
@@ -128,7 +128,7 @@ async function qwen(env, sys, user, model) {
   return call(true);
 }
 
-async function build(env, doc, d) {
+export async function build(env, doc, d) {
   const trips = doc.trips.filter((x) => x.d === d);
   if (!trips.length) return null;
   const cities = [...new Set(trips.flatMap((x) => [x.how === "stay" ? "" : x.from, x.to]).filter(Boolean))];
