@@ -84,14 +84,14 @@ async function qwen(env, messages, opt = {}) {
 const NEEDS_READ = /[\u3400-\u9fff]|[A-Za-z]|[%¥￥₩$~×÷／/#&+=@]|\d[元块]/;
 async function readable(env, text) {
   if (!NEEDS_READ.test(text)) return text;
-  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("rd2|" + text));
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("rd3|" + text));
   const key = "rd:" + [...new Uint8Array(d)].slice(0, 10).map((x) => x.toString(16).padStart(2, "0")).join("");
   const hit = await env.KV.get(key);
   if (hit) return hit;
   try {
     const o = await qwen(env, [{ role: "system", content:
       "너는 한국어 내레이션을 음성 합성기에 넘기기 전에 '읽기용 문장'으로 다듬는다. 화면 자막은 따로 있으니 소리 내 읽을 때 자연스러운 것만 생각한다. 규칙: " +
-      "1) 한자·중국어는 한국 사람이 실제로 말하는 한글 발음으로 바꾼다. 지명·음식·브랜드는 한국에서 통용되는 표기(广州→광저우, 火锅→훠궈, 小笼包→샤오롱바오, 喜茶→희차), 중국어 한마디는 한글 소리(你好→니하오, 多少钱→뚜어샤오치엔, 谢谢→씨에씨에). 한자어 단어가 한국어 한자음으로 더 자연스러우면 그걸로. " +
+      "1) 한자·중국어는 한국 사람이 실제로 말하는 한글 발음으로 바꾼다. 나라·지명은 한국 표준 이름(沙特→사우디, 沙特咖啡→사우디 커피, 泰国→태국, 越南→베트남, 广州→광저우, 深圳→선전), 음식·브랜드는 한국에서 통용되는 표기(火锅→훠궈, 小笼包→샤오롱바오, 喜茶→희차, 咖啡→커피, 奶茶→밀크티), 뜻이 있는 일반 명사는 소리 대신 한국어 뜻으로(咖啡→커피, 地铁→지하철). 모르는 고유명사를 억지로 줄여 쓰지 말 것, 중국어 한마디는 한글 소리(你好→니하오, 多少钱→뚜어샤오치엔, 谢谢→씨에씨에). 한자어 단어가 한국어 한자음으로 더 자연스러우면 그걸로. " +
       "2) 영어 단어·브랜드·약어는 한국식 발음 한글로(Starbucks→스타벅스, latte→라테, Didi→디디, KTX→케이티엑스, AI→에이아이, vlog→브이로그). " +
       "3) 숫자는 아라비아 숫자 그대로 두고 단위·기호만 말로(15元·15块·¥15→15위안, ₩3,000→3,000원, 50%→50퍼센트, 3~5분→3에서 5분, 2x→2배, &→앤, #→해시태그는 빼기). " +
       "4) 이모지·괄호 안 원문 병기·따옴표·특수기호는 지운다(예: '훠궈(火锅)' → '훠궈'). " +
@@ -902,8 +902,12 @@ async function krTry(env, b, h, synth) {
   const kr = await env.KV.get(krKey(h));
   const read = await readable(env, text);
   const bytes = await sayMine(env, synth, voice, read, voice === kr);
-  const k = "shorts/" + h + "/" + AVA + "/try" + (voice.slice(-6).replace(/[^\w]/g, "")) + "-" + Date.now().toString(36) + ".mp3";
+  // 파일 이름은 /shorts/file 허용 글자([\w.])만 — '-' 를 넣었다가 재생 403(2026-10-12). 들을 때마다 새 이름(브라우저 캐시 회피), 이전 것은 지움
+  const k = "shorts/" + h + "/" + AVA + "/try" + (voice.slice(-6).replace(/[^\w]/g, "")) + "_" + Date.now().toString(36) + ".mp3";
+  const prev = await env.KV.get("shorts:try:" + h);
+  if (prev && prev !== k) await env.R2.delete(prev).catch(() => {});
   await env.R2.put(k, bytes, { httpMetadata: { contentType: "audio/mpeg" } });
+  await env.KV.put("shorts:try:" + h, k);
   return { ok: true, url: await fileUrl(env, k), which: voice === kr ? "kr" : "zh", text, read };
 }
 
