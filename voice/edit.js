@@ -271,7 +271,7 @@ async function ensureNarr(ac,prog){
     prog('🔊 내레이션 '+(i+1)+'/'+D.scenes.length);
     var sc=D.scenes[i],vo=D.opts.voice||'Cherry';
     if(vo==='rec'){if(!sc._rec)continue;try{out[i]=await decode(ac,await sc._rec.blob.arrayBuffer());}catch(e){toast('#'+(i+1)+' 녹음을 읽지 못했어요');}continue;}
-    var key=vo+'|'+t,n=sc._narr;
+    var key='r2|'+vo+'|'+t,n=sc._narr; // r2: 읽기용 문장 다듬기(2026-10-12) 이후 내레이션 — 예전 것은 다시 만듦
     // 실패하면 한 번 더, 그래도 없으면 빠진 채로 만들지 않고 멈춤(예전엔 조용히 건너뛰어 내레이션이 날아갔음)
     if(!n||n.key!==key){var r=await api('/shorts/asset',{id:D.id,n:i,kind:'say',text:t,voice:vo});if(!r.ok){await new Promise(function(z){setTimeout(z,1500);});r=await api('/shorts/asset',{id:D.id,n:i,kind:'say',text:t,voice:vo});}
       if(!r.ok)throw new Error('#'+(i+1)+' 내레이션을 만들지 못했어요('+(r.detail||r.error)+'). 잠시 뒤 다시 눌러 주세요.');n=sc._narr={key:key,url:r.url,buf:null};}

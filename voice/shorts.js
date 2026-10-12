@@ -54,7 +54,7 @@ async function dsPost(env, path, body, async_) {
   return j;
 }
 async function qwen(env, messages, opt = {}) {
-  const body = { model: opt.model || env.SHORTS_MODEL || "qwen3.8-flash", messages, temperature: 0.85, response_format: { type: "json_object" }, enable_thinking: false };
+  const body = { model: opt.model || env.SHORTS_MODEL || "qwen3.8-flash", messages, temperature: opt.temperature ?? 0.85, response_format: { type: "json_object" }, enable_thinking: false };
   if (opt.search) body.enable_search = true;
   // 百炼 쪽 일시 오류(5xx·520·429·연결 끊김)는 잠깐 쉬고 두 번까지 다시 시도
   const call = async () => {
@@ -77,6 +77,38 @@ async function qwen(env, messages, opt = {}) {
   const a = c.indexOf("{"), z = c.lastIndexOf("}");
   if (a >= 0 && z > a) try { return JSON.parse(c.slice(a, z + 1)); } catch {}
   throw serr("千问 응답을 읽지 못했어요. 다시 눌러 주세요.", 502);
+}
+
+// 🗣 읽기용 문장(2026-10-12 시청자 피드백 "중국어·영어 읽을 때 인위적"): 자막은 그대로 두고 음성 합성에만
+// 한자·중국어·영어·기호를 한국 사람이 실제로 말하는 한글 발음으로 바꿔 넘김. KV rd:<해시> 60일 캐시, 실패하면 원문
+const NEEDS_READ = /[\u3400-\u9fff]|[A-Za-z]|[%¥￥₩$~×÷／/#&+=@]|\d[元块]/;
+async function readable(env, text) {
+  if (!NEEDS_READ.test(text)) return text;
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("rd2|" + text));
+  const key = "rd:" + [...new Uint8Array(d)].slice(0, 10).map((x) => x.toString(16).padStart(2, "0")).join("");
+  const hit = await env.KV.get(key);
+  if (hit) return hit;
+  try {
+    const o = await qwen(env, [{ role: "system", content:
+      "너는 한국어 내레이션을 음성 합성기에 넘기기 전에 '읽기용 문장'으로 다듬는다. 화면 자막은 따로 있으니 소리 내 읽을 때 자연스러운 것만 생각한다. 규칙: " +
+      "1) 한자·중국어는 한국 사람이 실제로 말하는 한글 발음으로 바꾼다. 지명·음식·브랜드는 한국에서 통용되는 표기(广州→광저우, 火锅→훠궈, 小笼包→샤오롱바오, 喜茶→희차), 중국어 한마디는 한글 소리(你好→니하오, 多少钱→뚜어샤오치엔, 谢谢→씨에씨에). 한자어 단어가 한국어 한자음으로 더 자연스러우면 그걸로. " +
+      "2) 영어 단어·브랜드·약어는 한국식 발음 한글로(Starbucks→스타벅스, latte→라테, Didi→디디, KTX→케이티엑스, AI→에이아이, vlog→브이로그). " +
+      "3) 숫자는 아라비아 숫자 그대로 두고 단위·기호만 말로(15元·15块·¥15→15위안, ₩3,000→3,000원, 50%→50퍼센트, 3~5분→3에서 5분, 2x→2배, &→앤, #→해시태그는 빼기). " +
+      "4) 이모지·괄호 안 원문 병기·따옴표·특수기호는 지운다(예: '훠궈(火锅)' → '훠궈'). " +
+      "5) 뜻·어순·말투는 바꾸지 말고 단어를 더하지 마라. 숨 쉴 곳에 쉼표만 넣어도 된다. " +
+      'JSON 만: {"read":"읽기용 문장"}' }, { role: "user", content: text }], { temperature: 0.1 });
+    let r = String((o && o.read) || "").trim();
+    // 엉뚱하게 길어지거나 비면 원문
+    if (!r || r.length > text.length * 2 + 20) return text;
+    await env.KV.put(key, r, { expirationTtl: 60 * 86400 });
+    return r;
+  } catch { return text; }
+}
+// 한국어로 복제한 내 목소리는 한국어 힌트·보통 속도로(공부용 중국어 목소리는 기존 그대로)
+async function sayMine(env, synth, voice, text, kr) {
+  if (!kr) return await synth(env, voice, text);
+  try { return await synth(env, voice, text, null, { language_hints: ["ko"], rate: 1.0 }); }
+  catch (e) { return await synth(env, voice, text); }
 }
 
 async function costDay(env) { return (await env.KV.get("shorts:cost:" + cnDay(), "json")) || { img: 0, vid: 0, tts: 0 }; }
@@ -522,15 +554,17 @@ async function asset(env, b, h, synth) {
     if (!text) throw serr("내레이션이 비었어요.");
     let bytes = null, why = "", ext = "wav", ct = "audio/wav";
     const want = ["Cherry", "Ethan", "mine"].includes(b.voice) ? b.voice : (env.SHORTS_VOICE || "Cherry");
+    const speakText = await readable(env, text);
     // 목소리는 고른 그대로만 — 실패했다고 다른 목소리로 바꾸면 한 영상 안에서 목소리가 섞임(2026-10-11 소유자 지적)
     let useAi = want !== "mine";
     if (want === "mine") {
-      const mine = (await env.KV.get("voice:kr:" + h)) || (await env.KV.get("voice:" + h));
+      const kr = await env.KV.get("voice:kr:" + h);
+      const mine = kr || (await env.KV.get("voice:" + h));
       if (!mine) { useAi = true; why = "내 목소리 미등록 → AI 여성"; }
-      else try { bytes = await synth(env, mine, text); ext = "mp3"; ct = "audio/mpeg"; } catch (e) { why = "내 목소리: " + String(e.message || e).slice(0, 100); }
+      else try { bytes = await sayMine(env, synth, mine, speakText, !!kr); ext = "mp3"; ct = "audio/mpeg"; } catch (e) { why = "내 목소리: " + String(e.message || e).slice(0, 100); }
     }
     if (!bytes && useAi) try {
-      const j = await dsPost(env, "/services/aigc/multimodal-generation/generation", { model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text, voice: want === "mine" ? "Cherry" : want, language_type: "Korean" } });
+      const j = await dsPost(env, "/services/aigc/multimodal-generation/generation", { model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text: speakText, voice: want === "mine" ? "Cherry" : want, language_type: "Korean" } });
       const url = j.output && j.output.audio && j.output.audio.url;
       if (url) { const r = await fetch(url); if (r.ok) bytes = new Uint8Array(await r.arrayBuffer()); }
       if (!bytes) why += " / qwen-tts 결과 없음";
@@ -864,7 +898,8 @@ async function krTry(env, b, h, synth) {
   const voice = (await env.KV.get(krKey(h))) || (await env.KV.get("voice:" + h));
   if (!voice) throw serr("아직 목소리가 없어요.");
   const text = String(b.text || "광저우에서 아메리카노 한 잔, 얼마일까요? 한국 돈으로 3천 원이 안 돼요.").slice(0, 120);
-  const bytes = await synth(env, voice, text);
+  const kr = await env.KV.get(krKey(h));
+  const bytes = await sayMine(env, synth, voice, await readable(env, text), voice === kr);
   const k = "shorts/" + h + "/" + AVA + "/try" + (voice.slice(-6).replace(/[^\w]/g, "")) + ".mp3";
   await env.R2.put(k, bytes, { httpMetadata: { contentType: "audio/mpeg" } });
   return { ok: true, url: await fileUrl(env, k), which: voice === (await env.KV.get(krKey(h))) ? "kr" : "zh" };

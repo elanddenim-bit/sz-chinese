@@ -371,7 +371,7 @@ async function tts(req, env, h, b) {
   await env.R2.put(key, mp3, { httpMetadata: { contentType: "audio/mpeg" } });
   return new Response(mp3, { headers: head });
 }
-async function synth(env, voice, text, model) {
+async function synth(env, voice, text, model, extra) {
   // 연결이 520 등으로 거부되면 잠깐 쉬고 두 번까지 다시
   let up = null;
   for (let k = 0; k < 3; k++) {
@@ -411,7 +411,7 @@ async function synth(env, voice, text, model) {
     ws.addEventListener("close", () => { clearTimeout(to); rej(err("tts", "합성 연결이 끊겼습니다")); });
     ws.send(msg("run-task", {
       task_group: "audio", task: "tts", function: "SpeechSynthesizer", model: model || ttsModel(env),
-      parameters: { text_type: "PlainText", voice, format: "mp3", sample_rate: 24000, volume: 50, rate: 0.95, pitch: 1 },
+      parameters: { text_type: "PlainText", voice, format: "mp3", sample_rate: 24000, volume: 50, rate: 0.95, pitch: 1, ...(extra || {}) },
       input: {},
     }));
   });
