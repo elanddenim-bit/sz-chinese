@@ -21,6 +21,9 @@ main{max-width:640px;margin:0 auto;padding:14px 16px 48px}h2{font-size:13px;colo
 </style></head><body>
 <header><a class="back" href="/" aria-label="박비서">‹</a><h1>🧰 도구함</h1></header>
 <main>
+<h2>업무</h2><div class="g">
+<a href="/brief"><i>🧳</i><b>출장 브리핑</b><small>전날 밤 날씨·출발·챙길 것 알림</small></a>
+</div>
 <h2>읽기</h2><div class="g">
 <a href="/trend"><i>🔥</i><b>오늘의 중국 인터넷</b><small>지금 뜨는 이슈·유행어</small></a>
 </div>

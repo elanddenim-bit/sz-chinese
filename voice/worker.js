@@ -32,6 +32,7 @@ import { shortsApi, shortsSave, shortsFile, ytCallback, legalPage, SHORTS_HTML, 
 import { EDIT_HTML } from "./edit.js";
 import { TOON_HTML } from "./toon.js";
 import { CINE_HTML } from "./cine.js";
+import { briefApi, briefCron, briefGet, BRIEF_HTML } from "./brief.js";
 import ICON180 from "./icon-180.png";
 import ICON192 from "./icon-192.png";
 import ICON512 from "./icon-512.png";
@@ -78,7 +79,10 @@ export default {
   // 🗓 토요일 아침 8시(UTC 토 0시) 이번 주 숏츠 기획
   async scheduled(ev, env, ctx) {
     if (ev.cron === "0 0 * * 6") ctx.waitUntil(weekCron(env).catch((e) => console.log("weekCron", e && e.message)));
-    else ctx.waitUntil(shortsCron(env).catch((e) => console.log("shortsCron", e && e.message)));
+    else {
+      ctx.waitUntil(shortsCron(env).catch((e) => console.log("shortsCron", e && e.message)));
+      ctx.waitUntil(briefCron(env).catch((e) => console.log("briefCron", e && e.message))); // 🧳 출장 전날 브리핑(정한 시각에만 보냄)
+    }
   },
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
@@ -108,6 +112,8 @@ export default {
       if (url.pathname.startsWith("/novel/") && req.method === "GET") return await novelGet(req, env, url);
       if (url.pathname === "/trend" && req.method === "GET") return new Response(TREND_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname.startsWith("/trend/") && req.method === "GET") return await trendGet(req, env, url, synth);
+      if (url.pathname === "/brief" && req.method === "GET") return new Response(BRIEF_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
+      if (url.pathname.startsWith("/brief/") && req.method === "GET") return await briefGet(req, env, url);
       if (url.pathname === "/hub" && req.method === "GET") return new Response(HUB_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/timecam" && req.method === "GET") return new Response(TIMECAM_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname.startsWith("/timecam/") && req.method === "GET") return await timecamGet(req, env, url);
@@ -125,6 +131,7 @@ export default {
       if (url.pathname.startsWith("/timecam/")) return json(req, await timecamApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/signs/")) return json(req, await signsApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/novel/")) return json(req, await novelApi(env, ctx, url.pathname, b, h));
+      if (url.pathname.startsWith("/brief/")) return json(req, await briefApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/trend/")) return json(req, await trendApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/shorts/")) {
         const out = await shortsApi(env, ctx, url.pathname, b, h, synth);
