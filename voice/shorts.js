@@ -129,6 +129,7 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
   if (path === "/shorts/script") return script(env, b, h);
   if (path === "/shorts/load") return load(env, b, h);
   if (path === "/shorts/plan") return plan(env, b, h);
+  if (path === "/shorts/rewrite") return rewrite(env, b, h);
   if (path === "/shorts/asr") return asr(env, b, h);
   if (path === "/shorts/update") return update(env, b, h);
   if (path === "/shorts/asset") return asset(env, b, h, synth);
@@ -178,6 +179,12 @@ const ANGLES = {
 async function krw(env) {
   try { const j = await (await fetch("https://api.frankfurter.app/latest?from=CNY&to=KRW")).json(); return Math.round(j.rates.KRW); } catch { return 0; }
 }
+// 숏츠 멘트 말투(2026-10-12 소유자 '멘트가 너무 짜친다' — 감탄사·과장·이모지 범벅 금지)
+const TONE_RULES = "말투: 친구에게 폰 화면을 보여주며 옆에서 말하듯 1인칭 구어체(~해요·~더라고요·~거든요를 섞어서, 같은 어미 반복 금지). " +
+  "금지어: 폭발, 미쳤다, 엄청나다, 대박, 역대급, 실화, 레전드, 찢었다, 난리, 무조건, 꼭 가세요. 느낌표 연발 금지. 이모지는 영상 전체에서 cap 1~2개까지만. " +
+  "명사형 끝맺음(~함, ~옴, ~예쁨)과 메모체 금지 — 소리 내어 읽었을 때 자연스러운 완결 문장. " +
+  "cap 은 감탄이 아니라 그 장면의 핵심 정보·대비·숫자·구체 명사(예: '지하철 나오자마자 이 줄'), say 는 cap 을 되풀이하지 말고 화면에 안 보이는 맥락·이유·내 느낌 한 가지만. " +
+  "'예쁘다·좋다·멋지다' 같은 뭉뚱그린 형용사 대신 무엇이 어떻게 그런지. 구간들이 한 사람의 이야기처럼 이어지게(앞 구간을 받아서).";
 const KR_RULES = "시청자는 한국에 사는 한국인이다. 중국 문화·역사 해설이나 '중국은 이렇다' 식 강의, 중국어 표현 소개 위주 내용은 피한다. " +
   "매 이야기는 '한국인인 나에게 왜 재밌거나 쓸모 있나'가 분명해야 한다: 한국과의 비교, 원화 환산 가격, 바로 써먹을 꿀팁, 놀라운 반전 중 하나 이상. " +
   "중국어 단어는 꼭 필요할 때만(메뉴 이름 등) 한두 개, 한글로 읽는 법을 붙인다. 정치·혐오·비하 표현 금지.";
@@ -408,9 +415,9 @@ async function script(env, b, h) {
   const rate = (await krw(env)) || 190;
   const ser = SERIES[b.series] || null;
   const out = await qwen(env, [
-    { role: "system", content: "너는 한국어 유튜브 숏츠 작가 겸 콘티 작가다. 채널: 광저우에 사는 한국인 직장인 부부의 광저우 생활. 약 " + sec + "초, 장면 " + nScenes + "개 세로 영상 대본을 쓴다. " + KR_RULES + " 이번 영상은 " + ang.d + ". " + (ser ? ser.rule + " " : "") +
+    { role: "system", content: "너는 한국어 유튜브 숏츠 작가 겸 콘티 작가다. 채널: 광저우에 사는 한국인 직장인 부부의 광저우 생활. 약 " + sec + "초, 장면 " + nScenes + "개 세로 영상 대본을 쓴다. " + KR_RULES + " " + TONE_RULES + " 이번 영상은 " + ang.d + ". " + (ser ? ser.rule + " " : "") +
       "가격이 나오면 위안과 원화를 같이 말한다(1위안 ≈ " + rate + "원, 반올림해서 말하기 쉽게). 한국 가격과 비교할 수 있으면 비교한다. " +
-      "규칙: 1번 장면이 바로 훅(반전·질문·숫자), 자기소개 금지. say 는 한국어 구어체 1~2문장, 읽으면 4~7초. cap 은 화면 큰 글씨, 한국어 12자 이내, 이모지 1개까지. " +
+      "규칙: 1번 장면이 바로 훅(반전·질문·숫자), 자기소개 금지. say 는 한국어 구어체 1~2문장, 읽으면 4~7초. cap 은 화면 큰 글씨, 한국어 12자 이내. " +
       "img 는 이미지 생성 모델에 줄 중국어 장면 묘사: 세로 구도, 실사 사진 느낌, 광저우의 실제 같은 디테일(빛·사람 동작·음식·거리), 화면에 글자·간판 글씨·워터마크·로고 금지, 유명인 금지. " +
       "move 는 중국어 카메라 움직임(예: \"镜头缓慢推进，热气升腾\"). 마지막 장면은 자연스럽게 구독·댓글 유도(질문형으로, 예: '여러분이라면 뭐 시키실래요?'). " +
       "title 은 한국어 40자 이내, 클릭하고 싶지만 과장 없이. description 한국어 2~3줄. tags 8개 이내(한국어 위주, # 없이)." +
@@ -454,7 +461,7 @@ async function plan(env, b, h) {
     (topic ? "내가 적은 설명: " + topic + ". " : "") +
     "이걸로 약 " + sec + "초짜리 한국어 유튜브 숏츠 편집 계획을 짜라. " + (ser ? ser.rule + " " : "") + KR_RULES + " 이번 영상은 " + ang.d + ". 가격이 보이거나 언급되면 위안과 원화(1위안≈" + rate + "원)를 같이. " +
     "규칙: 첫 구간은 가장 눈길 끄는 장면(훅). 구간은 2.5~6초로 너무 잘게 자르지 말고(첫 구간만 1.5초도 됨), 움직임이 이어지는 장면은 한 구간으로 길게, start/end 는 그 클립 길이 안에서 캡처를 근거로 고르고, 흔들리거나 의미 없는 부분은 피한다. 같은 순간을 두 번 쓰지 않는다. 구간 합계가 약 " + sec + "초 — 단 클립이 모자라면 반복하지 말고 더 짧게 끝낸다. " +
-    "cap 은 화면 큰 글씨(한국어 12자 이내, 이모지 1개까지, 필요 없으면 빈칸). say 는 그 구간에 깔 한국어 내레이션 — 구간 길이 1초당 4글자 이내로 짧게, 화면만으로 충분하면 빈칸. say 는 소리 내어 읽는 말이므로 →, :, =, / 같은 기호를 쓰지 말고 문장으로(예: '66위안, 우리 돈 약 만 2천 원'). 같은 클립을 바로 이어 두 번 쓰지 말고, 이야기(가격·음식)와 상관없는 풍경은 중간에 끼우지 말고 쓰려면 맨 앞 분위기 컷으로. 사진에 없는 사실을 지어내지 말 것(모르면 느낌·질문으로). 특히 제목·cap·say 에 '마지막·최초·역대·유일' 같은 사실 주장, 선수·연예인 이름, 날짜·경기 결과는 내가 적은 설명에 있을 때만 쓴다. 마지막 구간은 댓글 유도 질문. " +
+    TONE_RULES + " cap 은 화면 큰 글씨(한국어 12자 이내, 필요 없으면 빈칸). say 는 그 구간에 깔 한국어 내레이션 — 구간 길이 1초당 4글자 이내로 짧게, 화면만으로 충분하면 빈칸. say 는 소리 내어 읽는 말이므로 →, :, =, / 같은 기호를 쓰지 말고 문장으로(예: '66위안, 우리 돈 약 만 2천 원'). 같은 클립을 바로 이어 두 번 쓰지 말고, 이야기(가격·음식)와 상관없는 풍경은 중간에 끼우지 말고 쓰려면 맨 앞 분위기 컷으로. 사진에 없는 사실을 지어내지 말 것(모르면 느낌·질문으로). 특히 제목·cap·say 에 '마지막·최초·역대·유일' 같은 사실 주장, 선수·연예인 이름, 날짜·경기 결과는 내가 적은 설명에 있을 때만 쓴다. 마지막 구간은 댓글 유도 질문. " +
     'title(한국어 40자 이내), description(2~3줄), tags(8개 이내, # 없이). JSON만 출력: {"title":"","description":"","tags":[],"segments":[{"clip":1,"start":0,"end":3,"cap":"","say":""}]}' });
   const out = await qwen(env, [{ role: "user", content }], { model: env.SHORTS_VL_MODEL || "qwen3-vl-plus" });
   let segs = (Array.isArray(out.segments) ? out.segments : []).map((x) => {
@@ -481,6 +488,33 @@ async function plan(env, b, h) {
   l.unshift({ id, title: d.title, made: d.made, kind: "mine", series: d.series });
   await env.KV.put(listKey(h), JSON.stringify(l.slice(0, 40)));
   return { ok: true, draft: d, files: {} };
+}
+
+// 멘트만 다시 쓰기 — 구간·시간은 그대로, cap/say 만 TONE_RULES 로 고쳐 씀(글자만, 사진 안 보냄)
+async function rewrite(env, b, h) {
+  const id = String(b.id || "");
+  const d = await env.KV.get(draftKey(h, id), "json");
+  if (!d) throw serr("초안을 찾지 못했어요.", 404);
+  const segs = (Array.isArray(b.scenes) ? b.scenes : []).slice(0, 15).map((x) => ({ len: Math.max(1, Math.min(12, Number(x.len) || 3)), cap: String(x.cap || "").slice(0, 30), say: String(x.say || "").slice(0, 160) }));
+  if (!segs.length) throw serr("구간이 없어요.");
+  const day = "shorts:rw:" + new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10) + ":" + h;
+  const used = Number(await env.KV.get(day)) || 0;
+  if (used >= 40) throw serr("오늘 멘트 다시 쓰기는 여기까지예요(40번).", 429);
+  await env.KV.put(day, String(used + 1), { expirationTtl: 2 * 86400 });
+  const note = String(b.note || "").slice(0, 120);
+  const prompt = "한국어 유튜브 숏츠(광저우 생활, 한국 시청자) 구간별 화면 글씨(cap)와 내레이션(say)을 다시 써라. 주제: " + String(d.topic || d.title || "").slice(0, 200) + ". " +
+    (note ? "내가 원하는 느낌: " + note + ". " : "") + TONE_RULES + " " +
+    "구간 수·순서는 그대로. 원래 문장에 없는 사실(가격·시각·개수·장소 이름)은 새로 만들지 말고, 원래 있던 숫자는 그대로 둔다. cap 은 12자 이내(비어 있던 구간은 비워 둬도 됨). say 는 구간 길이 1초당 4글자 이내, 기호(→ : = /) 없이. 첫 구간은 계속 보고 싶게 만드는 훅, 마지막 구간은 댓글 달고 싶은 자연스러운 질문. " +
+    "지금 구간: " + JSON.stringify(segs.map((x, i) => ({ n: i + 1, sec: +x.len.toFixed(1), cap: x.cap, say: x.say }))) +
+    ' JSON만: {"segments":[{"cap":"","say":""}]}';
+  const out = await qwen(env, [{ role: "user", content: prompt }], { temperature: 0.7 });
+  const r = Array.isArray(out.segments) ? out.segments : [];
+  if (r.length < segs.length * 0.6) throw serr("다시 쓰기 결과가 이상해요. 한 번 더 눌러 주세요.", 502);
+  return { ok: true, segments: segs.map((x, i) => {
+    const y = r[i] || {};
+    const say = String(y.say ?? x.say).replace(/\s*(→|->|=>)\s*/g, ", ").replace(/\s*[:：=]\s*/g, ", ").slice(0, 160);
+    return { cap: String(y.cap ?? x.cap).slice(0, 30), say };
+  }) };
 }
 
 async function load(env, b, h) {

@@ -34,7 +34,7 @@ textarea{min-height:56px;resize:vertical}
 .seg .hd{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink2);margin-bottom:6px;flex-wrap:wrap}.seg .hd b{color:var(--sky)}
 .seg input[type=number]{width:62px;font:inherit;font-size:15px;padding:5px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
 .seg input[type=text],.seg textarea{font-size:14.5px;padding:7px 9px;margin-bottom:6px}
-.mini{display:flex;gap:6px;flex-wrap:wrap}.mini button{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:8px;padding:5px 9px;font:inherit;font-size:12.5px}
+.rw{display:flex;gap:6px;margin:0 0 10px}.rw input{flex:1;min-width:0;margin:0}.rw button{white-space:nowrap;padding:8px 10px;border-radius:10px;border:1px solid var(--line,#ccc);background:#fff;font-weight:700}.mini{display:flex;gap:6px;flex-wrap:wrap}.mini button{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:8px;padding:5px 9px;font:inherit;font-size:12.5px}
 .note{font-size:12.5px;color:var(--ink2);margin:6px 0 0}.err{color:var(--red);font-size:13.5px;margin-top:8px;white-space:pre-wrap}
 .prog{font-size:14px;margin:8px 0}.bar{height:6px;background:var(--soft);border-radius:3px;overflow:hidden}.bar i{display:block;height:100%;background:var(--sky);width:0}
 canvas.pv{width:60%;max-width:300px;display:block;margin:10px auto;border-radius:10px;background:#000}
@@ -130,6 +130,17 @@ async function resume(){
 
 // ---------- 3) 편집 ----------
 var SPEEDS=[0.5,1,1.5,2];
+var RW_UNDO=null;
+async function rewriteAll(){
+  readForm();var b=$('rwBtn'),note=$('rwNote').value.trim();b.disabled=true;b.textContent='✍️ 다시 쓰는 중…';
+  try{
+    var r=await api('/shorts/rewrite',{id:D.id,note:note,scenes:D.scenes.map(function(x){return {len:segLen(x),cap:x.cap||'',say:x.say||''};})});
+    if(!r.ok)throw new Error(r.detail||r.error||'실패');
+    RW_UNDO=D.scenes.map(function(x){return {cap:x.cap||'',say:x.say||''};});
+    r.segments.forEach(function(y,k){var x=D.scenes[k];if(x){x.cap=y.cap;x.say=y.say;}});
+    editor();saveSoon();toast('멘트를 다시 썼어요. 마음에 안 들면 ↩ 되돌리기');
+  }catch(e){toast('다시 쓰기 실패: '+e.message);b.disabled=false;b.textContent='✍️ 멘트 다시 쓰기';}
+}
 function segLen(s){return Math.max(0.3,(s.e-s.s)/(s.sp||1));}
 function segHtml(s,i){
   var c=CLIPS[s.clip],sp=s.sp||1;
@@ -151,7 +162,7 @@ function editor(){
   if(CH===null){CH='';api('/shorts/yt/status').then(function(y){CH=(y&&y.channel)||'';}).catch(function(){});}
   var tot=D.scenes.reduce(function(a,s){return a+segLen(s);},0)+(o.end?2:0);
   var h='<div class="card"><h2>제목·설명</h2><input type="text" id="tt" value="'+esc(D.title)+'"><p class="lbl">설명</p><textarea id="ds">'+esc(D.description)+'</textarea><p class="lbl">태그(쉼표)</p><input type="text" id="tg" value="'+esc((D.tags||[]).join(', '))+'"></div>';
-  h+='<div class="card"><h2>구간 '+D.scenes.length+'개 · 약 '+Math.round(tot)+'초</h2><p class="note" style="margin:0 0 6px">내레이션이 구간보다 길면 그만큼 늘어나요. 속도 0.5×=슬로모션, 2×=빨리감기.</p><video class="prev" id="pv" playsinline muted controls style="display:none"></video>'+D.scenes.map(segHtml).join('')+'<button class="big ghost" id="addSeg">＋ 구간 추가</button></div>';
+  h+='<div class="card"><h2>구간 '+D.scenes.length+'개 · 약 '+Math.round(tot)+'초</h2><p class="note" style="margin:0 0 6px">내레이션이 구간보다 길면 그만큼 늘어나요. 속도 0.5×=슬로모션, 2×=빨리감기.</p><div class="rw"><input type="text" id="rwNote" placeholder="원하는 느낌 (선택) 예: 담백하게, 웃기게"><button id="rwBtn">✍️ 멘트 다시 쓰기</button>'+(RW_UNDO?'<button id="rwUndo">↩ 되돌리기</button>':'')+'</div><video class="prev" id="pv" playsinline muted controls style="display:none"></video>'+D.scenes.map(segHtml).join('')+'<button class="big ghost" id="addSeg">＋ 구간 추가</button></div>';
   h+='<div class="card"><h2>설정</h2><p class="lbl">화면</p>'+chipRow('fit',[['crop','꽉 채우기(가운데 자르기)'],['full','전체 보기(흐린 배경)']],o.fit)
    +'<p class="lbl">원본 소리 <span style="font-weight:400">(내레이션 나올 땐 자동으로 줄어요)</span></p>'+chipRow('orig',[[0,'끄기'],[0.3,'작게'],[1,'그대로']],o.orig)
    +'<p class="lbl">내레이션 목소리</p>'+chipRow('voice',[['Cherry','👩 AI 여성'],['Ethan','👨 AI 남성'],['mine','🗣 내 목소리(AI 복제)'],['rec','🎙 직접 녹음']],o.voice||'Cherry')
@@ -201,6 +212,7 @@ function bind(){
     if(a==='dup'&&L.length<15){var cp=JSON.parse(JSON.stringify(L[i]));delete cp._narr;delete cp._rec;L.splice(i+1,0,cp);}
     if(a==='del'&&L.length>1)L.splice(i,1);
     editor();saveSoon();};});
+  $('rwBtn').onclick=rewriteAll;if($('rwUndo'))$('rwUndo').onclick=function(){if(!RW_UNDO)return;D.scenes.forEach(function(x,k){var u=RW_UNDO[k];if(u){x.cap=u.cap;x.say=u.say;}});RW_UNDO=null;editor();saveSoon();toast('되돌렸어요');};
   $('addSeg').onclick=function(){readForm();if(D.scenes.length>=15)return;var c=CLIPS.length-1;D.scenes.push({clip:c,s:0,e:Math.min(3,CLIPS[c].dur),sp:1,cap:'',say:''});editor();saveSoon();};
   document.querySelectorAll('[data-o]').forEach(function(b){b.onclick=function(){var k=b.getAttribute('data-o'),v=b.getAttribute('data-v');
     if(k==='fit'||k==='voice')D.opts[k]=v;else if(k==='orig'||k==='bgv'||k==='nv')D.opts[k]=+v;else D.opts[k]=!D.opts[k];readForm();editor();saveSoon();};});
