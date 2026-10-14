@@ -130,6 +130,8 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
   if (path === "/shorts/load") return load(env, b, h);
   if (path === "/shorts/plan") return plan(env, b, h);
   if (path === "/shorts/rewrite") return rewrite(env, b, h);
+  if (path === "/shorts/assemble") return assemble(env, b, h);
+  if (path === "/shorts/lines") return lines(env, b, h);
   if (path === "/shorts/asr") return asr(env, b, h);
   if (path === "/shorts/update") return update(env, b, h);
   if (path === "/shorts/asset") return asset(env, b, h, synth);
@@ -457,6 +459,63 @@ function APP_PLAN(clips, topic, sec, rate) {
 }
 function cleanPt(p) { if (!Array.isArray(p) || p.length < 2) return null; const x = Number(p[0]), y = Number(p[1]); if (!(x >= 0 && x <= 1000 && y >= 0 && y <= 1000)) return null; return [Math.round(x), Math.round(y)]; }
 function cleanCv(a) { return (Array.isArray(a) ? a : []).map((b) => Array.isArray(b) && b.length >= 4 ? b.slice(0, 4).map((n) => Math.max(0, Math.min(1000, Math.round(Number(n) || 0)))) : null).filter((b) => b && b[2] >= 8 && b[3] >= 8).slice(0, 6); }
+// 📝 대본 모드 — 대본 줄(장면) 먼저, 미디어 풀(영상을 장면 전환으로 자동 컷낸 것 + 사진)에서 줄마다 맞는 걸 VL 이 끼워 넣고, 못 채운 줄은 '빈칸'
+async function assemble(env, b, h) {
+  const L = (Array.isArray(b.lines) ? b.lines : []).map((x) => String(x || "").trim()).filter(Boolean).slice(0, 15);
+  if (L.length < 1) throw serr("대본 줄을 적어 주세요.");
+  const clips = (Array.isArray(b.clips) ? b.clips : []).slice(0, 30).map((c) => ({ dur: Math.max(0.5, Math.min(600, Number(c.dur) || 0)), name: String(c.name || "").slice(0, 60), kind: c.kind === "photo" ? "photo" : "video" }));
+  const media = (Array.isArray(b.media) ? b.media : []).filter((m) => m && clips[m.clip] && /^data:image\/jpeg;base64,/.test(m.img || "") && m.img.length < 170000).slice(0, 40)
+    .map((m) => ({ kind: m.kind === "photo" ? "photo" : "cut", clip: Math.round(Number(m.clip)), s: Math.max(0, Number(m.s) || 0), e: Math.max(0, Number(m.e) || 0), img: m.img }));
+  const sec = [15, 20, 30, 45, 60].includes(Number(b.sec)) ? Number(b.sec) : 45;
+  const topic = String(b.topic || "").slice(0, 200);
+  const ser = SERIES[b.series] || null;
+  const rate = (await krw(env)) || 190;
+  let out = { scenes: [] };
+  if (media.length) {
+    const content = [];
+    media.forEach((m, i) => { content.push({ type: "text", text: "[미디어 " + (i + 1) + " · " + (m.kind === "photo" ? "📷 사진" : "🎬 영상 " + (m.clip + 1) + "번 " + m.s.toFixed(1) + "~" + m.e.toFixed(1) + "초") + "]" }); content.push({ type: "image_url", image_url: { url: m.img } }); });
+    content.push({ type: "text", text: "위는 내가 가진 미디어 풀(내 영상에서 자동으로 잘라낸 컷의 대표 장면, 내 사진)이다. 아래는 한국어 유튜브 숏츠 대본 — 한 줄이 한 장면이고 그 줄의 내레이션이다.\n" +
+      L.map((t, i) => (i + 1) + ". " + t).join("\n") + "\n\n" + (topic ? "영상 주제: " + topic + ". " : "") +
+      "줄마다 가장 잘 맞는 미디어 번호 하나를 고르라(내용·사물·장소·숫자가 보이는 것 우선, 같은 미디어를 여러 줄에 쓰는 건 피하되 꼭 맞으면 허용). 억지로 끼우지 말고 정말 맞는 게 없으면 0(빈칸). " +
+      "줄마다 cap(화면 큰 글씨, 한국어 12자 이내 — 숫자·대비·핵심어, 내레이션 반복 금지, 필요 없으면 빈칸)을 쓴다. 가격이 보이면 원화(1위안≈" + rate + "원)로. " + TONE_RULES + " " +
+      "title(한국어 40자 이내, 숫자·비교·물음표 중 하나), description(2~3줄), tags(8개 이내, # 없이). JSON만: {\"title\":\"\",\"description\":\"\",\"tags\":[],\"scenes\":[{\"line\":1,\"media\":3,\"cap\":\"\"}]} — scenes 는 줄 수(" + L.length + "개)와 같고 line 순서대로." });
+    out = await qwen(env, [{ role: "user", content }], { model: env.SHORTS_VL_MODEL || "qwen3-vl-plus" });
+  } else {
+    out = await qwen(env, [{ role: "user", content: "아래 한국어 숏츠 대본(한 줄=한 장면)에 줄마다 cap(화면 큰 글씨 12자 이내, 내레이션 반복 금지)과 title(40자 이내)·description·tags(8개 이내)를 붙여라. " + TONE_RULES + "\n" + L.map((t, i) => (i + 1) + ". " + t).join("\n") + "\nJSON만: {\"title\":\"\",\"description\":\"\",\"tags\":[],\"scenes\":[{\"line\":1,\"media\":0,\"cap\":\"\"}]}" }]);
+  }
+  const blankIdx = clips.length;
+  clips.push({ dur: 30, name: "빈칸", kind: "blank" });
+  const byLine = {};
+  (Array.isArray(out.scenes) ? out.scenes : []).forEach((x) => { const i = Math.round(Number(x.line)) - 1; if (i >= 0 && i < L.length && !byLine[i]) byLine[i] = x; });
+  const scenes = L.map((say, i) => {
+    const x = byLine[i] || {}, mi = Math.round(Number(x.media)) - 1, m = media[mi];
+    const o = { clip: blankIdx, s: 0, e: 3, cap: String(x.cap || "").slice(0, 30), say: say.slice(0, 160), img: "", move: "" };
+    if (m && m.kind === "cut") { o.clip = m.clip; o.s = +m.s.toFixed(2); o.e = +Math.max(m.s + 1, m.e).toFixed(2); }
+    else if (m && m.kind === "photo") { o.clip = m.clip; o.s = 0; o.e = 3; }
+    return o;
+  });
+  const id = "s" + Date.now().toString(36);
+  let title = String(out.title || topic || L[0] || "숏츠");
+  if (ser) { const ck = "shorts:series:" + h + ":" + b.series, n = (Number(await env.KV.get(ck)) || 0) + 1; await env.KV.put(ck, String(n)); title = "[" + ser.name + " #" + n + "] " + title.replace(/^\[[^\]]*\]\s*/, ""); }
+  const d = { id, kind: "mine", mode: "script", series: ser ? b.series : "", topic: topic || L[0].slice(0, 40), sec, angle: b.angle || "mix", made: Date.now(), title: title.slice(0, 90), description: String(out.description || "").slice(0, 900),
+    tags: (Array.isArray(out.tags) ? out.tags : []).map((t) => String(t).replace(/^#/, "").slice(0, 30)).slice(0, 10), clips, scenes, opts: { fit: "crop", orig: 0.3, narr: true, subs: true } };
+  await env.KV.put(draftKey(h, id), JSON.stringify(d), { expirationTtl: 120 * 86400 });
+  const l = (await env.KV.get(listKey(h), "json")) || [];
+  l.unshift({ id, title: d.title, made: d.made, kind: "mine", series: d.series });
+  await env.KV.put(listKey(h), JSON.stringify(l.slice(0, 40)));
+  return { ok: true, draft: d, files: {}, blanks: scenes.filter((x) => x.clip === blankIdx).length };
+}
+// 📝 대본 줄만 빨리(초안 저장 없음) — 대본 모드 '✍️ AI 대본' 버튼
+async function lines(env, b, h) {
+  const topic = String(b.topic || "").trim().slice(0, 400);
+  if (!topic) throw serr("주제를 적어 주세요.");
+  const sec = [15, 20, 30, 45, 60].includes(Number(b.sec)) ? Number(b.sec) : 45, n = Math.max(4, Math.min(12, Math.round(sec / 5)));
+  const ang = ANGLES[b.angle] || ANGLES.mix, rate = (await krw(env)) || 190;
+  const out = await qwen(env, [{ role: "user", content: "한국어 유튜브 숏츠 내레이션 대본을 써라. 채널: 광저우에 사는 한국인 직장인. 주제: " + topic + ". 약 " + sec + "초, 정확히 " + n + "줄(한 줄 = 한 장면, 한 줄 10~28자, 소리 내어 읽는 말이라 기호 없이). 1줄은 훅(숫자·비교·질문), 마지막 줄은 댓글 유도 질문. " + KR_RULES + " 이번 영상은 " + ang.d + ". 가격은 원화(1위안≈" + rate + "원) 병기. " + TONE_RULES + " 모르는 사실은 지어내지 말고 느낌·질문으로. JSON만: {\"lines\":[\"\"]}" }]);
+  const ls = (Array.isArray(out.lines) ? out.lines : []).map((x) => String(x || "").trim()).filter(Boolean).slice(0, 15);
+  if (!ls.length) throw serr("대본을 만들지 못했어요.");
+  return { ok: true, lines: ls };
+}
 // 🎥 편집실 — 내가 찍은 클립의 캡처(폰에서 뽑은 작은 JPEG)를 보고 구간·순서·자막·내레이션을 정한다. 원본 영상은 서버로 오지 않는다
 async function plan(env, b, h) {
   const clips = (Array.isArray(b.clips) ? b.clips : []).slice(0, 20).map((c) => ({ dur: Math.max(0.5, Math.min(600, Number(c.dur) || 0)), name: String(c.name || "").slice(0, 60) }));
@@ -1081,13 +1140,13 @@ async function cloudSubmit(env, b, h) {
     if (Math.abs(sp - 1) > 0.01) c.Speed = Math.min(4, Math.max(0.25, sp));
     main.push(c);
   }
-  if (!main.length) throw serr("영상 구간이 없어요.");
   const layers = {};
   for (const im of (Array.isArray(tl.images) ? tl.images : []).slice(0, 400)) {
     const c = { Type: "Image", MediaURL: url(im.k), TimelineIn: n3(im.tin), TimelineOut: n3(im.tout), X: 0, Y: 0, Width: W, Height: H, AdaptMode: "Cover" };
     if (c.TimelineOut <= c.TimelineIn) continue;
     if (im.layer === "main") main.push(c); else (layers[im.layer] = layers[im.layer] || []).push(c);
   }
+  if (!main.length) throw serr("영상 구간이 없어요.");
   const byIn = (x, y) => x.TimelineIn - y.TimelineIn;
   main.sort(byIn);
   const VideoTracks = [{ VideoTrackClips: main }].concat(["base", "mark", "cap", "asr", "sub"].filter((l) => layers[l]).map((l) => ({ VideoTrackClips: layers[l].sort(byIn) })));

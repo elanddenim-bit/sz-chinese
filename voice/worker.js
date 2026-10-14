@@ -170,7 +170,7 @@ export default {
       if (url.pathname.startsWith("/trend/")) return json(req, await trendApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/shorts/")) {
         const out = await shortsApi(env, ctx, url.pathname, b, h, synth);
-        const ev = { "/shorts/script": "script", "/shorts/yt/upload": "upload", "/shorts/ideas": "ideas", "/shorts/plan": "plan", "/shorts/asr": "asr", "/shorts/cine/make": "cine" }[url.pathname];
+        const ev = { "/shorts/script": "script", "/shorts/yt/upload": "upload", "/shorts/ideas": "ideas", "/shorts/plan": "plan", "/shorts/assemble": "assemble", "/shorts/asr": "asr", "/shorts/cine/make": "cine" }[url.pathname];
         if (ev) ctx.waitUntil(logUse(env, "shorts", { [ev]: 1 }, 0, h).catch(() => {}));
         return json(req, out);
       }
