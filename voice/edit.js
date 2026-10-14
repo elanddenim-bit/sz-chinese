@@ -66,6 +66,7 @@ var QID=(location.search.match(/[?&]id=([^&]+)/)||[])[1]||'';
 var QTOPIC='';try{QTOPIC=decodeURIComponent((location.search.match(/[?&]topic=([^&]+)/)||[])[1]||'');}catch(e){}
 
 // ---------- 1) 클립 고르기 ----------
+var SER_APP_NOTE='📱 중국 앱 투어: 폰 화면 녹화(메이투안·더우인·타오바오·디디…)를 고르세요. 화면이 바뀌는 순간마다 캡처해서 AI가 한국어 설명·원화 환산·📍 포인터를 넣고, 전화번호·주소·잔액은 🙈 가리기 상자로 표시해요. 설명 칸에 앱 이름과 뭘 하는 장면인지 적으면 정확해져요.';
 function start(){
   if(!CODE){$('main').innerHTML='<div class="gate">숏츠 공방에서 초대 코드를 먼저 넣어 주세요.<br><a class="big" href="/shorts">숏츠 공방으로</a></div>';return;}
   var h='';
@@ -73,7 +74,7 @@ function start(){
   h+='<div class="card"><label class="pick"><input type="file" id="files" accept="video/*" multiple><b>📂 영상 클립 고르기</b>여러 개 한 번에 · 5~15초짜리가 좋아요<br>원본은 서버로 올라가지 않아요</label><div class="clips" id="clips"></div></div>';
   if(!QID){
     h+='<div class="card"><h2>어떤 영상인가요?</h2><input type="text" id="topic" placeholder="예: 永庆坊 산책, 早茶 집 첫 방문 (짧게)"><p class="lbl">한국 시청자 각도</p><div class="chips">'+ANGS.map(function(a){return '<button class="chip'+(a[0]===ANG?' on':'')+'" data-ang="'+a[0]+'">'+a[1]+'</button>';}).join('')+'</div>'
-      +'<p class="lbl">시리즈</p><div class="chips"><button class="chip'+(SER===''?' on':'')+'" data-ser="">없음</button><button class="chip'+(SER==='price'?' on':'')+'" data-ser="price">💰 광저우 물가 1분</button></div><p class="note">시리즈로 고르면 제목 앞에 [광저우 물가 1분 #번호]가 자동으로 붙고, 가격표·원화 비교·댓글 질문 형식으로 짜요.</p>'
+      +'<p class="lbl">시리즈</p><div class="chips"><button class="chip'+(SER===''?' on':'')+'" data-ser="">없음</button><button class="chip'+(SER==='price'?' on':'')+'" data-ser="price">💰 광저우 물가 1분</button><button class="chip'+(SER==='app'?' on':'')+'" data-ser="app">📱 중국 앱 투어</button></div><p class="note" id="serNote">'+(SER==='app'?SER_APP_NOTE:'시리즈로 고르면 제목 앞에 [광저우 물가 1분 #번호]가 자동으로 붙고, 가격표·원화 비교·댓글 질문 형식으로 짜요.')+'</p>'
       +'<p class="lbl">길이</p><div class="chips">'+[15,20,30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div><p class="note" id="secNote"></p>'
       +'</div><div class="dock"><button class="big" id="planBtn" disabled>🤖 AI 편집 계획 받기</button><div class="prog" id="pp"></div><div class="err" id="pe"></div></div>';
   }else h+='<div class="dock"><button class="big" id="resumeBtn" disabled>이 클립으로 편집 이어가기</button><div class="err" id="pe"></div></div>';
@@ -82,7 +83,8 @@ function start(){
   document.querySelectorAll('[data-ang]').forEach(function(b){b.onclick=function(){ANG=b.getAttribute('data-ang');try{localStorage.setItem('sh-ang',ANG);}catch(e){}document.querySelectorAll('[data-ang]').forEach(function(x){x.classList.toggle('on',x===b);});};});
   document.querySelectorAll('[data-sec]').forEach(function(b){b.onclick=function(){SEC=+b.getAttribute('data-sec');SECMAN=true;document.querySelectorAll('[data-sec]').forEach(function(x){x.classList.toggle('on',x===b);});};});
   document.querySelectorAll('[data-ser]').forEach(function(b){b.onclick=function(){SER=b.getAttribute('data-ser');try{localStorage.setItem('ed-ser',SER);}catch(e){}document.querySelectorAll('[data-ser]').forEach(function(x){x.classList.toggle('on',x===b);});
-    if(SER==='price'){ANG='price';document.querySelectorAll('[data-ang]').forEach(function(x){x.classList.toggle('on',x.getAttribute('data-ang')==='price');});}};});
+    if(SER==='price'){ANG='price';document.querySelectorAll('[data-ang]').forEach(function(x){x.classList.toggle('on',x.getAttribute('data-ang')==='price');});}
+    if($('serNote'))$('serNote').textContent=SER==='app'?SER_APP_NOTE:'시리즈로 고르면 제목 앞에 [광저우 물가 1분 #번호]가 자동으로 붙고, 가격표·원화 비교·댓글 질문 형식으로 짜요.';};});
   if($('planBtn'))$('planBtn').onclick=makePlan;
   if($('resumeBtn'))$('resumeBtn').onclick=resume;
 }
@@ -112,7 +114,8 @@ function renderClips(){$('clips').innerHTML=CLIPS.map(function(c,i){return '<div
 async function makePlan(){
   var b=$('planBtn'),pp=$('pp'),pe=$('pe');b.disabled=true;pe.textContent='';
   var tot=CLIPS.reduce(function(a,c){return a+c.dur;},0),budget=36,frames=[];
-  for(var i=0;i<CLIPS.length;i++){
+  if(SER==='app'){frames=await appFrames(pp);}
+  else for(var i=0;i<CLIPS.length;i++){
     var c=CLIPS[i],n=Math.max(2,Math.min(8,Math.round(budget*c.dur/Math.max(1,tot))));
     for(var k=0;k<n;k++){var t=c.dur*(k+0.5)/n;pp.textContent='장면 캡처 중… 클립 '+(i+1)+'/'+CLIPS.length;await seekTo(c.v,t);var img=grab(c.v,384,0.62);if(img)frames.push({c:i,t:+t.toFixed(1),img:img});}
   }
@@ -121,6 +124,21 @@ async function makePlan(){
   var r=await api('/shorts/plan',{topic:$('topic').value.trim(),sec:SEC,angle:ANG,series:SER,clips:CLIPS.map(function(c){return {dur:c.dur,name:c.name};}),frames:frames});
   if(!r.ok){pp.textContent='';pe.textContent=r.detail||r.error||'실패';b.disabled=false;return;}
   D=r.draft;NARR={};editor();
+}
+// 📱 앱 화면 녹화: 0.5초마다 작은 흑백으로 비교해 화면이 바뀐 순간만 캡처(최대 40장, 글자가 보이게 416px)
+async function appFrames(pp){
+  var out=[],cands=[];
+  for(var i=0;i<CLIPS.length;i++){var c=CLIPS[i],prev=null,lastT=-9;
+    var sm=document.createElement('canvas');sm.width=36;sm.height=64;var sg=sm.getContext('2d',{willReadFrequently:true});
+    for(var t=0.2;t<c.dur;t+=0.5){pp.textContent='화면 바뀜 찾는 중… 클립 '+(i+1)+' '+Math.round(t)+'/'+Math.round(c.dur)+'초';await seekTo(c.v,t);
+      sg.drawImage(c.v,0,0,36,64);var d=sg.getImageData(0,0,36,64).data,g=new Float32Array(36*64);for(var k=0;k<g.length;k++)g[k]=(d[k*4]*0.3+d[k*4+1]*0.59+d[k*4+2]*0.11);
+      var diff=0;if(prev){for(var q=0;q<g.length;q++)diff+=Math.abs(g[q]-prev[q]);diff/=g.length;}
+      if(!prev||diff>9||t-lastT>5){cands.push({c:i,t:t,d:prev?diff:999});lastT=t;}
+      prev=g;}
+  }
+  cands.sort(function(a,b){return b.d-a.d;});cands=cands.slice(0,40).sort(function(a,b){return a.c-b.c||a.t-b.t;});
+  for(var j=0;j<cands.length;j++){var x=cands[j],cc=CLIPS[x.c];pp.textContent='장면 캡처 중… '+(j+1)+'/'+cands.length;await seekTo(cc.v,x.t);var img=grab(cc.v,416,0.55);if(img&&img.length<170000)out.push({c:x.c,t:+x.t.toFixed(1),img:img});}
+  return out;
 }
 async function resume(){
   var r=await api('/shorts/load',{id:QID});if(!r.ok){$('pe').textContent=r.detail||r.error;return;}
@@ -150,6 +168,7 @@ function segHtml(s,i){
     +' <select data-f="sp" aria-label="속도">'+SPEEDS.map(function(x){return '<option value="'+x+'"'+(x===sp?' selected':'')+'>'+x+'×</option>';}).join('')+'</select></div>'
     +'<input type="text" data-f="cap" value="'+esc(s.cap)+'" placeholder="화면 큰 글씨 (비워도 돼요)">'
     +'<textarea data-f="say" placeholder="내레이션 (비우면 원본 소리만)">'+esc(s.say)+'</textarea>'
+    +((s.pt||s._pt||s.cv||s._cv)?'<div class="mini" style="margin-bottom:6px">'+((s.pt||s._pt)?'<button data-a="pt"'+(s.pt?' style="border-color:var(--sky);color:var(--sky)"':'')+'>📍 포인터'+(s.pt?' 켬':' 끔')+'</button>':'')+((s.cv||s._cv)?'<button data-a="cv"'+(s.cv?' style="border-color:var(--red);color:var(--red)"':'')+'>🙈 가리기 '+((s.cv||s._cv).length)+'곳'+(s.cv?' 켬':' 끔')+'</button>':'')+'</div>':'')
     +((D.opts&&D.opts.voice==='rec')?'<div class="mini" style="margin-bottom:6px"><button data-a="rec" style="border-color:var(--red);color:var(--red)">'+(RECING===s?'■ 정지':'🎙 녹음')+'</button>'+(s._rec?'<button data-a="hear">▶ 들어보기</button><span class="note" style="margin:0;align-self:center">'+fmt(s._rec.dur)+'초 녹음됨</span>':'')+'</div>':'')
     +'<div class="mini"><button data-a="pv">▶ 보기</button><button data-a="up">▲</button><button data-a="dn">▼</button><button data-a="dup">복제</button><button data-a="del">✕</button></div></div></div>';
 }
@@ -162,6 +181,7 @@ function editor(){
   if(CH===null){CH='';api('/shorts/yt/status').then(function(y){CH=(y&&y.channel)||'';}).catch(function(){});}
   var tot=D.scenes.reduce(function(a,s){return a+segLen(s);},0)+(o.end?2:0);
   var h='<div class="card"><h2>제목·설명</h2><input type="text" id="tt" value="'+esc(D.title)+'"><p class="lbl">설명</p><textarea id="ds">'+esc(D.description)+'</textarea><p class="lbl">태그(쉼표)</p><input type="text" id="tg" value="'+esc((D.tags||[]).join(', '))+'"></div>';
+  if(D.privacy&&D.privacy.length)h+='<div class="card" style="border-color:var(--red)"><h2>🙈 개인정보 확인</h2><p class="note" style="margin:0">AI가 가렸거나 직접 봐야 할 것: '+D.privacy.map(esc).join(' · ')+'. 올리기 전에 ▶ 전체 미리보기로 꼭 확인하세요 — 전화번호·주소·잔액은 한 프레임만 보여도 캡처돼요.</p></div>';
   h+='<div class="card"><h2>구간 '+D.scenes.length+'개 · 약 '+Math.round(tot)+'초</h2><p class="note" style="margin:0 0 6px">내레이션이 구간보다 길면 그만큼 늘어나요. 속도 0.5×=슬로모션, 2×=빨리감기.</p><div class="rw"><input type="text" id="rwNote" placeholder="원하는 느낌 (선택) 예: 담백하게, 웃기게"><button id="rwBtn">✍️ 멘트 다시 쓰기</button>'+(RW_UNDO?'<button id="rwUndo">↩ 되돌리기</button>':'')+'</div><video class="prev" id="pv" playsinline muted controls style="display:none"></video>'+D.scenes.map(segHtml).join('')+'<button class="big ghost" id="addSeg">＋ 구간 추가</button></div>';
   h+='<div class="card"><h2>설정</h2><p class="lbl">화면</p>'+chipRow('fit',[['crop','꽉 채우기(가운데 자르기)'],['full','전체 보기(흐린 배경)']],o.fit)
    +'<p class="lbl">원본 소리 <span style="font-weight:400">(내레이션 나올 땐 자동으로 줄어요)</span></p>'+chipRow('orig',[[0,'끄기'],[0.3,'작게'],[1,'그대로']],o.orig)
@@ -199,7 +219,7 @@ function readForm(){
     el.querySelectorAll('[data-f]').forEach(function(f){var k=f.getAttribute('data-f'),v=f.value;if(k==='clip')s.clip=+v;else if(k==='sp')s.sp=+v||1;else if(k==='s'||k==='e')s[k]=Math.max(0,parseFloat(v)||0);else s[k]=v;});
     var c=CLIPS[s.clip];if(c){s.e=Math.min(s.e,c.dur);s.s=Math.min(s.s,Math.max(0,s.e-0.3));}if(s.e-s.s<0.3)s.e=s.s+0.3;});
 }
-function draftBody(){var asr={};(D.clips||[]).forEach(function(c,i){if(c&&c.asr)asr[i]=c.asr;});return {title:D.title,description:D.description,tags:D.tags,scenes:D.scenes.map(function(s){return {clip:s.clip,s:s.s,e:s.e,sp:s.sp||1,cap:s.cap,say:s.say};}),opts:D.opts,asr:asr};}
+function draftBody(){var asr={};(D.clips||[]).forEach(function(c,i){if(c&&c.asr)asr[i]=c.asr;});return {title:D.title,description:D.description,tags:D.tags,scenes:D.scenes.map(function(s){return {clip:s.clip,s:s.s,e:s.e,sp:s.sp||1,cap:s.cap,say:s.say,pt:s.pt||null,cv:s.cv||[]};}),opts:D.opts,asr:asr};}
 var saveT=null;function saveSoon(){clearTimeout(saveT);saveT=setTimeout(function(){readForm();api('/shorts/update',{id:D.id,draft:draftBody()});},1200);}
 function bind(){
   document.querySelectorAll('#main input,#main textarea,#main select').forEach(function(x){if(x.type==='file')return;x.oninput=saveSoon;x.onchange=saveSoon;});
@@ -211,6 +231,8 @@ function bind(){
     if(a==='dn'&&i<L.length-1){var t2=L[i];L[i]=L[i+1];L[i+1]=t2;}
     if(a==='dup'&&L.length<15){var cp=JSON.parse(JSON.stringify(L[i]));delete cp._narr;delete cp._rec;L.splice(i+1,0,cp);}
     if(a==='del'&&L.length>1)L.splice(i,1);
+    if(a==='pt'){var sc1=L[i];if(sc1.pt){sc1._pt=sc1.pt;delete sc1.pt;}else if(sc1._pt){sc1.pt=sc1._pt;delete sc1._pt;}}
+    if(a==='cv'){var sc2=L[i];if(sc2.cv){sc2._cv=sc2.cv;delete sc2.cv;}else if(sc2._cv){sc2.cv=sc2._cv;delete sc2._cv;}}
     editor();saveSoon();};});
   $('rwBtn').onclick=rewriteAll;if($('rwUndo'))$('rwUndo').onclick=function(){if(!RW_UNDO)return;D.scenes.forEach(function(x,k){var u=RW_UNDO[k];if(u){x.cap=u.cap;x.say=u.say;}});RW_UNDO=null;editor();saveSoon();toast('되돌렸어요');};
   $('addSeg').onclick=function(){readForm();if(D.scenes.length>=15)return;var c=CLIPS.length-1;D.scenes.push({clip:c,s:0,e:Math.min(3,CLIPS[c].dur),sp:1,cap:'',say:''});editor();saveSoon();};
@@ -385,6 +407,7 @@ async function render0(dry){
       if(D.opts.fit==='full'){var bs=Math.max(W/vw,H/vh)*1.1;tg.drawImage(v,0,0,tiny.width,tiny.height);g.imageSmoothingEnabled=true;g.drawImage(tiny,(W-vw*bs)/2,(H-vh*bs)/2,vw*bs,vh*bs);g.fillStyle='rgba(0,0,0,.45)';g.fillRect(0,0,W,H);var fs2=Math.min(W/vw,H/vh);g.drawImage(v,(W-vw*fs2)/2,(H-vh*fs2)/2,vw*fs2,vh*fs2);}
       else{var cs=Math.max(W/vw,H/vh);g.drawImage(v,(W-vw*cs)/2,(H-vh*cs)/2,vw*cs,vh*cs);}
     }
+    if(ready&&(sc.cv||sc.pt))drawMark(g,sc,vw,vh,el);
     var gr=g.createLinearGradient(0,H*0.5,0,H);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,.55)');g.fillStyle=gr;g.fillRect(0,H*0.5,W,H*0.5);
     if(sc.cap){var pop=Math.min(1,el/0.18),fs=Math.round(66*(0.85+0.15*pop)),fnt='900 '+fs+'px -apple-system,"Apple SD Gothic Neo",sans-serif';g.font=fnt;wrap(g,sc.cap,W-140).forEach(function(l,k){stroke(l,W/2,H*0.20+k*(fs+12),fnt,idx===0&&k===0?'#FFD84D':'#FFFFFF',14);});}
     // 내레이션 자막: 말하는 속도에 맞춰 한 토막씩(글자 수 비례로 시간 배분)
@@ -493,6 +516,13 @@ var KF='-apple-system,"Apple SD Gothic Neo",sans-serif';
 function ovC(){var c=document.createElement('canvas');c.width=720;c.height=1280;return c;}
 function cvBlob(c,type,q){return new Promise(function(ok,no){c.toBlob(function(b){b?ok(b):no(new Error('그림 만들기 실패'));},type||'image/png',q);});}
 function stk(g,txt,x,y,font,fill,lw){g.font=font;g.textAlign='center';g.lineJoin='round';if(lw){g.lineWidth=lw;g.strokeStyle='rgba(0,0,0,.85)';g.strokeText(txt,x,y);}g.fillStyle=fill;g.fillText(txt,x,y);}
+// 📱 앱 투어 표시: 가리기 상자(불투명)·포인터 링 — 좌표는 영상 프레임 0~1000 정규화, 화면 맞춤(fit)대로 변환
+function vrect(vw,vh){var W=720,H=1280,s=(D.opts.fit==='full')?Math.min(W/vw,H/vh):Math.max(W/vw,H/vh);return {x:(W-vw*s)/2,y:(H-vh*s)/2,w:vw*s,h:vh*s};}
+function drawMark(g,sc,vw,vh,el){var r=vrect(vw,vh);
+  (sc.cv||[]).forEach(function(b){var x=r.x+b[0]/1000*r.w,y=r.y+b[1]/1000*r.h,w=b[2]/1000*r.w,h=b[3]/1000*r.h;g.fillStyle='#1A2330';g.beginPath();g.roundRect?g.roundRect(x-6,y-6,w+12,h+12,10):g.rect(x-6,y-6,w+12,h+12);g.fill();});
+  if(sc.pt){var px=r.x+sc.pt[0]/1000*r.w,py=r.y+sc.pt[1]/1000*r.h,ph=el==null?0.5:(0.5+0.5*Math.sin(el*5)),R=38+10*ph;
+    g.beginPath();g.arc(px,py,R,0,7);g.strokeStyle='rgba(210,22,36,.95)';g.lineWidth=6;g.stroke();g.beginPath();g.arc(px,py,R+10,0,7);g.strokeStyle='rgba(255,255,255,.7)';g.lineWidth=3;g.stroke();}}
+function ovMark(sc,vw,vh){var c=ovC(),g=c.getContext('2d');drawMark(g,sc,vw,vh,null);return cvBlob(c);}
 function ovCap(t,first){var c=ovC(),g=c.getContext('2d'),fs=66,f='900 '+fs+'px '+KF;g.font=f;wrap(g,t,580).forEach(function(l,k){stk(g,l,360,256+k*(fs+12),f,first&&k===0?'#FFD84D':'#FFFFFF',14);});return cvBlob(c);}
 function ovSub(t){var c=ovC(),g=c.getContext('2d'),f='800 44px '+KF;g.font=f;var sl=wrap(g,t,570).slice(0,2);sl.forEach(function(l,k){stk(g,l,340,858+k*56-(sl.length-1)*28,f,'#FFFFFF',10);});return cvBlob(c);}
 function ovAsr(ko,zh){var c=ovC(),g=c.getContext('2d'),f='800 42px '+KF;g.font=f;var kl=wrap(g,ko,570).slice(0,2),y0=896-(kl.length-1)*27;
@@ -527,6 +557,7 @@ async function cloudRender(){
       vid.push({clip:sc.clip,in:sc.s,out:Math.min(c.dur,sc.s+vl*sp),speed:sp,tin:t0,tout:t0+vl,gain:(o.orig||0)*(hasN||nEnd>t0+0.2?0.25:1)});
       if(len>vl+0.05)ovs.push({kind:'freeze',layer:'main',v:c.v,at:Math.min(c.dur,sc.s+vl*sp)-0.06,tin:t0+vl,tout:t0+len});
       if(sc.cap)ovs.push({kind:'cap',layer:'cap',txt:sc.cap,first:k===0,tin:t0,tout:t0+len});
+      if(sc.cv||sc.pt)ovs.push({kind:'mark',layer:'mark',sc:sc,vw:c.v.videoWidth||720,vh:c.v.videoHeight||1280,tin:t0,tout:t0+vl});
       if(o.subs){var chs=hasN?alignW(narr[k],sayChunks(sc.say)):sayChunks(sc.say);if(chs.length&&(hasN||!o.narr||!sc.say)){var s0=hasN?ns:t0,span=hasN?nd:len,acc=0;chs.forEach(function(ch){var a=s0+acc*span;acc+=ch.w;ovs.push({kind:'sub',layer:'sub',txt:ch.t,tin:a,tout:Math.max(a+0.3,s0+acc*span)});});}}
       var A=o.osub&&clipAsr(sc.clip);if(A)A.forEach(function(r){if(!r[3])return;var a=t0+(r[0]-sc.s)/sp,b=t0+(r[1]+0.3-sc.s)/sp;if(b<=t0||a>=t0+vl)return;ovs.push({kind:'asr',layer:'asr',ko:r[3],zh:r[2],tin:Math.max(t0,a),tout:Math.min(t0+vl,b)});});
       T+=len;}
@@ -544,7 +575,7 @@ async function cloudRender(){
     aud=aud.filter(function(a){return a.key;});
     var bgmKey='';if(BGM&&o.bgv){bgmKey=dir+'bgm-'+BGM.file.size+'.'+extOf(BGM.file.name,BGM.file.type,'mp3');if(!OSSUP[bgmKey])ups.push({key:bgmKey,size:BGM.file.size,get:function(){return BGM.file;},clip:1});}
     ovs.forEach(function(x,i){x.key=dir+'o'+rid+'-'+i+(x.kind==='freeze'||x.kind==='end'?'.jpg':'.png');ups.push({key:x.key,size:40000,get:function(){
-      return x.kind==='cap'?ovCap(x.txt,x.first):x.kind==='sub'?ovSub(x.txt):x.kind==='asr'?ovAsr(x.ko,x.zh):x.kind==='base'?ovBase():frameJpg(x.v,x.at,x.kind==='end');}});});
+      return x.kind==='cap'?ovCap(x.txt,x.first):x.kind==='sub'?ovSub(x.txt):x.kind==='asr'?ovAsr(x.ko,x.zh):x.kind==='mark'?ovMark(x.sc,x.vw,x.vh):x.kind==='base'?ovBase():frameJpg(x.v,x.at,x.kind==='end');}});});
     var tot=ups.reduce(function(a,u){return a+u.size;},0)||1,done=0;
     for(var j=0;j<ups.length;j++){var u=ups[j],nm=u.clip?'원본 영상':'재료';
       prog('⏫ '+nm+' 올리는 중… '+(j+1)+'/'+ups.length+(u.clip?' ('+(u.size/1048576).toFixed(0)+'MB)':''),done/tot);

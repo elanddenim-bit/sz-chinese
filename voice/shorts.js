@@ -442,13 +442,26 @@ async function script(env, b, h) {
 // 시리즈: 같은 형식을 반복해 구독으로 잇는다. 제목 앞 번호는 KV 카운터(shorts:series:<해시>:<키>)
 const SERIES = {
   price: { name: "광저우 물가 1분", rule: "이 영상은 '광저우 물가 1분' 시리즈다: 첫 구간 cap 은 대표 물건과 원화 가격으로 놀라게(예: '편의점 도시락 = 2,800원?!'), 가격표·메뉴판이 보이는 장면은 꼭 쓰고 그 구간 cap 에 '00위안 ≈ 0,000원'. 한국 가격과 비교 한 줄(모르면 '한국이면?' 질문). 실제로 먹거나 써 본 반응 구간 포함. 마지막 구간 say 는 '여러분 동네는 얼마예요?' 같은 댓글 질문. 제목에는 번호를 넣지 말 것(자동으로 붙음), 대신 가장 놀라운 가격을 넣는다. 태그에 광저우물가·중국물가 포함." },
+  app: { name: "중국 앱 투어", rule: "이 영상은 '중국 앱 투어' 시리즈다: 중국 앱(메이투안·더우인·타오바오·디디·알리페이·위챗 등)의 실제 화면 녹화를 한국 시청자에게 설명한다." },
   cnet: { name: "중국 인터넷 1분", rule: "이 영상은 '중국 인터넷 1분' 시리즈다: 지금 중국 SNS(웨이보·더우인)에서 뜨는 화제를 한국 시청자에게 1분 안에 풀어 준다. 1번 장면 cap 은 '중국 네티즌 난리 난 이유' 류의 훅. 무슨 일인지 → 중국 사람들이 왜 열광/웃는지 → 한국이라면? 비교 → 마지막 장면은 '오늘의 유행어'(한자·뜻)를 cap 에 크게, say 로 읽는 법과 뜻, 그리고 댓글 질문. 실존 연예인·인물의 얼굴이나 닮은 모습은 img 에 절대 그리지 말고 상징물·소품·분위기(휴대폰 화면 속 하트, 밈 느낌의 사물, 거리 풍경)로 표현. 원본 영상·사진·로고를 묘사하지 않는다. 확인 안 된 수치·사실은 지어내지 말고 주제에 적힌 내용 안에서만. 제목에 번호는 넣지 말 것(자동). 태그에 중국인터넷·중국밈·중국유행어 포함." },
 };
+// 📱 중국 앱 투어 — 화면 녹화 캡처(화면이 바뀐 순간마다)를 보고 한국 시청자용 설명 자막·포인터·개인정보 가리기 상자를 짠다
+function APP_PLAN(clips, topic, sec, rate) {
+  return "위는 내가 중국 앱을 쓰는 모습을 폰 화면 녹화한 것의 캡처다(화면이 바뀐 순간마다 한 장, 클립 번호·시각 표시). 클립 길이: " + clips.map((c, i) => "클립 " + (i + 1) + "=" + c.dur.toFixed(1) + "초").join(", ") + ". " +
+    (topic ? "내가 적은 설명: " + topic + ". " : "") +
+    "이걸로 약 " + sec + "초짜리 한국어 유튜브 숏츠 '중국 앱 투어' 편집 계획을 짜라. 시청자는 중국 앱을 한 번도 안 써 본 한국 사람 — 화면에 뭐가 보이는지, 한국 앱(배민·쿠팡·카카오T·토스 등)과 뭐가 다른지, 가격·배달비·할인은 원화로(1위안≈" + rate + "원) 바로 환산해 알려 준다. 중국어 글자는 한국어로 풀어 주고 꼭 필요한 단어 1~2개만 한자+뜻. " +
+    "규칙: 구간은 화면이 바뀌는 지점(캡처 시각)에 맞춰 자르고 1.5~6초. 첫 구간 cap 은 한국인이 놀랄 숫자·비교·질문(예: '배달비 300원?', '한국 앱엔 없는 버튼'). 같은 화면이 길게 이어지면 그 안에서 짧게 쓴다. 화면에 없는 사실을 지어내지 말 것. " + KR_RULES + " " + TONE_RULES + " " +
+    "cap 은 화면 큰 글씨(한국어 12자 이내). say 는 그 구간 내레이션(1초당 4글자 이내, 기호 대신 문장). 구간마다 설명하는 대상이 화면 어디인지 pt 로 가리켜라 — 캡처 기준 0~1000 정규화 좌표 [x,y] (가로, 세로), 가리킬 게 없으면 null. " +
+    "개인정보(실명·전화번호·상세 주소·잔액·주문번호·얼굴·차량 번호)가 보이는 구간은 cover 에 그 영역 [x,y,w,h](0~1000 정규화) 상자를 넣어 가리게 한다(없으면 빈 배열). privacy 에는 가린 것·사람이 직접 확인해야 할 것을 한 줄씩. app 은 앱 이름(한국어). " +
+    'title(한국어 40자 이내), description(2~3줄), tags(8개 이내, # 없이). JSON만 출력: {"app":"","title":"","description":"","tags":[],"privacy":[],"segments":[{"clip":1,"start":0,"end":3,"cap":"","say":"","pt":[500,400],"cover":[[0,0,0,0]]}]}';
+}
+function cleanPt(p) { if (!Array.isArray(p) || p.length < 2) return null; const x = Number(p[0]), y = Number(p[1]); if (!(x >= 0 && x <= 1000 && y >= 0 && y <= 1000)) return null; return [Math.round(x), Math.round(y)]; }
+function cleanCv(a) { return (Array.isArray(a) ? a : []).map((b) => Array.isArray(b) && b.length >= 4 ? b.slice(0, 4).map((n) => Math.max(0, Math.min(1000, Math.round(Number(n) || 0)))) : null).filter((b) => b && b[2] >= 8 && b[3] >= 8).slice(0, 6); }
 // 🎥 편집실 — 내가 찍은 클립의 캡처(폰에서 뽑은 작은 JPEG)를 보고 구간·순서·자막·내레이션을 정한다. 원본 영상은 서버로 오지 않는다
 async function plan(env, b, h) {
   const clips = (Array.isArray(b.clips) ? b.clips : []).slice(0, 20).map((c) => ({ dur: Math.max(0.5, Math.min(600, Number(c.dur) || 0)), name: String(c.name || "").slice(0, 60) }));
   if (!clips.length) throw serr("클립을 골라 주세요.");
-  const frames = (Array.isArray(b.frames) ? b.frames : []).filter((f) => f && clips[f.c] && /^data:image\/jpeg;base64,/.test(f.img || "") && f.img.length < 120000).slice(0, 40);
+  const frames = (Array.isArray(b.frames) ? b.frames : []).filter((f) => f && clips[f.c] && /^data:image\/jpeg;base64,/.test(f.img || "") && f.img.length < 170000).slice(0, 40);
   if (frames.length < 2) throw serr("장면 캡처를 만들지 못했어요. 다른 클립으로 해 보세요.");
   const sec = [15, 20, 30, 45, 60].includes(Number(b.sec)) ? Number(b.sec) : 45;
   const ser = SERIES[b.series] || null;
@@ -457,7 +470,8 @@ async function plan(env, b, h) {
   const rate = (await krw(env)) || 190;
   const content = [];
   for (const f of frames) { content.push({ type: "text", text: "[클립 " + (f.c + 1) + " · " + Number(f.t).toFixed(1) + "초]" }); content.push({ type: "image_url", image_url: { url: f.img } }); }
-  content.push({ type: "text", text: "위는 내가 광저우에서 직접 찍은 영상 클립들의 장면 캡처다(클립 번호·시각 표시). 클립 길이: " + clips.map((c, i) => "클립 " + (i + 1) + "=" + c.dur.toFixed(1) + "초").join(", ") + ". " +
+  if (b.series === "app") content.push({ type: "text", text: APP_PLAN(clips, topic, sec, rate) });
+  else content.push({ type: "text", text: "위는 내가 광저우에서 직접 찍은 영상 클립들의 장면 캡처다(클립 번호·시각 표시). 클립 길이: " + clips.map((c, i) => "클립 " + (i + 1) + "=" + c.dur.toFixed(1) + "초").join(", ") + ". " +
     (topic ? "내가 적은 설명: " + topic + ". " : "") +
     "이걸로 약 " + sec + "초짜리 한국어 유튜브 숏츠 편집 계획을 짜라. " + (ser ? ser.rule + " " : "") + KR_RULES + " 이번 영상은 " + ang.d + ". 가격이 보이거나 언급되면 위안과 원화(1위안≈" + rate + "원)를 같이. " +
     "규칙: 첫 구간은 전체 캡처 중 가장 눈길 끄는 장면(훅) — 시청자 절반이 3초 안에 떠나므로 음식·가격·사람·움직임이 가장 크게 보이는 순간을 고르고, 걸어가는 길·입구·간판 같은 준비 장면은 첫 구간에 절대 쓰지 않는다. 첫 구간의 cap 은 숫자·비교·질문 중 하나로 궁금증을 만든다. 구간은 2.5~6초로 너무 잘게 자르지 말고(첫 구간만 1.5초도 됨), 움직임이 이어지는 장면은 한 구간으로 길게, start/end 는 그 클립 길이 안에서 캡처를 근거로 고르고, 흔들리거나 의미 없는 부분은 피한다. 같은 순간을 두 번 쓰지 않는다. 구간 합계가 약 " + sec + "초 — 단 클립이 모자라면 반복하지 말고 더 짧게 끝낸다. " +
@@ -472,7 +486,9 @@ async function plan(env, b, h) {
     if (en - st < 0.5) return null;
     if (en - st > 6.5) en = st + 6; // 한 구간이 너무 길면 지루함
     const say = String(x.say || "").replace(/\s*(→|->|=>)\s*/g, ", ").replace(/\s*[:：=]\s*/g, ", ").replace(/,\s*,/g, ",").slice(0, 160);
-    return { clip: c, s: +st.toFixed(2), e: +en.toFixed(2), cap: String(x.cap || "").slice(0, 30), say, img: "", move: "" };
+    const o = { clip: c, s: +st.toFixed(2), e: +en.toFixed(2), cap: String(x.cap || "").slice(0, 30), say, img: "", move: "" };
+    if (b.series === "app") { const pt = cleanPt(x.pt); if (pt) o.pt = pt; const cv = cleanCv(x.cover); if (cv.length) o.cv = cv; }
+    return o;
   }).filter(Boolean)
     // 바로 앞 구간과 같은 클립이 겹치는 부분이면 버림(같은 장면 반복처럼 보임)
     .filter((x, i, a) => !(i > 0 && a[i - 1].clip === x.clip && x.s < a[i - 1].e + 0.5))
@@ -482,7 +498,8 @@ async function plan(env, b, h) {
   let title = String(out.title || topic || "광저우 둘이서");
   if (ser) { const ck = "shorts:series:" + h + ":" + b.series, n = (Number(await env.KV.get(ck)) || 0) + 1; await env.KV.put(ck, String(n)); title = "[" + ser.name + " #" + n + "] " + title.replace(/^\[[^\]]*\]\s*/, ""); }
   const d = { id, kind: "mine", series: ser ? b.series : "", topic: topic || "내 영상", sec, angle: b.angle || "mix", made: Date.now(), title: title.slice(0, 90), description: String(out.description || "").slice(0, 900),
-    tags: (Array.isArray(out.tags) ? out.tags : []).map((t) => String(t).replace(/^#/, "").slice(0, 30)).slice(0, 10), clips, scenes: segs, opts: { fit: "crop", orig: 0.3, narr: true, subs: true } };
+    tags: (Array.isArray(out.tags) ? out.tags : []).map((t) => String(t).replace(/^#/, "").slice(0, 30)).slice(0, 10), clips, scenes: segs, opts: b.series === "app" ? { fit: "full", orig: 0, narr: true, subs: true, tag: "📱 " + (String(out.app || topic || "중국 앱").slice(0, 16)) } : { fit: "crop", orig: 0.3, narr: true, subs: true } };
+  if (b.series === "app" && Array.isArray(out.privacy)) d.privacy = out.privacy.map((x) => String(x).slice(0, 80)).slice(0, 8);
   await env.KV.put(draftKey(h, id), JSON.stringify(d), { expirationTtl: 120 * 86400 });
   const l = (await env.KV.get(listKey(h), "json")) || [];
   l.unshift({ id, title: d.title, made: d.made, kind: "mine", series: d.series });
@@ -539,7 +556,8 @@ async function update(env, b, h) {
   if (Array.isArray(u.tags)) d.tags = u.tags.map((t) => String(t).slice(0, 30)).slice(0, 10);
   if (Array.isArray(u.scenes)) d.scenes = u.scenes.slice(0, 15).map((s, i) => {
     const o = { ...(d.scenes[i] || {}), cap: String(s.cap || "").slice(0, 30), say: String(s.say || "").slice(0, 160), img: String(s.img || "").slice(0, 400), move: String(s.move || "").slice(0, 160) };
-    if (d.kind === "mine") { o.clip = Math.max(0, Math.min(19, Math.round(Number(s.clip) || 0))); o.s = Math.max(0, Number(s.s) || 0); o.e = Math.max(o.s + 0.3, Number(s.e) || o.s + 2); o.sp = [0.5, 1, 1.5, 2].includes(Number(s.sp)) ? Number(s.sp) : 1; }
+    if (d.kind === "mine") { o.clip = Math.max(0, Math.min(19, Math.round(Number(s.clip) || 0))); o.s = Math.max(0, Number(s.s) || 0); o.e = Math.max(o.s + 0.3, Number(s.e) || o.s + 2); o.sp = [0.5, 1, 1.5, 2].includes(Number(s.sp)) ? Number(s.sp) : 1;
+      if ("pt" in s) { const pt = cleanPt(s.pt); if (pt) o.pt = pt; else delete o.pt; } if ("cv" in s) { const cv = cleanCv(s.cv); if (cv.length) o.cv = cv; else delete o.cv; } }
     return o;
   });
   if (d.kind === "mine" && u.asr && typeof u.asr === "object" && Array.isArray(d.clips)) for (const k of Object.keys(u.asr)) { const c = d.clips[Number(k)]; if (c && Array.isArray(u.asr[k])) c.asr = cleanAsr(u.asr[k]); }
@@ -1072,7 +1090,7 @@ async function cloudSubmit(env, b, h) {
   }
   const byIn = (x, y) => x.TimelineIn - y.TimelineIn;
   main.sort(byIn);
-  const VideoTracks = [{ VideoTrackClips: main }].concat(["base", "cap", "asr", "sub"].filter((l) => layers[l]).map((l) => ({ VideoTrackClips: layers[l].sort(byIn) })));
+  const VideoTracks = [{ VideoTrackClips: main }].concat(["base", "mark", "cap", "asr", "sub"].filter((l) => layers[l]).map((l) => ({ VideoTrackClips: layers[l].sort(byIn) })));
   const tracks = {};
   for (const au of (Array.isArray(tl.audio) ? tl.audio : []).slice(0, 120)) {
     const fx = [{ Type: "Volume", Gain: Math.min(5, Math.max(0, Number(au.gain) || 1)) }];
