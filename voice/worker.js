@@ -19,7 +19,7 @@
 // [필수] Anthropic 호출 없음 — 百炼(알리바바)만 사용
 // =========================================================
 
-import { AGENT_TOOLS, AGENT_PROMPT, AGENT_HTML, runTool } from "./agent.js";
+import { AGENT_TOOLS, AGENT_PROMPT, AGENT_HTML, runTool, agentAsk } from "./agent.js";
 import { beacon, logUse, usageData, USAGE_HTML } from "./usage.js";
 import { questApi, questGet, QUEST_HTML } from "./quest.js";
 import { mysteryApi, mysteryGet, MYSTERY_HTML } from "./mystery.js";
@@ -154,6 +154,7 @@ export default {
       if (url.pathname === "/usage/data") return json(req, await usageData(env, b));
       if (!env.DASHSCOPE_API_KEY) return json(req, { error: "config", detail: "DASHSCOPE_API_KEY 시크릿 없음" }, 500);
       const h = await hash(String(b.code).trim());
+      if (url.pathname === "/agent/ask") { const out = await agentAsk(env, b, h); ctx.waitUntil(logUse(env, "pb", { ask: 1, ...Object.fromEntries(Object.entries(out.tools || {})) }, 0, h).catch(() => {})); return json(req, out); }
       if (url.pathname.startsWith("/quest/")) return json(req, await questApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/mystery/")) return json(req, await mysteryApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/timecam/")) return json(req, await timecamApi(env, ctx, url.pathname, b, h));

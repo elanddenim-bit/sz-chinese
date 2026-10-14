@@ -49,6 +49,40 @@ export const AGENT_PROMPT = [
   "不要说你是AI模型，不要长篇解释。",
 ].join("\n");
 
+// ---------------- 글자 한 번 묻기(시리 단축어용) ----------------
+// POST /agent/ask {code, text, gps?} → {reply} — 실시간 통화 대신 千问 chat completions + 같은 도구(함수 호출 최대 4바퀴). 시리 '박비서' 단축어가 받아쓰기 → 여기 → 읽어 줌.
+export async function agentAsk(env, b, h) {
+  const text = String(b.text || "").trim().slice(0, 500);
+  if (!text) return { ok: false, error: "empty", reply: "무엇을 도와드릴까요?" };
+  const host = (env.DASHSCOPE_WS_HOST || "dashscope.aliyuncs.com").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  const sess = { gps: /^-?\d+\.\d+,-?\d+\.\d+$/.test(String(b.gps || "")) ? String(b.gps) : "", tools: {} };
+  const messages = [{ role: "system", content: AGENT_PROMPT + "\n这是文字问答（Siri 快捷指令），回答会被朗读：只用纯文本，不用 markdown、列表、表情符号，两句以内。" }, { role: "user", content: text }];
+  const model = env.AGENT_TEXT_MODEL || env.QUEST_MODEL || "qwen3.8-flash";
+  let reply = "";
+  for (let round = 0; round < 4; round++) {
+    const r = await fetch("https://" + host + "/compatible-mode/v1/chat/completions", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
+      body: JSON.stringify({ model, messages, tools: AGENT_TOOLS, temperature: 0.4, enable_thinking: false }), signal: AbortSignal.timeout(40000) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) return { ok: false, error: "qwen", reply: "지금은 답을 못 가져왔어요. 잠시 뒤 다시 말씀해 주세요." };
+    const m = (j.choices && j.choices[0] && j.choices[0].message) || {};
+    if (Array.isArray(m.tool_calls) && m.tool_calls.length) {
+      messages.push({ role: "assistant", content: m.content || "", tool_calls: m.tool_calls });
+      for (const tc of m.tool_calls) {
+        let args = {}; try { args = JSON.parse(tc.function.arguments || "{}"); } catch {}
+        const out = await runTool(env, sess, tc.function.name, args);
+        sess.tools[tc.function.name] = (sess.tools[tc.function.name] || 0) + 1;
+        messages.push({ role: "tool", tool_call_id: tc.id, content: String(out).slice(0, 4000) });
+      }
+      continue;
+    }
+    reply = String(m.content || "").trim();
+    break;
+  }
+  if (!reply) reply = "답을 정리하지 못했어요. 다시 한 번 말씀해 주세요.";
+  reply = reply.replace(/[*_#`>]+/g, "").replace(/\s+/g, " ").slice(0, 600);
+  return { ok: true, reply, tools: sess.tools };
+}
+
 // ---------------- 도구 실행 ----------------
 export async function runTool(env, sess, name, args) {
   try {
