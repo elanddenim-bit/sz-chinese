@@ -120,7 +120,7 @@ async function newCase(env, ctx, b, h) {
     "4) 线索要公平：地点调查4条线索合起来加上审问能推理出唯一答案，也要有1~2条误导；单条不够。" +
     "5) 全部用韩语写，第二人称'당신'，有画面感。look 是给绘图模型的中文人物外貌描述(40字内：年龄、性别、发型、服装、表情、职业感)，不要真实名人。scene 是地点插画的中文描述(40字内：时间、天气、氛围)。" +
     "6) ending 揭晓真相(5~8句，逐条说明线索怎么指向真相)，wrong 猜错结局(2~3句，不剧透)，hints 2条(每条一句，越来越直接)。\n" +
-    '只输出 JSON：{"title":"","intro":"3~5句开场，案件是什么、玩家为什么卷入","suspects":[{"name":"","korean":"","role":"","desc":"2句性格外貌","alibi":"本人声称的不在场说明1句","look":"","secret":""}],' +
+    '只输出 JSON（title 用韩语写，6~14字，像推理小说书名）：{"title":"","intro":"3~5句开场，案件是什么、玩家为什么卷入","suspects":[{"name":"","korean":"","role":"","desc":"2句性格外貌","alibi":"本人声称的不在场说明1句","look":"","secret":""}],' +
     '"places":[{"i":候选编号,"title":"章节标题","story":"到达时的描写3~4句","scene":"","search":"调查后发现的东西2~3句","clue":"这条线索一句话"}],"culprit":0,"hints":["",""],"ending":"","wrong":""}';
   const out = await qwen(env, [env.AIR_MODEL, env.QUEST_MODEL || "qwen3.8-flash", "qwen-plus"], [{ role: "system", content: sys }, { role: "user", content: "候选地点：" + JSON.stringify(list) }]);
   const S = (x, n) => String(x == null ? "" : x).slice(0, n);
@@ -171,7 +171,7 @@ async function newBook(env, ctx, b, h) {
     "5) 这一步只写大纲：每页 s 是这一页发生什么的1~2句韩语摘要(正文下一步再写)，选项文字 t 是韩语。" +
     "6) 真实地点(候选)只当背景舞台，人物、事件全部虚构，不能有凶杀、血腥、暴力、色情、政治。" +
     "7) 结局页 end 字段: good|half|bad，结局页没有 choices。所有 choices.to 必须是存在的 id，不能有循环，不能有到不了的页。\n" +
-    '只输出 JSON：{"title":"","nodes":[{"id":"n1","s":"","choices":[{"t":"选项文字(韩语)","to":"n2"}]},{"id":"n9","s":"","end":"bad"}]}';
+    '只输出 JSON（title 用韩语写，6~14字，像漫画书名）：{"title":"","nodes":[{"id":"n1","s":"","choices":[{"t":"选项文字(韩语)","to":"n2"}]},{"id":"n9","s":"","end":"bad"}]}';
   const out = await qwen(env, [env.AIR_MODEL, env.QUEST_MODEL || "qwen3.8-flash", "qwen-plus"], [{ role: "system", content: sys }, { role: "user", content: "候选地点(可用作舞台)：" + JSON.stringify(places.map((p) => ({ name: p.name, type: p.type, area: p.area }))) }], 0.95);
   const S = (x, n) => String(x == null ? "" : x).slice(0, n);
   const raw = (Array.isArray(out.nodes) ? out.nodes : []).slice(0, 36);
@@ -398,7 +398,7 @@ function home(){
   var h='<div class="st"><span class="dot'+(navigator.onLine?'':' off')+'"></span>'+(navigator.onLine?'온라인':'오프라인 · 저장본')+' · 사건은 폰에 저장돼 비행기 모드에서도 돼요</div>';
   if(!S.cases.length)h+='<div class="card muted">담아 둔 사건이 없어요. 아래에서 만들어 두세요(사건 하나에 1분쯤, 그림 8장은 2~3분 더).</div>';
   S.cases.forEach(function(c){var p=ls('air-play:'+c.id)||{};var im=c.imgs&&(c.kind==='book'?c.imgs.n1:c.imgs.s0);
-    h+='<div class="card"><div class="cs">'+(im?'<img src="'+esc(im)+'" alt="">':'<div class="ph"></div>')+'<div style="flex:1"><b>'+(c.kind==='book'?'📚 ':'🕵️ ')+esc(c.title)+'</b><div class="muted">'+esc(S.genres[c.genre]||'')+(c.kind==='book'?' · 게임북 '+Object.keys(c.nodes).length+'쪽 · 결말 '+((p.seen||[]).length)+'/'+c.ends.length:'')+(c.left?' · <span class="spin">✍️</span> '+(c.kind==='book'?'본문 쓰는 중 '+(Object.keys(c.nodes).length-c.left)+'/'+Object.keys(c.nodes).length+'쪽':'심문 대본 '+(c.suspects.length-c.left)+'/'+c.suspects.length+'명')+'':' · 그림 '+ready(c))+(c.pending?' <span class="spin">⏳</span>':'')+(c.kind==='book'?(p.good?' · ✅ 진상 도달':''):(p.done?' · '+(p.ok?'✅ 해결 '+p.score+'점':'❌ 오답'):p.started?' · 진행 중':''))+'</div>'
+    h+='<div class="card"><div class="cs">'+(im?'<img src="'+esc(im)+'" alt="">':'<div class="ph"></div>')+'<div style="flex:1"><b>'+(c.kind==='book'?'📚 ':'🕵️ ')+esc(c.title)+'</b><div class="muted">'+esc(S.genres[c.genre]||'')+(c.kind==='book'?' · 게임북 '+Object.keys(c.nodes).length+'쪽 · 결말 발견 '+((p.seen||[]).length)+'/'+c.ends.length:'')+(c.left?' · <span class="spin">✍️</span> '+(c.kind==='book'?'본문 쓰는 중 '+(Object.keys(c.nodes).length-c.left)+'/'+Object.keys(c.nodes).length+'쪽':'심문 대본 '+(c.suspects.length-c.left)+'/'+c.suspects.length+'명')+'':' · 그림 '+ready(c))+(c.pending?' <span class="spin">⏳</span>':'')+(c.kind==='book'?(p.good?' · ✅ 진상 도달':''):(p.done?' · '+(p.ok?'✅ 해결 '+p.score+'점':'❌ 오답'):p.started?' · 진행 중':''))+'</div>'
       +'<div class="chips" style="margin-top:8px">'+(c.left?'<button class="chip" disabled>준비 중…</button>':'<button class="chip on" data-play="'+c.id+'">'+(p.started?'이어서':'시작')+'</button>')+'<button class="chip" data-drop="'+c.id+'">지우기</button></div></div></div></div>';});
   var KD=ls('air-kind')||'case';h+='<div class="card"><h2>새 사건 만들기</h2><div class="chips" style="margin-bottom:8px"><button class="chip'+(KD==='case'?' on':'')+'" data-k="case">🕵️ 심문 추리</button><button class="chip'+(KD==='book'?' on':'')+'" data-k="book">📚 만화 게임북</button></div><p class="muted">'+(KD==='book'?'한 쪽마다 만화 컷+선택지. 선택에 따라 추리 방향이 갈리고, 잘못 고르면 엉뚱한 사람을 잡거나 단서를 놓치는 실패 결말(결말 5개 이상). 그림 12장.':'광저우 실제 장소 4곳이 무대, 용의자 4명 심문(라운드마다 질문 하나만!), 그림 8장.')+' 인터넷 될 때만.</p><div class="chips" id="gn">'+Object.keys(S.genres).map(function(k){return '<button class="chip'+(k===(ls('air-genre')||'classic')?' on':'')+'" data-g="'+k+'">'+esc(S.genres[k])+'</button>';}).join('')+'</div><button class="big" id="mk"'+(navigator.onLine?'':' disabled')+'>🕵️ 사건 만들기</button></div>';
   if(S.hist&&S.hist.length)h+='<div class="card"><h2>지난 사건</h2>'+S.hist.slice(0,10).map(function(x){return '<div class="muted">'+esc(x.date)+' · '+esc(x.title)+' · '+(x.kind==='book'?'📚 결말 '+(x.who||'')+(x.ok?' ✅':''):(x.ok?'✅ '+x.score+'점':'❌'))+'</div>';}).join('')+'</div>';
@@ -472,7 +472,7 @@ function playBook(){B=ls('air-play:'+CUR.id)||{started:true,at:'n1',path:['n1'],
 function saveBook(){ls('air-play:'+CUR.id,B);}
 function drawBook(){
   var n=CUR.nodes[B.at]||CUR.nodes.n1;var pg=B.path.length;
-  $('pts').innerHTML='<span class="score">'+pg+'쪽 · 결말 '+B.seen.length+'/'+CUR.ends.length+'</span>';
+  $('pts').innerHTML='<span class="score">'+pg+'쪽 · 결말 발견 '+B.seen.length+'/'+CUR.ends.length+'</span>';
   var im=(CUR.imgs||{})[n.id];
   var h='<div class="card" style="padding:0;overflow:hidden">'+(im?'<img class="scene" src="'+esc(im)+'" alt="" style="border-radius:0;margin:0;aspect-ratio:4/3">':'')+'<div style="padding:14px"><p class="story" style="margin:0">'+esc(n.text)+'</p></div></div>';
   if(n.end){var E={good:['✅ 진상에 도달했다','end'],half:['🟡 반쯤 맞았다','end'],bad:['❌ 추리 실패','end']}[n.end];
