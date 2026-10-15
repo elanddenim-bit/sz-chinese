@@ -137,6 +137,10 @@ function calcAnchor(k){
     a=b+864e5}
   return {rows:out,units:units,hiUnits:hiUnits,sixth:sixth,work3:wS?dt(D.dad.work.slice(0,4)*1+3+D.dad.work.slice(4))-864e5:null,anchor:true};
 }
+// 귀임 시점을 학기 끝에 맞춤: 요건 충족일이 학기 도중이면 그 학기 끝(다음 학기 시작 전날)으로. 한국 학교는 3월(1~2월 귀임)·9월(6~8월 귀임) 편입
+function snapEnd(k,t){var rs=(D.kids[k].rows||[]).slice().sort(function(x,y){return (x.s||'')<(y.s||'')?-1:1});
+  for(var i=0;i<rs.length;i++){var a=dt(rs[i].s),b=rs[i+1]?dt(rs[i+1].s)-864e5:dt(rs[i].e);if(!a||!b)continue;if(t>=a&&t<=b)return {t:b,row:rs[i],mid:t<b-864e5*20}}return {t:t,row:null,mid:false}}
+function krTerm(t){var d=new Date(t),y=d.getUTCFullYear(),m=d.getUTCMonth()+1;if(m<=2)return y+'년 3월 신학기';if(m<=8)return y+'년 9월(2학기 편입)';return (y+1)+'년 3월 신학기'}
 function cell(v,ok,need){return v==null?'<td class="dim">—</td>':'<td class="n '+(ok?'ok':'bad')+'">'+v+'<small class="dim">/'+need+'</small></td>'}
 function render(){
   if(!D.kids.length)D.kids.push({id:uid(),name:'자녀 1',rows:[]});if(K>=D.kids.length)K=D.kids.length-1;
@@ -158,8 +162,10 @@ function render(){
   D.kids.forEach(function(c,i){var Q=calc(i),ok6=Q.units>=6,hi=Q.hiUnits>=2,all=ok6&&hi&&Q.work3;
     h+='<div class="uni"><b>'+esc(c.name)+'</b> <span class="big '+(all?'ok':'bad')+'" style="font-size:16px">'+(all?'✓ 자격 충족(계획대로 가면)':'✗ 아직 미충족')+'</span>'
       +'<div class="kv"><div>인정 학기<b class="'+(ok6?'ok':'bad')+'">'+Q.units+' / 6</b></div><div>고교 학기 포함<b class="'+(hi?'ok':'bad')+'">'+Q.hiUnits+' / 2</b></div><div>6학기+고교 2학기 완성<b>'+(Q.sixth?ds(Q.sixth):'—')+'</b></div></div>';
-    if(Q.sixth&&Q.work3){var earliest=Math.max(Q.sixth,Q.work3);h+='<p style="margin:8px 0 0;font-size:13px"><b>최조 귀임 가능 시점 '+ds(earliest)+'</b>(보수적 공통 기준) — 그 전에 누구라도 체류 비율이 깨지면 그 학기는 통째로 빠집니다.</p>'}
-    h+='<table class="t" style="margin-top:8px"><thead><tr><th>대학</th><th>인정</th><th>고교</th><th>완성일</th><th>귀임 가능</th><th>판정</th></tr></thead><tbody>'+UNI.map(function(u){var q=calc(i,u),o6=q.units>=6,oh=q.hiUnits>=2,ok=o6&&oh&&q.work3,er=(q.sixth&&q.work3)?ds(Math.max(q.sixth,q.work3)):'—';
+    if(Q.sixth&&Q.work3){var earliest=Math.max(Q.sixth,Q.work3),sn=snapEnd(i,earliest);
+      h+='<p style="margin:8px 0 0;font-size:13px"><b>요건 충족일 '+ds(earliest)+'</b>'+(sn.mid?' — 학기 도중이라 그날 돌아가면 그 학기('+esc(sn.row.g)+' '+(sn.row.t==='y'?'학년':sn.row.t+'학기')+') 성적이 날아갑니다.':'')+'</p>'
+        +'<p style="margin:4px 0 0;font-size:13px">✂️ <b>학기 끝에 맞춘 귀임: '+ds(sn.t)+'</b>'+(sn.row?' ('+esc(sn.row.g)+' '+(sn.row.t==='y'?'학년':sn.row.t+'학기')+' 끝, 방학 포함)':'')+' → 한국 학교 <b>'+krTerm(sn.t+864e5)+'</b>. 그 전에 누구라도 체류 비율이 깨지면 그 학기는 통째로 빠집니다.</p>'}
+    h+='<table class="t" style="margin-top:8px"><thead><tr><th>대학</th><th>인정</th><th>고교</th><th>요건 충족</th><th>학기 끝 귀임</th><th>판정</th></tr></thead><tbody>'+UNI.map(function(u){var q=calc(i,u),o6=q.units>=6,oh=q.hiUnits>=2,ok=o6&&oh&&q.work3,er=(q.sixth&&q.work3)?ds(snapEnd(i,Math.max(q.sixth,q.work3)).t):'—';
       return '<tr><td><b>'+u.n+'</b>'+(u.anchor?' <small class="dim">학년(편입일 365일)</small>':'')+'</td><td class="n '+(o6?'ok':'bad')+'">'+q.units+'/6</td><td class="n '+(oh?'ok':'bad')+'">'+q.hiUnits+'/2</td><td>'+(q.sixth?ds(q.sixth):'—')+'</td><td>'+er+'</td><td class="'+(ok?'ok':'bad')+'">'+(ok?'✓':'✗')+'</td></tr>'}).join('')+'</tbody></table>'
       +'<p class="m" style="margin:6px 0 0">출입국 당일 처리(연세대 둘 다 제외·고려대/성균관대 출국일 포함·한양대 입국일 포함)와 성균관대의 편입일 기준 학년 산정을 반영. 한양대 서울은 요강 원문 미확인(ERICA 기준).</p>';
     DAYMODE='both';
