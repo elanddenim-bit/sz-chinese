@@ -32,6 +32,9 @@ table.t{width:100%;border-collapse:collapse;font-size:12.5px}.t th{text-align:le
 .kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:8px}.kv div{background:#fff;border-radius:8px;padding:8px 10px;font-size:12.5px}.kv b{display:block;font-size:15px;margin-top:2px}
 .big{font-size:21px;font-weight:800;margin:4px 0}.warn{background:#FBE7EA;border-left:3px solid var(--red);padding:8px 10px;border-radius:6px;font-size:13px;margin-top:8px}
 .uni{margin:8px 0;padding:8px 10px;background:#fff;border-radius:8px;font-size:13px}.uni p{margin:3px 0 0;color:var(--ink2)}.uni a{color:var(--sky)}
+.rows{display:flex;flex-direction:column;gap:6px;margin-top:6px}.row{background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 10px}.row.pass{border-left:4px solid var(--ok)}.row.fail{border-left:4px solid var(--red)}.row.na{border-left:4px solid var(--line)}
+.row .l1{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.row .l1 input.g{width:52px}.row .l1 select{min-width:0}.row .l1 input[type=date]{min-width:118px}.row .l1 .end{font-size:12.5px;color:var(--ink2)}.row .l1 .v{margin-left:auto;font-weight:800;font-size:13px;white-space:nowrap}
+.row .l2{font-size:11.5px;color:var(--ink2);margin-top:4px;display:flex;flex-wrap:wrap;gap:4px 10px}.row .l2 b{font-weight:700}.row .l2 .ok{color:var(--ok)}.row .l2 .bad{color:var(--red)}
 .bar{position:fixed;left:0;right:0;bottom:0;padding:10px 16px calc(env(safe-area-inset-bottom) + 10px);background:var(--bg);border-top:1px solid var(--line);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 14px;border-radius:999px;font-size:13px;opacity:0;transition:.2s;pointer-events:none}.toast.on{opacity:1}
 </style></head><body>
@@ -42,8 +45,8 @@ table.t{width:100%;border-collapse:collapse;font-size:12.5px}.t th{text-align:le
 <section class="box"><h2>① 자녀</h2>
 <div class="tabs" id="ktabs"></div>
 <div class="quick" id="kq"></div>
-<p class="m">한 행 = 한 학기(1학기·2학기) 또는 학년 전체. 기간은 학기 시작일부터 다음 학기 시작 전날까지. 한국에서 다닌 학기는 '재학 국가'를 한국으로.</p>
-<table class="t" id="yt"><thead><tr><th>학년</th><th>한국</th><th>학기</th><th>국가</th><th>시작</th><th>종료</th><th>일수</th><th>학생</th><th>아빠</th><th>엄마</th><th>판정</th><th></th></tr></thead><tbody></tbody></table>
+<p class="m">한 행 = 한 학기(또는 학년 전체). 종료일은 <b>다음 행 시작 전날</b>로 자동(방학 포함 — 요강의 산정 방식), 마지막 행만 직접 적어요. 한국에서 다닌 학기는 국가를 한국으로.</p>
+<div class="rows" id="yt"></div>
 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"><button class="b2" id="yadd">+ 학기 행 추가</button><button class="b2" id="kdel" style="color:var(--red)">이 자녀 삭제</button></div>
 </section>
 
@@ -105,14 +108,16 @@ function calc(k,u){
   if(u&&u.anchor)return calcAnchor(k);
   var out=[],units=0,hiUnits=0,sixth=null,who='k'+k;
   var dS=dt(D.dad.stay),dE=dt(D.dad.stayEnd),mS=dt(D.mom.stay),mE=dt(D.mom.stayEnd),wS=dt(D.dad.work),wE=dt(D.dad.workEnd);
-  (D.kids[k].rows||[]).slice().sort(function(x,y){return (x.s||'')<(y.s||'')?-1:1}).forEach(function(y){
-    var a=dt(y.s),b=dt(y.e);if(!a||!b||b<a){out.push({y:y,bad:1});return}
+  var rs=(D.kids[k].rows||[]).slice().sort(function(x,y){return (x.s||'')<(y.s||'')?-1:1});
+  rs.forEach(function(y,i){
+    var a=dt(y.s),nx=rs[i+1]?dt(rs[i+1].s):null,b=nx?nx-864e5:dt(y.e);y._e=b?ds(b):'';if(!a||!b||b<a){out.push({y:y,bad:1});return}
     var len=days(a,b),ns=Math.floor(len*3/4),np=Math.floor(len*2/3),u=y.t==='y'?2:1;
     var ps=present(who,null,null,a,b),pd=present('d',dS,dE,a,b),pm=D.mom.on?present('m',mS,mE,a,b):null;
-    var abroad=(y.c||'')!=='kr',inWork=wS?(a>=wS&&(!wE||b<=wE)):false;
+    var abroad=(y.c||'')!=='kr',inWork=wS?(a>=wS&&(!wE||b<=wE)):false,noP=!wS||!dS||(D.mom.on&&!mS);
     var okS=ps>=ns,okD=pd>=np,okM=!D.mom.on||pm>=np,pass=abroad&&okS&&okD&&okM&&inWork;
+    if(noP)pass=false;
     if(pass){units+=u;if(/^G1[0-2]$/.test(y.g))hiUnits+=u;if(units>=6&&hiUnits>=2&&!sixth)sixth=b}
-    out.push({y:y,len:len,ns:ns,np:np,ps:ps,pd:pd,pm:pm,okS:okS,okD:okD,okM:okM,abroad:abroad,inWork:inWork,pass:pass,u:u,slackS:ps-ns,slackD:pd-np,slackM:pm==null?null:pm-np});
+    out.push({y:y,len:len,ns:ns,np:np,ps:ps,pd:pd,pm:pm,okS:okS,okD:okD,okM:okM,abroad:abroad,inWork:inWork,noP:noP,pass:pass,u:u,slackS:ps-ns,slackD:pd-np,slackM:pm==null?null:pm-np});
   });
   var work3=wS?dt(D.dad.work.slice(0,4)*1+3+D.dad.work.slice(4))-864e5:null;
   return {rows:out,units:units,hiUnits:hiUnits,sixth:sixth,work3:work3};
@@ -141,10 +146,11 @@ function render(){
     +'<label>1학기 시작 <span><input id="qm1" type="number" min="1" max="12" value="'+(k.q&&k.q.m1||8)+'" style="width:50px"> / <input id="qd1" type="number" min="1" max="31" value="'+(k.q&&k.q.d1||15)+'" style="width:50px"></span></label><label>2학기 시작 <span><input id="qm2" type="number" min="1" max="12" value="'+(k.q&&k.q.m2||2)+'" style="width:50px"> / <input id="qd2" type="number" min="1" max="31" value="'+(k.q&&k.q.d2||1)+'" style="width:50px"></span></label>'
     +'<label>지금 학년도(1학기 시작 연도) <input id="qy" type="number" min="2015" max="2040" value="'+(k.q&&k.q.y||2026)+'" style="width:74px"></label><label>해외 첫 학기 <span><select id="qfg">'+GS.map(function(g){return '<option'+(g===(k.q&&k.q.fg||'G8')?' selected':'')+'>'+g+'</option>'}).join('')+'</select> <select id="qfs"><option value="1"'+((k.q&&k.q.fs)==='2'?'':' selected')+'>1학기</option><option value="2"'+((k.q&&k.q.fs)==='2'?' selected':'')+'>2학기</option></select></span></label><button class="b2" id="qgen">학기 표 만들기</button>';
   var R=calc(K),map={};R.rows.forEach(function(r){map[r.y.id]=r});
-  $('yt').querySelector('tbody').innerHTML=(k.rows||[]).map(function(y){var r=map[y.id]||{};
-    return '<tr data-id="'+y.id+'"><td><input data-k="g" value="'+esc(y.g)+'" style="width:46px"></td><td class="dim">'+(KO[y.g]||'')+'</td><td><select data-k="t"><option value="1"'+(y.t==='1'?' selected':'')+'>1학기</option><option value="2"'+(y.t==='2'?' selected':'')+'>2학기</option><option value="y"'+(y.t==='y'?' selected':'')+'>학년 전체</option></select></td><td><select data-k="c"><option value="cn"'+(y.c==='cn'?' selected':'')+'>중국</option><option value="other"'+(y.c==='other'?' selected':'')+'>다른 해외</option><option value="kr"'+(y.c==='kr'?' selected':'')+'>한국</option></select></td><td><input type="date" data-k="s" value="'+esc(y.s)+'"></td><td><input type="date" data-k="e" value="'+esc(y.e)+'"></td><td class="n">'+(r.len||'')+'</td>'
-      +(r.len?cell(r.ps,r.okS,r.ns)+cell(r.pd,r.okD,r.np)+(r.pm==null?'<td class="dim">—</td>':cell(r.pm,r.okM,r.np)):'<td></td><td></td><td></td>')
-      +'<td>'+(r.bad?'<span class="bad">날짜?</span>':r.pass?'<span class="ok">✓ '+(r.u===2?'2학기':'1학기')+'</span>':!r.abroad?'<span class="dim">한국</span>':!r.inWork?'<span class="bad">근무기간 밖</span>':'<span class="bad">✗</span>')+'</td><td><button class="x" data-del="'+y.id+'">×</button></td></tr>'}).join('');
+  var sorted=(k.rows||[]).slice().sort(function(x,y){return (x.s||'')<(y.s||'')?-1:1});
+  $('yt').innerHTML=sorted.map(function(y,i){var r=map[y.id]||{},last=i===sorted.length-1,st=r.bad?'na':r.pass?'pass':(r.noP||!r.abroad)?'na':'fail';
+    var v=r.bad?'<span class="dim">날짜?</span>':r.pass?'<span class="ok">✓ '+(r.u===2?'2학기':'1학기')+'</span>':!r.abroad?'<span class="dim">한국</span>':r.noP?'<span class="dim">부모 입력 전</span>':!r.inWork?'<span class="bad">근무기간 밖</span>':'<span class="bad">✗ 체류 부족</span>';
+    var nums=r.len?'<span>'+r.len+'일</span><span class="'+(r.okS?'ok':'bad')+'">학생 '+r.ps+'/'+r.ns+'</span><span class="'+(r.okD?'ok':'bad')+'">아빠 '+r.pd+'/'+r.np+'</span>'+(r.pm==null?'':'<span class="'+(r.okM?'ok':'bad')+'">엄마 '+r.pm+'/'+r.np+'</span>'):'';
+    return '<div class="row '+st+'" data-id="'+y.id+'"><div class="l1"><input class="g" data-k="g" value="'+esc(y.g)+'" aria-label="학년"><span class="dim" style="font-size:12px">'+(KO[y.g]||'')+'</span><select data-k="t"><option value="1"'+(y.t==='1'?' selected':'')+'>1학기</option><option value="2"'+(y.t==='2'?' selected':'')+'>2학기</option><option value="y"'+(y.t==='y'?' selected':'')+'>학년 전체</option></select><select data-k="c"><option value="cn"'+(y.c==='cn'?' selected':'')+'>중국</option><option value="other"'+(y.c==='other'?' selected':'')+'>다른 해외</option><option value="kr"'+(y.c==='kr'?' selected':'')+'>한국</option></select><input type="date" data-k="s" value="'+esc(y.s)+'">'+(last?'<span class="end">~</span><input type="date" data-k="e" value="'+esc(y.e)+'" aria-label="종료">':'<span class="end">~ '+esc(y._e||'')+'</span>')+'<span class="v">'+v+'</span><button class="x" data-del="'+y.id+'">×</button></div>'+(nums?'<div class="l2">'+nums+'</div>':'')+'</div>'}).join('');
   $('at').querySelector('tbody').innerHTML=D.abs.map(function(x){var s=dt(x.s),e=dt(x.e);return '<tr data-id="'+x.id+'"><td><select data-k="who">'+D.kids.map(function(c,i){return '<option value="k'+i+'"'+(x.who==='k'+i?' selected':'')+'>'+esc(c.name)+'</option>'}).join('')+'<option value="d"'+(x.who==='d'?' selected':'')+'>아빠</option><option value="m"'+(x.who==='m'?' selected':'')+'>엄마</option></select></td><td><input type="date" data-k="s" value="'+esc(x.s)+'"></td><td><input type="date" data-k="e" value="'+esc(x.e)+'"></td><td class="n">'+(s&&e&&e>=s?days(s,e):'')+'</td><td><input data-k="memo" value="'+esc(x.memo)+'" placeholder="한국 방문"></td><td><button class="x" data-del="'+x.id+'">×</button></td></tr>'}).join('');
   $('dwork').value=D.dad.work||'';$('dworkEnd').value=D.dad.workEnd||'';$('dstay').value=D.dad.stay||'';$('dstayEnd').value=D.dad.stayEnd||'';$('mon').checked=!!D.mom.on;$('mstay').value=D.mom.stay||'';$('mstayEnd').value=D.mom.stayEnd||'';
   // 판정 — 자녀 전체
@@ -159,7 +165,7 @@ function render(){
     DAYMODE='both';
     var now=Date.now(),cur=Q.rows.filter(function(r){return r.len&&dt(r.y.s)<=now&&dt(r.y.e)>=now})[0];
     if(cur)h+='<p class="m" style="margin:6px 0 0">이번 학기('+esc(cur.y.g)+') 남은 여유 — 자녀 <b class="'+(cur.slackS>=0?'ok':'bad')+'">'+cur.slackS+'일</b> · 아빠 <b class="'+(cur.slackD>=0?'ok':'bad')+'">'+cur.slackD+'일</b>'+(cur.slackM==null?'':' · 엄마 <b class="'+(cur.slackM>=0?'ok':'bad')+'">'+cur.slackM+'일</b>')+' 더 벗어나도 됨(남은 기간 전부 근무지에 있다고 가정)</p>';
-    Q.rows.forEach(function(r){if(!r.len||!r.abroad)return;var w=[];if(!r.okS)w.push('자녀 '+r.ps+'일 < '+r.ns+'일');if(!r.okD)w.push('아빠 '+r.pd+'일 < '+r.np+'일');if(D.mom.on&&!r.okM)w.push('엄마 '+r.pm+'일 < '+r.np+'일');if(!r.inWork)w.push('해외 근무 기간 밖');if(w.length)h+='<div class="warn"><b>'+esc(r.y.g)+' '+(r.y.t==='y'?'학년':r.y.t+'학기')+' ('+esc(r.y.s)+'~'+esc(r.y.e)+')</b>: '+w.join(' · ')+'</div>'});
+    Q.rows.forEach(function(r){if(!r.len||!r.abroad||r.noP)return;var w=[];if(!r.okS)w.push('자녀 '+r.ps+'일 < '+r.ns+'일');if(!r.okD)w.push('아빠 '+r.pd+'일 < '+r.np+'일');if(D.mom.on&&!r.okM)w.push('엄마 '+r.pm+'일 < '+r.np+'일');if(!r.inWork)w.push('해외 근무 기간 밖');if(w.length)h+='<div class="warn"><b>'+esc(r.y.g)+' '+(r.y.t==='y'?'학년':r.y.t+'학기')+' ('+esc(r.y.s)+'~'+esc(r.y._e||r.y.e)+')</b>: '+w.join(' · ')+'</div>'});
     h+='</div>'});
   h+='<div class="kv"><div>아빠 재직 3년 완성<b>'+(R.work3?ds(R.work3):'근무 시작일 입력')+'</b></div></div>';
   $('res').innerHTML=h;
@@ -175,7 +181,9 @@ function gen(){var k=kid(),q={g:$('qg').value,s:$('qs').value,m1:+$('qm1').value
   render();save(true)}
 document.addEventListener('input',function(e){var t=e.target,tr=t.closest('tr');
   if(t.id==='kname'){kid().name=t.value;return}
-  if(tr&&t.dataset.k){var id=tr.dataset.id,arr=tr.closest('table').id==='yt'?kid().rows:D.abs,o=arr.filter(function(x){return x.id===id})[0];if(o){o[t.dataset.k]=t.value;if(t.type==='date'||t.tagName==='SELECT')render();else if(t.dataset.k==='g')tr.children[1].textContent=KO[t.value]||''}return}
+  var rw=t.closest('.row');
+  if(rw&&t.dataset.k){var o1=kid().rows.filter(function(x){return x.id===rw.dataset.id})[0];if(o1){o1[t.dataset.k]=t.value;if(t.type==='date'||t.tagName==='SELECT')render();else if(t.dataset.k==='g'){rw.querySelector('.l1 .dim').textContent=KO[t.value]||''}}return}
+  if(tr&&t.dataset.k){var id=tr.dataset.id,o=D.abs.filter(function(x){return x.id===id})[0];if(o){o[t.dataset.k]=t.value;if(t.type==='date'||t.tagName==='SELECT')render()}return}
   var m={dwork:['dad','work'],dworkEnd:['dad','workEnd'],dstay:['dad','stay'],dstayEnd:['dad','stayEnd'],mstay:['mom','stay'],mstayEnd:['mom','stayEnd']}[t.id];
   if(m){D[m[0]][m[1]]=t.value;render()}if(t.id==='mon'){D.mom.on=t.checked;render()}
 });
@@ -184,7 +192,7 @@ document.addEventListener('click',function(e){var b=e.target.closest('button');i
   if(b.dataset.kid!=null){if(b.dataset.kid==='new'){D.kids.push({id:uid(),name:'자녀 '+(D.kids.length+1),rows:[]});K=D.kids.length-1}else K=+b.dataset.kid;render();return}
   if(b.dataset.del){kid().rows=kid().rows.filter(function(x){return x.id!==b.dataset.del});D.abs=D.abs.filter(function(x){return x.id!==b.dataset.del});render()}
   if(b.id==='qgen')gen();
-  if(b.id==='yadd'){var rows=kid().rows,last=rows[rows.length-1];var s=last?ds(dt(last.e)+864e5):'';rows.push({id:uid(),g:last?last.g:'',t:last&&last.t==='1'?'2':'1',c:'cn',s:s,e:''});render()}
+  if(b.id==='yadd'){var rows=kid().rows,last=rows.slice().sort(function(x,y){return (x.s||'')<(y.s||'')?-1:1}).pop();var s=last&&last.e?ds(dt(last.e)+864e5):'';rows.push({id:uid(),g:last?last.g:'',t:last&&last.t==='1'?'2':'1',c:'cn',s:s,e:''});render()}
   if(b.id==='kdel'){if(D.kids.length<=1)return toast('자녀는 한 명 이상 있어야 해요');if(!confirm(kid().name+' 자료를 지울까요?'))return;var who='k'+K;D.abs=D.abs.filter(function(x){return x.who!==who});D.kids.splice(K,1);K=0;render();save(true)}
   if(b.id==='aadd'){D.abs.push({id:uid(),who:'k'+K,s:'',e:'',memo:''});render()}
   if(b.id==='save')save();
