@@ -64,7 +64,9 @@ table.t{width:100%;border-collapse:collapse;font-size:12.5px}.t th{text-align:le
 
 <section class="box"><h2>기준·메모</h2>
 <div class="uni"><b>연세대 (재외국민 특별전형 · 3년)</b><p>고교 1개 학년 포함 중·고교 3개 학년(6학기) 이상 국외 정규학교 수료. 학생은 각 학년(학기) 기간의 3/4, 부모(배우자 동반)는 2/3 이상 체류. 총 초·중·고 23학기 이상, 검정고시·홈스쿨 불인정, 학제 차이로 생긴 1학기 결손 인정. 지원 시 중학교 입학~고교 졸업 출입국 기록 전부 조회. <a href="https://admission.yonsei.ac.kr/seoul/admission/html/abroad/" target="_blank" rel="noopener">입학처 안내 ↗</a></p></div>
-<div class="uni"><b>다른 대학</b><p>고려대·성균관대·서울대(글로벌인재 II) 등도 같은 교육부 공통 자격을 쓰지만 체류 비율·학기 산정·연속 요건이 조금씩 달라요. 이 계산기는 연세대 기준을 학기 단위로 보수적으로 적용한 참고용입니다.</p></div>
+<div class="uni"><b>고려대 (재외국민 3년)</b><p>같은 공통 자격(3/4·2/3·배우자 동반·재직 3년). 출국일은 국외 체류로, 입국일은 제외. 학제 차이 1학기 결손 인정, 국내·국외 학기가 겹치면 1학기만 인정. 1단계 서류 100%(3배수) → 1단계 70% + 면접 30%. 2027학년도부터 인문·자연·의학 계열 단위 선발, 모집 78명.</p></div>
+<div class="uni"><b>성균관대 (재외국민 3년)</b><p>같은 공통 자격. 출국일 포함·입국일 제외. <b>중간 편입은 편입일부터 365일을 1개 학년으로</b> 봐서 2학기에 시작한 경우에 유리. 1학기 결손 인정. 서류평가 100%(의예과만 2단계 면접 30%). 접수 7월 초(2026학년도는 7/7~7/10).</p></div>
+<div class="uni"><b>한양대 (중·고교과정 해외이수자)</b><p>서울 캠퍼스 2027 요강은 웹에서 본문을 못 열어 <b>ERICA 요강 기준</b>으로 넣었어요(같은 학교 공통 규정일 가능성이 높지만 확인 필요): 재직 역년 통산 3년(1,095일, 유학·연수·출장 불인정), <b>입국일은 국외 체류로, 출국일은 제외</b>(다른 대학과 반대), 학제 결손 1학기 인정, 1단계 서류 100%(5배수) → 2단계 자격심사, 면접 없음, 서류 반영 학업 40·진로 40·공동체 20. 서울 접수 2026-07-07~07-09.</p></div>
 <p class="m">※ 참고용 계산입니다. 최종 판단은 지원 학년도 모집요강 원문과 입학처 문의로 확인하세요. 특히 출입국 당일 포함 여부·학기 산정 방식은 대학마다 다릅니다.</p>
 </section>
 <div class="bar"><button class="b1" id="save">💾 저장</button><button class="b2" id="exp">내보내기</button><label class="b2" style="cursor:pointer">불러오기<input type="file" id="imp" accept="application/json" style="display:none"></label><span id="saved" class="m" style="margin:0"></span></div>
@@ -82,15 +84,25 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return
 function uid(){return Math.random().toString(36).slice(2,8)}
 function toast(t){var e=$('toast');e.textContent=t;e.classList.add('on');setTimeout(function(){e.classList.remove('on')},1800)}
 function kid(){return D.kids[K]}
+// 대학별 차이(2026~27 요강): day = 출입국 당일 처리(both 둘 다 벗어난 날로(보수적) / dep 출국일은 국외 체류로 / arr 입국일은 국외 체류로), anchor = 중간 편입 시 편입일부터 365일을 1개 학년으로
+var UNI=[
+ {k:'ys',n:'연세대',day:'both',anchor:false,m:'1단계 서류 → 2단계 서류+면접 · 접수 7월 초 · 당일 처리 미명시(보수적으로 둘 다 제외) · 학제 차이 1학기 결손 인정'},
+ {k:'ku',n:'고려대',day:'dep',anchor:false,m:'서류 100%(3배수) → 1단계 70%+면접 30% · 2027부터 계열 단위 선발 · 출국일은 국외 체류, 입국일 제외 · 국내외 학기 겹침은 1학기만 인정'},
+ {k:'sk',n:'성균관대',day:'dep',anchor:true,m:'서류 100%(의예 면접) · 접수 7월 초 · 출국일 포함·입국일 제외 · 중간 편입은 편입일부터 365일을 1개 학년으로(2학기 시작에 유리)'},
+ {k:'hy',n:'한양대',day:'arr',anchor:false,m:'서울 캠퍼스 요강 원문 미확인 — ERICA 기준 적용: 서류 100%(5배수)+자격심사, 면접 없음 · 입국일은 국외 체류, 출국일 제외 · 접수 7/7~7/9 · 재직 3년은 발령일·출국일 중 늦은 날부터'}
+];
+var DAYMODE='both';
 // 어떤 사람이 [a,b] 기간 중 근무지 국가에 있던 날 — 체류 시작 전·종료 후 + 벗어난 기간을 뺌
 function present(who,stayS,stayE,a,b){
   var len=days(a,b),away=0;
   if(stayS&&stayS>a)away+=days(a,Math.min(b,stayS-864e5));
   if(stayE&&stayE<b)away+=days(Math.max(a,stayE+864e5),b);
-  D.abs.forEach(function(x){if(x.who!==who)return;var s=dt(x.s),e=dt(x.e);if(!s||!e||e<s)return;var lo=Math.max(s,a),hi=Math.min(e,b);if(hi>=lo)away+=days(lo,hi)});
+  D.abs.forEach(function(x){if(x.who!==who)return;var s=dt(x.s),e=dt(x.e);if(!s||!e||e<s)return;if(DAYMODE==='dep')s+=864e5;else if(DAYMODE==='arr')e-=864e5;if(e<s)return;var lo=Math.max(s,a),hi=Math.min(e,b);if(hi>=lo)away+=days(lo,hi)});
   return Math.max(0,len-away);
 }
-function calc(k){
+function calc(k,u){
+  DAYMODE=u?u.day:'both';
+  if(u&&u.anchor)return calcAnchor(k);
   var out=[],units=0,hiUnits=0,sixth=null,who='k'+k;
   var dS=dt(D.dad.stay),dE=dt(D.dad.stayEnd),mS=dt(D.mom.stay),mE=dt(D.mom.stayEnd),wS=dt(D.dad.work),wE=dt(D.dad.workEnd);
   (D.kids[k].rows||[]).slice().sort(function(x,y){return (x.s||'')<(y.s||'')?-1:1}).forEach(function(y){
@@ -104,6 +116,21 @@ function calc(k){
   });
   var work3=wS?dt(D.dad.work.slice(0,4)*1+3+D.dad.work.slice(4))-864e5:null;
   return {rows:out,units:units,hiUnits:hiUnits,sixth:sixth,work3:work3};
+}
+// 편입일 기준 365일 창(성균관대 식): 첫 국외 행 시작일부터 365일씩 — 창 안이 전부 국외 행으로 덮여야 하고, 창의 절반 이상이 고교 행이면 고교 학년
+function calcAnchor(k){
+  var who='k'+k,rows=(D.kids[k].rows||[]).filter(function(y){return dt(y.s)&&dt(y.e)&&(y.c||'')!=='kr'}).sort(function(x,y){return dt(x.s)-dt(y.s)});
+  var dS=dt(D.dad.stay),dE=dt(D.dad.stayEnd),mS=dt(D.mom.stay),mE=dt(D.mom.stayEnd),wS=dt(D.dad.work),wE=dt(D.dad.workEnd);
+  var out=[],units=0,hiUnits=0,sixth=null;if(!rows.length)return {rows:out,units:0,hiUnits:0,sixth:null,work3:wS?dt(D.dad.work.slice(0,4)*1+3+D.dad.work.slice(4))-864e5:null,anchor:true};
+  var a=dt(rows[0].s),last=Math.max.apply(null,rows.map(function(y){return dt(y.e)}));
+  while(a+364*864e5<=last){var b=a+364*864e5,len=365,cov=0,hi=0;
+    rows.forEach(function(y){var lo=Math.max(dt(y.s),a),hiD=Math.min(dt(y.e),b);if(hiD>=lo){var d=days(lo,hiD);cov+=d;if(/^G1[0-2]$/.test(y.g))hi+=d}});
+    var ns=Math.floor(len*3/4),np=Math.floor(len*2/3),ps=present(who,null,null,a,b),pd=present('d',dS,dE,a,b),pm=D.mom.on?present('m',mS,mE,a,b):null;
+    var full=cov>=len-3,inWork=wS?(a>=wS&&(!wE||b<=wE)):false,okS=ps>=ns,okD=pd>=np,okM=!D.mom.on||pm>=np,pass=full&&okS&&okD&&okM&&inWork,isHi=hi>=len/2;
+    if(pass){units+=2;if(isHi)hiUnits+=2;if(units>=6&&hiUnits>=2&&!sixth)sixth=b}
+    out.push({y:{g:(isHi?'고교':'중학')+' 학년',t:'y',s:ds(a),e:ds(b)},len:len,ns:ns,np:np,ps:ps,pd:pd,pm:pm,okS:okS,okD:okD,okM:okM,abroad:full,inWork:inWork,pass:pass,u:2,slackS:ps-ns,slackD:pd-np,slackM:pm==null?null:pm-np});
+    a=b+864e5}
+  return {rows:out,units:units,hiUnits:hiUnits,sixth:sixth,work3:wS?dt(D.dad.work.slice(0,4)*1+3+D.dad.work.slice(4))-864e5:null,anchor:true};
 }
 function cell(v,ok,need){return v==null?'<td class="dim">—</td>':'<td class="n '+(ok?'ok':'bad')+'">'+v+'<small class="dim">/'+need+'</small></td>'}
 function render(){
@@ -125,7 +152,11 @@ function render(){
   D.kids.forEach(function(c,i){var Q=calc(i),ok6=Q.units>=6,hi=Q.hiUnits>=2,all=ok6&&hi&&Q.work3;
     h+='<div class="uni"><b>'+esc(c.name)+'</b> <span class="big '+(all?'ok':'bad')+'" style="font-size:16px">'+(all?'✓ 자격 충족(계획대로 가면)':'✗ 아직 미충족')+'</span>'
       +'<div class="kv"><div>인정 학기<b class="'+(ok6?'ok':'bad')+'">'+Q.units+' / 6</b></div><div>고교 학기 포함<b class="'+(hi?'ok':'bad')+'">'+Q.hiUnits+' / 2</b></div><div>6학기+고교 2학기 완성<b>'+(Q.sixth?ds(Q.sixth):'—')+'</b></div></div>';
-    if(Q.sixth&&Q.work3){var earliest=Math.max(Q.sixth,Q.work3);h+='<p style="margin:8px 0 0;font-size:13px"><b>최조 귀임 가능 시점 '+ds(earliest)+'</b> — 그 전에 누구라도 체류 비율이 깨지면 그 학기는 통째로 빠집니다.</p>'}
+    if(Q.sixth&&Q.work3){var earliest=Math.max(Q.sixth,Q.work3);h+='<p style="margin:8px 0 0;font-size:13px"><b>최조 귀임 가능 시점 '+ds(earliest)+'</b>(보수적 공통 기준) — 그 전에 누구라도 체류 비율이 깨지면 그 학기는 통째로 빠집니다.</p>'}
+    h+='<table class="t" style="margin-top:8px"><thead><tr><th>대학</th><th>인정</th><th>고교</th><th>완성일</th><th>귀임 가능</th><th>판정</th></tr></thead><tbody>'+UNI.map(function(u){var q=calc(i,u),o6=q.units>=6,oh=q.hiUnits>=2,ok=o6&&oh&&q.work3,er=(q.sixth&&q.work3)?ds(Math.max(q.sixth,q.work3)):'—';
+      return '<tr><td><b>'+u.n+'</b>'+(u.anchor?' <small class="dim">학년(편입일 365일)</small>':'')+'</td><td class="n '+(o6?'ok':'bad')+'">'+q.units+'/6</td><td class="n '+(oh?'ok':'bad')+'">'+q.hiUnits+'/2</td><td>'+(q.sixth?ds(q.sixth):'—')+'</td><td>'+er+'</td><td class="'+(ok?'ok':'bad')+'">'+(ok?'✓':'✗')+'</td></tr>'}).join('')+'</tbody></table>'
+      +'<p class="m" style="margin:6px 0 0">출입국 당일 처리(연세대 둘 다 제외·고려대/성균관대 출국일 포함·한양대 입국일 포함)와 성균관대의 편입일 기준 학년 산정을 반영. 한양대 서울은 요강 원문 미확인(ERICA 기준).</p>';
+    DAYMODE='both';
     var now=Date.now(),cur=Q.rows.filter(function(r){return r.len&&dt(r.y.s)<=now&&dt(r.y.e)>=now})[0];
     if(cur)h+='<p class="m" style="margin:6px 0 0">이번 학기('+esc(cur.y.g)+') 남은 여유 — 자녀 <b class="'+(cur.slackS>=0?'ok':'bad')+'">'+cur.slackS+'일</b> · 아빠 <b class="'+(cur.slackD>=0?'ok':'bad')+'">'+cur.slackD+'일</b>'+(cur.slackM==null?'':' · 엄마 <b class="'+(cur.slackM>=0?'ok':'bad')+'">'+cur.slackM+'일</b>')+' 더 벗어나도 됨(남은 기간 전부 근무지에 있다고 가정)</p>';
     Q.rows.forEach(function(r){if(!r.len||!r.abroad)return;var w=[];if(!r.okS)w.push('자녀 '+r.ps+'일 < '+r.ns+'일');if(!r.okD)w.push('아빠 '+r.pd+'일 < '+r.np+'일');if(D.mom.on&&!r.okM)w.push('엄마 '+r.pm+'일 < '+r.np+'일');if(!r.inWork)w.push('해외 근무 기간 밖');if(w.length)h+='<div class="warn"><b>'+esc(r.y.g)+' '+(r.y.t==='y'?'학년':r.y.t+'학기')+' ('+esc(r.y.s)+'~'+esc(r.y.e)+')</b>: '+w.join(' · ')+'</div>'});
