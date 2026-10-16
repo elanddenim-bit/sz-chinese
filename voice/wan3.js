@@ -60,7 +60,7 @@ function draw(){
     +'<p class="lbl">목소리</p>'+chips('vc',[['mine','🎙 내 목소리'+(ST.voiceMine?'':' (미등록)')],['Ethan','남성 Ethan'],['Cherry','여성 Cherry']],S.voice,'voice')
     +'<p class="lbl">길이</p>'+chips('sc',[[5,'5초'],[10,'10초'],[15,'15초'],[20,'20초'],[30,'30초']],S.sec,'sec')
     +'<p class="lbl">화질 · 비율</p>'+chips('rs',[['480P','480P (반값)'],['720P','720P']],S.res,'res')+'<div style="height:6px"></div>'+chips('rt',[['9:16','세로 9:16'],['16:9','가로 16:9'],['1:1','정사각']],S.ratio,'ratio')
-    +'<p class="lbl">속도</p>'+chips('fs',[['0','만상 3.0 (기본)'],['1','⚡ prime (빠름)']],S.fast?'1':'0','fast')
+    +'<p class="lbl">속도</p>'+chips('fs',[['0','만상 3.0 Prime (기본)'],['1','⚡ Prime']],S.fast?'1':'0','fast')
     +'<button class="big red" id="go">🎬 영상 만들기</button><p class="note" id="cnt"></p><div class="err" id="err"></div><div id="pend"></div></div>'
     +'<div class="card"><h2>만든 영상</h2><div id="gal" class="gal"></div><p class="note">소리(대사·효과음·배경음)까지 들어 있어요. 📥 저장 → 편집실 클립으로. 같은 캐릭터 그림을 계속 1번에 두면 시리즈가 됩니다.</p></div>';
   $('main').innerHTML=h;refs();

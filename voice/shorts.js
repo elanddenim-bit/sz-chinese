@@ -899,7 +899,7 @@ async function w3Make(env, b, h, synth) {
   const d = await w3Doc(env, h);
   if (d.day.sec + sec > w3Cap(env)) throw serr("오늘 영상 " + w3Cap(env) + "초 중 " + d.day.sec + "초를 썼어요. " + sec + "초는 넘어요.", 429);
   if (d.pend.length >= 2) throw serr("만드는 중인 영상이 2개예요. 하나 끝나면 다시.", 429);
-  const t = Date.now(), model = b.fast ? (env.SHORTS_W3_FAST || "wan3.0-video-prime") : (env.SHORTS_W3_MODEL || "wan3.0-video");
+  const t = Date.now(), model = b.fast ? (env.SHORTS_W3_FAST || "wan3.0-video-prime") : (env.SHORTS_W3_MODEL || "wan3.0-video-prime"); // 베이징 업무공간 모델 광장에 wan3.0-video 표준판이 없고 Prime 만 있음(2026-10-16 확인, 표준판 호출 → 400 빈 응답)
   // 참조 그림 → R2(보관) + 百炼 임시 저장소(oss://)
   const refs = [], media = [], roles = (Array.isArray(b.roles) ? b.roles : []).map((x) => String(x || "").slice(0, 40));
   for (let i = 0; i < imgs.length; i++) {
