@@ -928,7 +928,18 @@ async function w3Make(env, b, h, synth) {
   } catch {}
   if (!prompt) prompt = (imgs.length ? "保持图1角色外形一致。" : "") + scene + (say ? "。角色说出音频1的内容，口型同步。" : "");
   const body = { model, input: { prompt, ...(media.length ? { media } : {}) }, parameters: { resolution: res, ratio, duration: sec, audio: true, prompt_extend: true, watermark: false } };
-  const j = await dsRaw(env, "/services/aigc/video-generation/video-synthesis", body, { "X-DashScope-Async": "enable", ...OSSR });
+  let j;
+  try { j = await dsRaw(env, "/services/aigc/video-generation/video-synthesis", body, { "X-DashScope-Async": "enable", ...OSSR }); }
+  catch (e) {
+    // 400 이면 ① 프롬프트 자동 확장 끄고 ② 그래도 안 되면 千问 프롬프트 대신 짧은 기본 프롬프트로(심사·형식 문제 분리, 2026-10-16)
+    if (!/400/.test(String(e.message))) throw e;
+    try { j = await dsRaw(env, "/services/aigc/video-generation/video-synthesis", { ...body, parameters: { ...body.parameters, prompt_extend: false } }, { "X-DashScope-Async": "enable", ...OSSR }); }
+    catch (e2) {
+      const plain = (imgs.length ? "图1角色保持原有插画画风和外形。" : "") + (say ? "角色说出音频1的内容，口型同步。" : "") + "竖屏，光线自然。";
+      try { j = await dsRaw(env, "/services/aigc/video-generation/video-synthesis", { ...body, input: { ...body.input, prompt: plain } }, { "X-DashScope-Async": "enable", ...OSSR }); prompt = plain; }
+      catch (e3) { throw serr("百炼이 요청을 거절했어요(400). 프롬프트 확장 끄기·기본 프롬프트로도 실패 — " + String(e3.message).slice(0, 160) + " / 참조 " + media.map((m) => m.type).join(","), 502); }
+    }
+  }
   const task = j.output && j.output.task_id; if (!task) throw serr("작업 번호를 받지 못했어요.", 502);
   d.day.sec += sec;
   d.pend.push({ task, model, sec, res, ratio, refs, sayKey, say, scene, zh: prompt, title: title || scene.slice(0, 14), at: t });
