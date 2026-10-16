@@ -54,7 +54,8 @@ export async function liveRelay(req, env, ctx, url, allowed, hash) {
   for (const u of ups) {
     u.ws.addEventListener("message", (e) => {
       if (typeof e.data !== "string") return;
-      if (e.data.includes('"session.created"')) {
+      if (!u.set && (e.data.includes('"session.created"') || !e.data.startsWith('{"type":"response.audio.delta"'))) {
+        u.set = true;
         const session = { output_modalities: ["text", "audio"], translation: { language: u.lang }, turn_detection: { type: "speaker_detection", threshold: 0.5 } };
         if (clone) { session.enable_voice_clone = true; session.voice_clone_options = { frequency: "always" }; session.voice = "default"; }
         try { u.ws.send(JSON.stringify({ type: "session.update", session })); } catch { end("upstream_send"); }
@@ -132,7 +133,8 @@ function want(d,src){ // 자동 모드: 원문 언어로 어느 세션 음성을
   if(DIR!=='auto')return true;if(d==='zh')return HAN.test(src)||!CJK.test(src);return CJK.test(src)&&!HAN.test(src)}
 function send(o){if(S&&S.ws&&S.ws.readyState===1)S.ws.send(JSON.stringify(o))}
 function card(d){var el=document.createElement('div');el.className='t '+d;el.innerHTML='<div class="src"></div><div class="dst"></div>';$('main').appendChild(el);el.scrollIntoView({block:'end'});return el}
-function ev(e){var d=e._d||'zh',R=S.r[d];if(!R)return;var t=e.type;
+var DBG=[];function dbg(t){DBG.push(t);if(DBG.length>6)DBG.shift();if(S&&S.ready<S.n)say('연결 중… '+DBG.join(' › '))}
+function ev(e){var d=e._d||S.first,R=S.r[d]||S.r[S.first];var t=e.type;if(t!=='response.audio.delta')dbg(t+(e._d?'/'+e._d:''));if(!R)return;
   if(t==='session.updated'){S.ready=(S.ready||0)+1;if(S.ready>=S.n)say(DIR==='auto'?'말씀하세요 (한국어·중국어 자동)':'말씀하세요');return}
   if(t==='input_audio_buffer.speech_started'){if(!R.cur||R.cur.done){R.cur={el:null,src:'',dst:'',done:false,pend:[],dec:null}}return}
   if(t==='conversation.item.input_audio_transcription.delta'){if(!R.cur)R.cur={el:null,src:'',dst:'',done:false,pend:[],dec:null};R.cur.src+=e.delta||'';decide(d,R);show(d,R);return}
@@ -140,7 +142,7 @@ function ev(e){var d=e._d||'zh',R=S.r[d];if(!R)return;var t=e.type;
   if(t==='response.audio_transcript.delta'||t==='response.text.delta'){if(!R.cur)R.cur={el:null,src:'',dst:'',done:false,pend:[],dec:null};R.cur.dst+=e.delta||'';decide(d,R);show(d,R);return}
   if(t==='response.audio.delta'){if(!R.cur)R.cur={el:null,src:'',dst:'',done:false,pend:[],dec:null};if(R.cur.dec===true)pcmPush(S.pl,e.delta);else if(R.cur.dec===null)R.cur.pend.push(e.delta);return}
   if(t==='response.done'){if(R.cur){if(R.cur.dec===null){R.cur.dec=(DIR!=='auto'||d===S.first);if(R.cur.dec)flush(R.cur);else R.cur.pend=[];show(d,R)}R.cur.done=true}return}
-  if(t==='error'){var m=(e.error&&(e.error.message||e.error.code))||e.message||'오류';var c=card(d);c.querySelector('.dst').textContent='⚠ '+m;return}
+  if(t==='error'||e.code){var m=(e.error&&(e.error.message||e.error.code))||e.message||(e.code?e.code+' '+(e.msg||''):'')||'오류';var c=card(d);c.querySelector('.dst').textContent='⚠ '+m;return}
   if(t==='relay.closed'){stop(e.reason==='daily_cap'?'오늘 한도를 다 썼어요':'')}
 }
 function decide(d,R){var c=R.cur;if(c.dec!==null)return;if(!c.src&&!c.dst)return;var src=c.src||'';
@@ -158,7 +160,7 @@ async function start(){
   pr.onaudioprocess=function(e){pcmPull(S&&S.pl,e.outputBuffer.getChannelData(0));if(!S||S.ready<S.n)return;if(pcmBusy(S.pl))return;send({type:'input_audio_buffer.append',audio:b64(down(e.inputBuffer.getChannelData(0),ctx.sampleRate))})};
   src.connect(pr);pr.connect(ctx.destination);S.pr=pr;S.src=src;
   var ws=new WebSocket(location.origin.replace(/^http/,'ws')+'/live/ws?code='+encodeURIComponent(CODE)+'&to='+to.join(',')+'&clone='+($('oc').checked?'1':'0'));S.ws=ws;
-  ws.onmessage=function(m){var e;try{e=JSON.parse(m.data)}catch(_){return}if(e.type==='relay.ready'){$('lim').textContent='최대 '+Math.round(e.limit_sec/60)+'분';return}ev(e)};
+  ws.onmessage=function(m){var e;try{e=JSON.parse(m.data)}catch(_){return}if(e.type==='relay.ready'){$('lim').textContent='최대 '+Math.round(e.limit_sec/60)+'분';setTimeout(function(){if(S&&S.ready<S.n){S.ready=S.n;say('말씀하세요 (설정 응답 없이 시작)')}},5000);return}ev(e)};
   ws.onerror=function(){say('서버 연결 실패')};ws.onclose=function(){if(S)stop('')};
   if($('ov').checked)camOn();
   $('main').innerHTML='';$('go').textContent='■ 멈추기';$('go').classList.add('on');say('연결 중…');
