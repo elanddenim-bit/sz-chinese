@@ -164,6 +164,10 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
   if (path === "/shorts/cine/make") return cineMake(env, b, h);
   if (path === "/shorts/cine/poll") return cinePoll(env, b, h);
   if (path === "/shorts/cine/del") return cineDel(env, b, h);
+  if (path === "/shorts/w3/state") return w3View(env, h);
+  if (path === "/shorts/w3/make") return w3Make(env, b, h, synth);
+  if (path === "/shorts/w3/poll") return w3Poll(env, b, h);
+  if (path === "/shorts/w3/del") return w3Del(env, b, h);
   throw serr("not_found", 404);
 }
 const caps = (env) => ({ img: Number(env.SHORTS_IMG_DAY) || 40, vid: Number(env.SHORTS_VID_DAY) || 6 });
@@ -856,6 +860,109 @@ async function cineDel(env, b, h) {
   const d = await cineDoc(env, h), x = d.list.find((y) => y.k === String(b.k || ""));
   if (x) { await env.R2.delete(x.k).catch(() => {}); if (x.src) await env.R2.delete(x.src).catch(() => {}); d.list = d.list.filter((y) => y !== x); await env.KV.put(cineKey(h), JSON.stringify(d)); }
   return cineView(env, h);
+}
+// 🎬 장면 공장(2026-10-16, wan3.js 화면): 万相 3.0 참조 생성 — 참조 그림(캐릭터·장소, 최대 4장) + 대사 음성(qwen-tts/내 목소리 ≤15초, reference_audio → 입모양 동기) + 한국어 장면 설명
+// → 千问이 图1·音频1 을 가리키는 중문 멀티샷 프롬프트 → wan3.0-video(-prime) 비동기 2~30초, 480P 0.3 / 720P 0.6 위안/초. 하루 상한 SHORTS_W3_SEC(기본 90초, 실패는 되돌림).
+// KV shorts:w3:<해시> {list 40[{k,refs[],zh,say,sec,res,at}], pend[], day:{d,sec}}. R2 shorts/<해시>/sw3/<t>-r<n>.jpg · <t>-say.mp3 · v<t>.mp4
+const W3 = "sw3";
+const w3Key = (h) => "shorts:w3:" + h;
+const w3Cap = (env) => Number(env.SHORTS_W3_SEC) || 90;
+const W3_PRICE = { "480P": 0.3, "720P": 0.6, "1080P": 1.2 };
+async function w3Doc(env, h) { const d = (await env.KV.get(w3Key(h), "json")) || {}; d.list = d.list || []; d.pend = d.pend || []; if (!d.day || d.day.d !== cnDay()) d.day = { d: cnDay(), sec: 0 }; return d; }
+async function w3View(env, h) {
+  const d = await w3Doc(env, h);
+  const list = await Promise.all(d.list.map(async (x) => ({ ...x, url: await fileUrl(env, x.k), poster: x.refs && x.refs[0] ? await fileUrl(env, x.refs[0]) : "" })));
+  return { ok: true, list, pend: d.pend.map((p) => ({ task: p.task, sec: p.sec, res: p.res, at: p.at, title: p.title })), used: d.day.sec, cap: w3Cap(env), price: W3_PRICE, voiceMine: !!(await env.KV.get("voice:kr:" + h)) };
+}
+async function w3Voice(env, synth, h, voice, text) {
+  const speakText = await readable(env, text);
+  if (voice === "mine") {
+    const kr = await env.KV.get("voice:kr:" + h), mine = kr || (await env.KV.get("voice:" + h));
+    if (mine) { try { return { bytes: await sayMine(env, synth, mine, speakText, !!kr), ext: "mp3", ct: "audio/mpeg" }; } catch {} }
+  }
+  const j = await dsPost(env, "/services/aigc/multimodal-generation/generation", { model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text: speakText, voice: voice === "Ethan" ? "Ethan" : "Cherry", language_type: "Korean" } });
+  const url = j.output && j.output.audio && j.output.audio.url;
+  if (!url) throw serr("대사 음성을 만들지 못했어요.", 502);
+  const r = await fetch(url); if (!r.ok) throw serr("대사 음성 받기 실패", 502);
+  return { bytes: new Uint8Array(await r.arrayBuffer()), ext: "wav", ct: "audio/wav" };
+}
+async function w3Make(env, b, h, synth) {
+  const imgs = (Array.isArray(b.images) ? b.images : []).slice(0, 4).map((u) => /^data:image\/(jpeg|png|webp);base64,(.+)$/.exec(String(u || ""))).filter(Boolean);
+  const scene = String(b.scene || "").trim().slice(0, 600);
+  const say = String(b.say || "").trim().slice(0, 120);
+  if (!scene && !imgs.length) throw serr("장면 설명이나 참조 그림을 넣어 주세요.");
+  const sec = Math.max(2, Math.min(30, Math.round(Number(b.sec) || 10)));
+  const res = ["480P", "720P"].includes(b.res) ? b.res : "720P";
+  const ratio = ["9:16", "16:9", "1:1", "adaptive"].includes(b.ratio) ? b.ratio : "9:16";
+  const d = await w3Doc(env, h);
+  if (d.day.sec + sec > w3Cap(env)) throw serr("오늘 영상 " + w3Cap(env) + "초 중 " + d.day.sec + "초를 썼어요. " + sec + "초는 넘어요.", 429);
+  if (d.pend.length >= 2) throw serr("만드는 중인 영상이 2개예요. 하나 끝나면 다시.", 429);
+  const t = Date.now(), model = b.fast ? (env.SHORTS_W3_FAST || "wan3.0-video-prime") : (env.SHORTS_W3_MODEL || "wan3.0-video");
+  // 참조 그림 → R2(보관) + 百炼 임시 저장소(oss://)
+  const refs = [], media = [], roles = (Array.isArray(b.roles) ? b.roles : []).map((x) => String(x || "").slice(0, 40));
+  for (let i = 0; i < imgs.length; i++) {
+    const m = imgs[i], bytes = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0)); if (bytes.length > 8e6) throw serr("그림 " + (i + 1) + "이 너무 커요.");
+    const ext = m[1] === "png" ? "png" : m[1] === "webp" ? "webp" : "jpg", k = "shorts/" + h + "/" + W3 + "/" + t + "-r" + i + "." + ext;
+    await env.R2.put(k, bytes, { httpMetadata: { contentType: "image/" + m[1] } }); refs.push(k);
+    media.push({ type: "reference_image", url: await ossUp(env, model, bytes, "w3-" + t + "-" + i + "." + ext, "image/" + m[1]) });
+  }
+  let sayKey = "";
+  if (say) {
+    const v = await w3Voice(env, synth, h, b.voice, say);
+    if (v.ext === "wav" && wavSec(v.bytes) > 15) throw serr("대사가 15초를 넘어요 — 더 짧게(60자 안팎).");
+    sayKey = "shorts/" + h + "/" + W3 + "/" + t + "-say." + v.ext;
+    await env.R2.put(sayKey, v.bytes, { httpMetadata: { contentType: v.ct } });
+    media.push({ type: "reference_audio", url: await ossUp(env, model, v.bytes, "w3-" + t + "-say." + v.ext, v.ct) });
+  }
+  // 千问이 참조 번호(图1·音频1)를 가리키는 중문 프롬프트로
+  const roleTxt = imgs.map((_, i) => "图" + (i + 1) + " = " + (roles[i] || (i === 0 ? "주인공 캐릭터(외형 고정)" : "장소·배경"))).join(", ");
+  let prompt = "";
+  try {
+    const o = await qwen(env, [
+      { role: "system", content: "너는 AI 영상 생성(万相 3.0 참조 생성) 연출가다. 주인이 한국어로 적은 장면을 " + sec + "초 분량 중국어 프롬프트로 쓴다. 규칙: ① 참조 그림은 반드시 '图1'처럼 번호로 가리킨다 — " + (roleTxt || "참조 그림 없음") + ". 图1 이 캐릭터면 '保持图1角色的外形、服装、比例完全一致' 를 넣는다. ② " + (say ? "音频1 은 주인공이 하는 말(한국어). '角色说出音频1的内容，口型与音频同步' 를 넣고, 말하는 동안 카메라는 얼굴·상반신 중심." : "대사 없음 — 环境音·BGM 만.") + " ③ " + (sec >= 10 ? "장면을 " + Math.min(5, Math.max(2, Math.round(sec / 5))) + "개 샷으로 나눠 '镜头1: … 镜头2: …' 로 쓴다(각 샷 3~6초, 마지막은 여운)." : "샷 하나, 카메라 움직임 하나.") + " ④ 사실적 묘사(인물 행동·표정·장소·빛·소리), 그림에 없는 글자·로고 금지, 사람 얼굴은 캐릭터만. ⑤ 200~450자. JSON: {\"prompt\":\"\",\"title\":\"한국어 8~14자\"}" },
+      { role: "user", content: "장면: " + (scene || "(설명 없음 — 그림만으로 자연스러운 장면)") + (say ? "\n대사: " + say : "") + "\n비율 " + ratio + ", 길이 " + sec + "초." },
+    ]);
+    prompt = String(o.prompt || "").slice(0, 2000); var title = String(o.title || "").slice(0, 30);
+  } catch {}
+  if (!prompt) prompt = (imgs.length ? "保持图1角色外形一致。" : "") + scene + (say ? "。角色说出音频1的内容，口型同步。" : "");
+  const body = { model, input: { prompt, ...(media.length ? { media } : {}) }, parameters: { resolution: res, ratio, duration: sec, audio: true, prompt_extend: true, watermark: false } };
+  const j = await dsRaw(env, "/services/aigc/video-generation/video-synthesis", body, { "X-DashScope-Async": "enable", ...OSSR });
+  const task = j.output && j.output.task_id; if (!task) throw serr("작업 번호를 받지 못했어요.", 502);
+  d.day.sec += sec;
+  d.pend.push({ task, model, sec, res, ratio, refs, sayKey, say, scene, zh: prompt, title: title || scene.slice(0, 14), at: t });
+  await env.KV.put(w3Key(h), JSON.stringify(d));
+  return { ok: true, task, used: d.day.sec, cap: w3Cap(env), zh: prompt, title: title || "" };
+}
+async function w3Poll(env, b, h) {
+  const d = await w3Doc(env, h), p = d.pend.find((x) => x.task === String(b.task || ""));
+  if (!p) return { ok: true, status: "none" };
+  const el = Math.round((Date.now() - p.at) / 1000);
+  const r = await fetch("https://" + host(env) + "/api/v1/tasks/" + p.task, { headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY } }).catch(() => null);
+  if (!r || (!r.ok && (r.status >= 500 || r.status === 429))) return { ok: true, status: "RETRY", el };
+  const j = await r.json().catch(() => ({})), o = j.output || {}, st = o.task_status || "UNKNOWN";
+  if (st === "UNKNOWN" && r.ok) return { ok: true, status: "RUNNING", el };
+  if (st === "FAILED" || st === "CANCELED" || (st === "UNKNOWN" && !r.ok)) {
+    const d2 = await w3Doc(env, h); d2.pend = d2.pend.filter((x) => x.task !== p.task);
+    if (d2.day.d === cnDay(p.at)) d2.day.sec = Math.max(0, d2.day.sec - p.sec); // 실패는 과금 없음
+    await env.KV.put(w3Key(h), JSON.stringify(d2));
+    return { ok: true, status: "failed", detail: String(o.message || o.code || st).slice(0, 240) };
+  }
+  if (st !== "SUCCEEDED") return { ok: true, status: st, el };
+  const url = o.video_url || (o.results && o.results.video_url); if (!url) return { ok: true, status: "failed", detail: "결과 주소 없음" };
+  const f = await fetch(url); if (!f.ok) return { ok: true, status: "RETRY", el };
+  const k = "shorts/" + h + "/" + W3 + "/v" + p.at + ".mp4";
+  await env.R2.put(k, await f.arrayBuffer(), { httpMetadata: { contentType: "video/mp4" } });
+  const d2 = await w3Doc(env, h); d2.pend = d2.pend.filter((x) => x.task !== p.task);
+  const outSec = (j.usage && j.usage.output_video_duration) || p.sec;
+  if (!d2.list.some((x) => x.k === k)) d2.list = [{ k, refs: p.refs, sayKey: p.sayKey, say: p.say, scene: p.scene, zh: p.zh, title: p.title, sec: outSec, res: p.res, ratio: p.ratio, model: p.model, at: p.at }].concat(d2.list).slice(0, 40);
+  await env.KV.put(w3Key(h), JSON.stringify(d2));
+  await addCost(env, "vid", 1);
+  return { ok: true, status: "done", url: await fileUrl(env, k) };
+}
+async function w3Del(env, b, h) {
+  const d = await w3Doc(env, h), x = d.list.find((y) => y.k === String(b.k || ""));
+  if (x) { await env.R2.delete([x.k].concat(x.refs || [], x.sayKey ? [x.sayKey] : [])).catch(() => {}); d.list = d.list.filter((y) => y !== x); await env.KV.put(w3Key(h), JSON.stringify(d)); }
+  return w3View(env, h);
 }
 async function avaView(env, d) {
   return { ok: true, face: d.face ? (await fileUrl(env, d.face)) + "&v=" + (d.faceAt || 0) : "", /* v: 같은 이름이라 브라우저 캐시에 옛 그림이 남는 것 방지 */ check: d.check || null, pend: d.pend || null, used: d.sec || 0, cap: avaCap(env),
@@ -1702,7 +1809,7 @@ function home(){
       +'<p class="lbl">길이</p><div class="chips">'+[30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div>'
       +'<button class="big" id="scriptBtn">✍️ 대본 쓰기</button><div class="err" id="e1"></div></div>';
     P.make='<a class="big" href="/edit" style="text-align:center;text-decoration:none;background:var(--red);margin:0">🎥 내가 찍은 영상으로 만들기 (편집실)</a>'
-      +'<div class="tools"><a href="/cine" style="background:#6B4FA0"><b>🎞</b>사진 → 영상</a><a href="/toon" style="background:#1F7A4D"><b>🎨</b>공감툰</a><button id="avOpen" style="background:var(--ink)"><b>🗣</b>캐릭터·내 목소리</button></div>'
+      +'<div class="tools"><a href="/story" style="background:#B3541E"><b>🎬</b>장면 공장</a><a href="/cine" style="background:#6B4FA0"><b>🎞</b>사진 → 영상</a><a href="/toon" style="background:#1F7A4D"><b>🎨</b>공감툰</a><button id="avOpen" style="background:var(--ink)"><b>🗣</b>캐릭터·내 목소리</button></div>'
       +'<details class="mus"><summary>🎵 무료 배경음악 받는 곳</summary><a href="https://studio.youtube.com/channel/UC/music" target="_blank" rel="noopener"><b>유튜브 오디오 보관함</b><small>가장 안전 — 유튜브 공식, 저작권 신고 걱정 없음. \'저작자 표시 필요\' 표시 곡만 설명란에 출처</small></a><p class="note">⚠️ \'무료\' 사이트 곡(Pixabay·FMA 등)은 Content ID 신고가 붙어 수익이 남에게 가는 일이 실제로 있었어요(2026-10). 유튜브 오디오 보관함 곡만 쓰세요. 아이폰: 받은 곡은 \'파일\' 앱에 저장돼요 → 편집실 \'폰에 있는 음악 고르기\'에서 선택. 유튜브는 VPN이 필요할 수 있어요.</p></details>'+h;h='';
     X.yt='<div class="card" id="ytCard"><h2>유튜브 연결</h2><div id="ytBox" class="note">확인 중…</div></div>';
     X.wk='<div class="card" id="wkCard"><h2>🗓 이번 주말 찍을 숏츠 <button class="chip" id="wkRe" style="float:right;font-size:12px;padding:3px 9px">다시 만들기</button></h2><textarea id="wkMemo" rows="2" placeholder="이번 주 일정 (예: 화 광저우→제남 출장, 수~목 제남→닝보, 월·금 광저우)" style="width:100%;box-sizing:border-box;margin:4px 0 6px;border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;background:var(--card);color:var(--ink)"></textarea><div id="wkBox" class="note">불러오는 중…</div></div>';

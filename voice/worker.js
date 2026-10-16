@@ -34,6 +34,7 @@ import { shortsApi, shortsSave, shortsFile, ytCallback, legalPage, SHORTS_HTML, 
 import { EDIT_HTML } from "./edit.js";
 import { TOON_HTML } from "./toon.js";
 import { CINE_HTML } from "./cine.js";
+import { W3_HTML } from "./wan3.js";
 import { briefApi, briefCron, briefMorning, briefGet, BRIEF_HTML } from "./brief.js";
 import { magApi, magCron, magGet } from "./mag.js";
 import { airApi, airGet, } from "./air.js";
@@ -135,6 +136,7 @@ export default {
       if (req.method === "GET" && (url.pathname === "/about" || url.pathname === "/privacy" || url.pathname === "/terms")) return legalPage(url.pathname);
       if (url.pathname === "/edit" && req.method === "GET") return new Response(EDIT_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/toon" && req.method === "GET") return new Response(TOON_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
+      if (url.pathname === "/story" && req.method === "GET") return new Response(W3_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/cine" && req.method === "GET") return new Response(CINE_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/shorts" && req.method === "GET") return new Response(SHORTS_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/shorts/file" && (req.method === "GET" || req.method === "HEAD")) return await shortsFile(req, env, url);
@@ -185,7 +187,7 @@ export default {
       if (url.pathname.startsWith("/trend/")) return json(req, await trendApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/shorts/")) {
         const out = await shortsApi(env, ctx, url.pathname, b, h, synth);
-        const ev = { "/shorts/script": "script", "/shorts/yt/upload": "upload", "/shorts/ideas": "ideas", "/shorts/plan": "plan", "/shorts/assemble": "assemble", "/shorts/asr": "asr", "/shorts/cine/make": "cine" }[url.pathname];
+        const ev = { "/shorts/script": "script", "/shorts/yt/upload": "upload", "/shorts/ideas": "ideas", "/shorts/plan": "plan", "/shorts/assemble": "assemble", "/shorts/asr": "asr", "/shorts/cine/make": "cine", "/shorts/w3/make": "w3" }[url.pathname];
         if (ev) ctx.waitUntil(logUse(env, "shorts", { [ev]: 1 }, 0, h).catch(() => {}));
         return json(req, out);
       }
