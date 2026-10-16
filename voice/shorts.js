@@ -906,15 +906,15 @@ async function w3Make(env, b, h, synth) {
     const m = imgs[i], bytes = m.bytes; if (bytes.length > 8e6) throw serr("그림 " + (i + 1) + "이 너무 커요.");
     const ext = m.mime === "png" ? "png" : m.mime === "webp" ? "webp" : "jpg", k = m.key || "shorts/" + h + "/" + W3 + "/" + t + "-r" + i + "." + ext;
     if (!m.key) await env.R2.put(k, bytes, { httpMetadata: { contentType: "image/" + m.mime } }); refs.push(k);
-    media.push({ type: "reference_image", url: await ossUp(env, model, bytes, "w3-" + t + "-" + i + "." + ext, "image/" + m.mime) });
+    try { media.push({ type: "reference_image", url: await ossUp(env, model, bytes, "w3-" + t + "-" + i + "." + ext, "image/" + m.mime) }); } catch (e) { throw serr("그림 임시 저장소 단계: " + String(e.message || e).slice(0, 200), 502); }
   }
   let sayKey = "";
   if (say) {
-    const v = await w3Voice(env, synth, h, b.voice, say);
+    let v; try { v = await w3Voice(env, synth, h, b.voice, say); } catch (e) { throw serr("대사 음성 단계: " + String(e.message || e).slice(0, 200), 502); }
     if (v.ext === "wav" && wavSec(v.bytes) > 15) throw serr("대사가 15초를 넘어요 — 더 짧게(60자 안팎).");
     sayKey = "shorts/" + h + "/" + W3 + "/" + t + "-say." + v.ext;
     await env.R2.put(sayKey, v.bytes, { httpMetadata: { contentType: v.ct } });
-    media.push({ type: "reference_audio", url: await ossUp(env, model, v.bytes, "w3-" + t + "-say." + v.ext, v.ct) });
+    try { media.push({ type: "reference_audio", url: await ossUp(env, model, v.bytes, "w3-" + t + "-say." + v.ext, v.ct) }); } catch (e) { throw serr("음성 임시 저장소 단계: " + String(e.message || e).slice(0, 200), 502); }
   }
   // 千问이 참조 번호(图1·音频1)를 가리키는 중문 프롬프트로
   const roleTxt = imgs.map((_, i) => "图" + (i + 1) + " = " + (roles[i] || (i === 0 ? "주인공 캐릭터(외형 고정)" : "장소·배경"))).join(", ");
@@ -942,8 +942,8 @@ async function w3Make(env, b, h, synth) {
         const noAud = media.filter((m) => m.type !== "reference_audio");
         if (noAud.length !== media.length) {
           try { j = await dsRaw(env, "/services/aigc/video-generation/video-synthesis", { ...body, input: { prompt: plain, media: noAud } }, { "X-DashScope-Async": "enable", ...OSSR }); prompt = plain + " (오디오 참조 제외: " + String(e3.message).slice(0, 80) + ")"; }
-          catch (e4) { throw serr("百炼이 요청을 거절했어요(400). 확장 끄기·기본 프롬프트·오디오 제외 모두 실패 — " + String(e4.message).slice(0, 200) + " / 참조 " + media.map((m) => m.type).join(",") + " / " + model + " " + res + " " + ratio + " " + sec + "초", 502); }
-        } else throw serr("百炼이 요청을 거절했어요(400). 확장 끄기·기본 프롬프트로도 실패 — " + String(e3.message).slice(0, 200) + " / 참조 " + media.map((m) => m.type).join(",") + " / " + model + " " + res + " " + ratio + " " + sec + "초", 502);
+          catch (e4) { throw serr("영상 요청 단계: 百炼이 요청을 거절했어요(400). 확장 끄기·기본 프롬프트·오디오 제외 모두 실패 — " + String(e4.message).slice(0, 200) + " / 참조 " + media.map((m) => m.type).join(",") + " / " + model + " " + res + " " + ratio + " " + sec + "초", 502); }
+        } else throw serr("영상 요청 단계: 百炼이 요청을 거절했어요(400). 확장 끄기·기본 프롬프트로도 실패 — " + String(e3.message).slice(0, 200) + " / 참조 " + media.map((m) => m.type).join(",") + " / " + model + " " + res + " " + ratio + " " + sec + "초", 502);
       }
     }
   }
