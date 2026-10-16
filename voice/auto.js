@@ -31,7 +31,7 @@ async function plan(env, h, c, manualTopic) {
     topics = topics.filter((t) => t.ko && !c.seen.includes(t.ko));
     if (!topics.length) throw aerr("오늘 화제 중 안 쓴 게 없어요.");
   }
-  const maxSay = Math.min(60, Math.round(c.sec * 3.6)); // 15초 → 54자(말하기 ~12초, 음성 15초 상한)
+  const maxSay = Math.min(64, Math.round(c.sec * 3.8)); // 15초 → 57자(말하기 ~13초, 음성 15초 상한)
   const o = await shortsQwen(env, [
     { role: "system", content: "너는 한국 시청자용 유튜브 숏츠 채널의 자동 기획자다. 채널: 광저우 사는 한국인 40대 가장이 운영, 얼굴 대신 '치비 일러스트 캐릭터'가 진행자. " + KR_RULES + " " + TONE_RULES +
       " 오늘은 " + c.sec + "초짜리 한 토막: 캐릭터가 카메라를 보고 한 호흡으로 말한다. 시리즈 '" + SERIES[c.series] + "'. " +
@@ -40,8 +40,14 @@ async function plan(env, h, c, manualTopic) {
       ' JSON: {"pick":번호(1부터) 또는 0,"topic":"고른 화제 한 줄","title":"","say":"","scene":"","description":"","tags":[]}' },
     { role: "user", content: manualTopic ? "주제(직접 지정): " + manualTopic : "오늘의 화제 후보:\n" + topics.map((t, i) => (i + 1) + ". " + t.ko + (t.what ? " — " + t.what : "") + (t.why ? " (왜 뜨나: " + t.why + ")" : "") + (t.word && t.word.z ? " [유행어 " + t.word.z + " " + (t.word.k || "") + "]" : "")).join("\n") + "\n가장 한국 시청자가 멈출 만한 것 하나를 골라라." },
   ], { temperature: 0.8 });
-  const say = String(o.say || "").trim().slice(0, maxSay + 10);
+  let say = String(o.say || "").trim();
   if (say.length < 15) throw aerr("대본이 너무 짧아요.");
+  // 길면 잘라내지 말고 완결된 문장으로 다시 줄임(2026-10-16 첫 편 '원인 알고 보니 조명'에서 끊김)
+  if (say.length > maxSay + 4) {
+    try { const s2 = await shortsQwen(env, [{ role: "user", content: "다음 대사를 " + maxSay + "자 이내로 줄여라. 규칙: 문장은 반드시 끝까지 완결(마지막 글자는 마침표·물음표·느낌표·'요'·'죠'·'다'), 첫 문장 훅과 마지막 댓글 유도는 살리고 가운데 설명을 줄인다. 같은 말투. JSON {\"say\":\"\"}\n대사: " + say }], { temperature: 0.3 }); const t = String(s2.say || "").trim(); if (t.length >= 15 && t.length <= maxSay + 6) say = t; } catch {}
+    if (say.length > maxSay + 6) { const cut = say.slice(0, maxSay + 6), m = Math.max(cut.lastIndexOf("."), cut.lastIndexOf("?"), cut.lastIndexOf("!"), cut.lastIndexOf("요 "), cut.lastIndexOf("죠 ")); say = m > 15 ? cut.slice(0, m + 1).trim() : cut; }
+  }
+  if (!/[.?!…요죠다]["”']?$/.test(say)) say += ".";
   const topic = manualTopic || (topics[(Number(o.pick) || 1) - 1] || topics[0]).ko;
   return { topic: String(o.topic || topic).slice(0, 80), title: String(o.title || topic).slice(0, 40), say, scene: String(o.scene || "").slice(0, 500), description: String(o.description || "").slice(0, 600), tags: (Array.isArray(o.tags) ? o.tags : []).map((x) => String(x).slice(0, 20)).slice(0, 12) };
 }
