@@ -725,7 +725,7 @@ async function dsRaw(env, path, body, extra) {
   const t = await r.text();
   let j = {};
   try { j = JSON.parse(t); } catch {}
-  if (!r.ok) throw serr("百炼 " + r.status + ": " + (j.message || j.code || t.slice(0, 160)), 502);
+  if (!r.ok) throw serr("百炼 " + r.status + ": " + (j.message || j.code || t.slice(0, 160)) + (r.headers.get("x-request-id") || r.headers.get("request-id") ? " [req " + (r.headers.get("x-request-id") || r.headers.get("request-id")) + "]" : "") + (t.length < 3 ? " (빈 응답 — 요청 형식·모델 권한 문제 가능)" : ""), 502);
   return j;
 }
 async function ossUp(env, model, bytes, name, mime) {
@@ -937,7 +937,14 @@ async function w3Make(env, b, h, synth) {
     catch (e2) {
       const plain = (imgs.length ? "图1角色保持原有插画画风和外形。" : "") + (say ? "角色说出音频1的内容，口型同步。" : "") + "竖屏，光线自然。";
       try { j = await dsRaw(env, "/services/aigc/video-generation/video-synthesis", { ...body, input: { ...body.input, prompt: plain } }, { "X-DashScope-Async": "enable", ...OSSR }); prompt = plain; }
-      catch (e3) { throw serr("百炼이 요청을 거절했어요(400). 프롬프트 확장 끄기·기본 프롬프트로도 실패 — " + String(e3.message).slice(0, 160) + " / 참조 " + media.map((m) => m.type).join(","), 502); }
+      catch (e3) {
+        // ③ 오디오 참조를 빼고 한 번 더(오디오가 원인인지 분리). 되면 대사 없는 영상이라도 만들고 이유를 남김
+        const noAud = media.filter((m) => m.type !== "reference_audio");
+        if (noAud.length !== media.length) {
+          try { j = await dsRaw(env, "/services/aigc/video-generation/video-synthesis", { ...body, input: { prompt: plain, media: noAud } }, { "X-DashScope-Async": "enable", ...OSSR }); prompt = plain + " (오디오 참조 제외: " + String(e3.message).slice(0, 80) + ")"; }
+          catch (e4) { throw serr("百炼이 요청을 거절했어요(400). 확장 끄기·기본 프롬프트·오디오 제외 모두 실패 — " + String(e4.message).slice(0, 200) + " / 참조 " + media.map((m) => m.type).join(",") + " / " + model + " " + res + " " + ratio + " " + sec + "초", 502); }
+        } else throw serr("百炼이 요청을 거절했어요(400). 확장 끄기·기본 프롬프트로도 실패 — " + String(e3.message).slice(0, 200) + " / 참조 " + media.map((m) => m.type).join(",") + " / " + model + " " + res + " " + ratio + " " + sec + "초", 502);
+      }
     }
   }
   const task = j.output && j.output.task_id; if (!task) throw serr("작업 번호를 받지 못했어요.", 502);
