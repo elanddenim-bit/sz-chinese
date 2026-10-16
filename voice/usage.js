@@ -14,7 +14,7 @@ export const APPS = {
   didi: { name: "디디 주소록", icon: "🚕", f: { copy_name: "이름 복사·디디 열기", copy_addr: "주소 복사", driver: "기사님 화면", route: "방문 동선", map: "지도 열기", save: "저장·편집", search: "검색" } },
   threepark: { name: "삼박네", icon: "🏡", f: { pg_home: "홈", pg_plan: "일정표", pg_photos: "사진 기록", pg_movie: "다큐", paint: "그림엽서", movie_make: "다큐 만들기", upload: "사진 올리기" } },
   spain: { name: "스페인 일정", icon: "🇪🇸", f: { pg_home: "일정 보기" } },
-  shorts: { name: "숏츠 공방", icon: "🎬", f: { ideas: "주제 추천", script: "대본", plan: "편집실 AI 계획", assemble: "대본 모드 자동 배치", asr: "영상 속 말 자막", upload: "유튜브 업로드", cine: "시네마틱 영상", w3: "장면 공장(万相3.0)" } },
+  shorts: { name: "숏츠 공방", icon: "🎬", f: { ideas: "주제 추천", script: "대본", plan: "편집실 AI 계획", assemble: "대본 모드 자동 배치", asr: "영상 속 말 자막", upload: "유튜브 업로드", cine: "시네마틱 영상", w3: "장면 공장(万相3.0)", auto: "자동 채널 영상" } },
   quest: { name: "주말 탐험", icon: "🧭", f: { new: "퀘스트 받기", done: "사진 인증 성공", fail: "인증 실패", honor: "그래도 인정" } },
   air: { name: "미스터리 기내편", icon: "✈️", f: { new: "사건 생성", solve: "해결", wrong: "오답" } },
   mag: { name: "기내 잡지", icon: "📰", f: { make: "묶음 생성", open: "열기", bark: "탑승 전 알림" } },

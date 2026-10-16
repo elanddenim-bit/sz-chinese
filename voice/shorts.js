@@ -887,7 +887,9 @@ async function w3Voice(env, synth, h, voice, text) {
   return { bytes: new Uint8Array(await r.arrayBuffer()), ext: "wav", ct: "audio/wav" };
 }
 async function w3Make(env, b, h, synth) {
-  const imgs = (Array.isArray(b.images) ? b.images : []).slice(0, 4).map((u) => /^data:image\/(jpeg|png|webp);base64,(.+)$/.exec(String(u || ""))).filter(Boolean);
+  // 참조 그림: data URL(화면) 또는 이미 R2 에 있는 키(자동 채널 `refKeys`)
+  const imgs = (Array.isArray(b.images) ? b.images : []).slice(0, 4).map((u) => /^data:image\/(jpeg|png|webp);base64,(.+)$/.exec(String(u || ""))).filter(Boolean).map((m) => ({ mime: m[1], bytes: Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0)) }));
+  for (const k of (Array.isArray(b.refKeys) ? b.refKeys : []).slice(0, 4)) { const o = await env.R2.get(String(k)); if (o) imgs.push({ mime: /\.png$/.test(k) ? "png" : /\.webp$/.test(k) ? "webp" : "jpeg", bytes: new Uint8Array(await o.arrayBuffer()), key: String(k) }); }
   const scene = String(b.scene || "").trim().slice(0, 600);
   const say = String(b.say || "").trim().slice(0, 120);
   if (!scene && !imgs.length) throw serr("장면 설명이나 참조 그림을 넣어 주세요.");
@@ -901,10 +903,10 @@ async function w3Make(env, b, h, synth) {
   // 참조 그림 → R2(보관) + 百炼 임시 저장소(oss://)
   const refs = [], media = [], roles = (Array.isArray(b.roles) ? b.roles : []).map((x) => String(x || "").slice(0, 40));
   for (let i = 0; i < imgs.length; i++) {
-    const m = imgs[i], bytes = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0)); if (bytes.length > 8e6) throw serr("그림 " + (i + 1) + "이 너무 커요.");
-    const ext = m[1] === "png" ? "png" : m[1] === "webp" ? "webp" : "jpg", k = "shorts/" + h + "/" + W3 + "/" + t + "-r" + i + "." + ext;
-    await env.R2.put(k, bytes, { httpMetadata: { contentType: "image/" + m[1] } }); refs.push(k);
-    media.push({ type: "reference_image", url: await ossUp(env, model, bytes, "w3-" + t + "-" + i + "." + ext, "image/" + m[1]) });
+    const m = imgs[i], bytes = m.bytes; if (bytes.length > 8e6) throw serr("그림 " + (i + 1) + "이 너무 커요.");
+    const ext = m.mime === "png" ? "png" : m.mime === "webp" ? "webp" : "jpg", k = m.key || "shorts/" + h + "/" + W3 + "/" + t + "-r" + i + "." + ext;
+    if (!m.key) await env.R2.put(k, bytes, { httpMetadata: { contentType: "image/" + m.mime } }); refs.push(k);
+    media.push({ type: "reference_image", url: await ossUp(env, model, bytes, "w3-" + t + "-" + i + "." + ext, "image/" + m.mime) });
   }
   let sayKey = "";
   if (say) {
@@ -961,7 +963,7 @@ async function w3Poll(env, b, h) {
 }
 async function w3Del(env, b, h) {
   const d = await w3Doc(env, h), x = d.list.find((y) => y.k === String(b.k || ""));
-  if (x) { await env.R2.delete([x.k].concat(x.refs || [], x.sayKey ? [x.sayKey] : [])).catch(() => {}); d.list = d.list.filter((y) => y !== x); await env.KV.put(w3Key(h), JSON.stringify(d)); }
+  if (x) { await env.R2.delete([x.k].concat((x.refs || []).filter((r) => !r.includes("/auto/")), x.sayKey ? [x.sayKey] : [])).catch(() => {}); d.list = d.list.filter((y) => y !== x); await env.KV.put(w3Key(h), JSON.stringify(d)); }
   return w3View(env, h);
 }
 async function avaView(env, d) {
@@ -1809,7 +1811,7 @@ function home(){
       +'<p class="lbl">길이</p><div class="chips">'+[30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div>'
       +'<button class="big" id="scriptBtn">✍️ 대본 쓰기</button><div class="err" id="e1"></div></div>';
     P.make='<a class="big" href="/edit" style="text-align:center;text-decoration:none;background:var(--red);margin:0">🎥 내가 찍은 영상으로 만들기 (편집실)</a>'
-      +'<div class="tools"><a href="/story" style="background:#B3541E"><b>🎬</b>장면 공장</a><a href="/cine" style="background:#6B4FA0"><b>🎞</b>사진 → 영상</a><a href="/toon" style="background:#1F7A4D"><b>🎨</b>공감툰</a><button id="avOpen" style="background:var(--ink)"><b>🗣</b>캐릭터·내 목소리</button></div>'
+      +'<div class="tools"><a href="/auto" style="background:#1F7A4D"><b>🤖</b>자동 채널</a><a href="/story" style="background:#B3541E"><b>🎬</b>장면 공장</a><a href="/cine" style="background:#6B4FA0"><b>🎞</b>사진 → 영상</a><a href="/toon" style="background:#1F7A4D"><b>🎨</b>공감툰</a><button id="avOpen" style="background:var(--ink)"><b>🗣</b>캐릭터·내 목소리</button></div>'
       +'<details class="mus"><summary>🎵 무료 배경음악 받는 곳</summary><a href="https://studio.youtube.com/channel/UC/music" target="_blank" rel="noopener"><b>유튜브 오디오 보관함</b><small>가장 안전 — 유튜브 공식, 저작권 신고 걱정 없음. \'저작자 표시 필요\' 표시 곡만 설명란에 출처</small></a><p class="note">⚠️ \'무료\' 사이트 곡(Pixabay·FMA 등)은 Content ID 신고가 붙어 수익이 남에게 가는 일이 실제로 있었어요(2026-10). 유튜브 오디오 보관함 곡만 쓰세요. 아이폰: 받은 곡은 \'파일\' 앱에 저장돼요 → 편집실 \'폰에 있는 음악 고르기\'에서 선택. 유튜브는 VPN이 필요할 수 있어요.</p></details>'+h;h='';
     X.yt='<div class="card" id="ytCard"><h2>유튜브 연결</h2><div id="ytBox" class="note">확인 중…</div></div>';
     X.wk='<div class="card" id="wkCard"><h2>🗓 이번 주말 찍을 숏츠 <button class="chip" id="wkRe" style="float:right;font-size:12px;padding:3px 9px">다시 만들기</button></h2><textarea id="wkMemo" rows="2" placeholder="이번 주 일정 (예: 화 광저우→제남 출장, 수~목 제남→닝보, 월·금 광저우)" style="width:100%;box-sizing:border-box;margin:4px 0 6px;border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;background:var(--card);color:var(--ink)"></textarea><div id="wkBox" class="note">불러오는 중…</div></div>';
@@ -2149,3 +2151,6 @@ async function asr(env, b, h) {
   await env.KV.put(draftKey(h, id), JSON.stringify(d), { expirationTtl: 120 * 86400 });
   return { ok: true, asr: rows, heard: l.length };
 }
+
+// 자동 채널(auto.js)이 쓰는 내부 함수
+export { w3Make, w3Poll, ytQueueAdd, qwen as shortsQwen, draftKey, listKey, fileUrl, KR_RULES, TONE_RULES };

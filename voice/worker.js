@@ -35,6 +35,7 @@ import { EDIT_HTML } from "./edit.js";
 import { TOON_HTML } from "./toon.js";
 import { CINE_HTML } from "./cine.js";
 import { W3_HTML } from "./wan3.js";
+import { autoApi, autoCron, AUTO_HTML } from "./auto.js";
 import { briefApi, briefCron, briefMorning, briefGet, BRIEF_HTML } from "./brief.js";
 import { magApi, magCron, magGet } from "./mag.js";
 import { airApi, airGet, } from "./air.js";
@@ -112,6 +113,7 @@ export default {
       if (um < 15 && (uh === 1 || uh === 5 || uh === 11)) ctx.waitUntil(timingCron(env, uh).catch((e) => console.log("timingCron", e && e.message))); // ⏰ 숏츠 타이밍(중국 9·13·19시)
       if (uh >= 21 || uh <= 14) ctx.waitUntil(briefMorning(env).catch((e) => console.log("briefMorning", e && e.message))); // 중국 5~22시 '지금 출발'
       if (uh >= 21 || uh <= 14) ctx.waitUntil(magCron(env).catch((e) => console.log("magCron", e && e.message))); // 📰 출발 2시간 전 기내 잡지
+      ctx.waitUntil(autoCron(env, uh, synth).catch((e) => console.log("autoCron", e && e.message))); // 🤖 자동 채널(아침 시작·렌더링 폴링)
       if (um < 15) ctx.waitUntil(memoirCron(env, uh).catch((e) => console.log("memoirCron", e && e.message))); // 🎙 구술 자서전 밤 질문(정한 시각 정각 틱)
     }
   },
@@ -136,6 +138,7 @@ export default {
       if (req.method === "GET" && (url.pathname === "/about" || url.pathname === "/privacy" || url.pathname === "/terms")) return legalPage(url.pathname);
       if (url.pathname === "/edit" && req.method === "GET") return new Response(EDIT_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/toon" && req.method === "GET") return new Response(TOON_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
+      if (url.pathname === "/auto" && req.method === "GET") return new Response(AUTO_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/story" && req.method === "GET") return new Response(W3_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/cine" && req.method === "GET") return new Response(CINE_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/shorts" && req.method === "GET") return new Response(SHORTS_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
@@ -185,6 +188,8 @@ export default {
       if (url.pathname === "/memoir/save" || url.pathname === "/memoir/say" || url.pathname === "/memoir/state" || url.pathname === "/memoir/next") return jsonStream(req, () => memoirApi(env, ctx, url.pathname, b, h, synth));
       if (url.pathname.startsWith("/memoir/")) return json(req, await memoirApi(env, ctx, url.pathname, b, h, synth));
       if (url.pathname.startsWith("/trend/")) return json(req, await trendApi(env, ctx, url.pathname, b, h));
+      if (url.pathname === "/auto/run" || url.pathname === "/auto/retry") return jsonStream(req, () => autoApi(env, ctx, url.pathname, b, h, synth));
+      if (url.pathname.startsWith("/auto/")) return json(req, await autoApi(env, ctx, url.pathname, b, h, synth));
       if (url.pathname.startsWith("/shorts/")) {
         const out = await shortsApi(env, ctx, url.pathname, b, h, synth);
         const ev = { "/shorts/script": "script", "/shorts/yt/upload": "upload", "/shorts/ideas": "ideas", "/shorts/plan": "plan", "/shorts/assemble": "assemble", "/shorts/asr": "asr", "/shorts/cine/make": "cine", "/shorts/w3/make": "w3" }[url.pathname];
