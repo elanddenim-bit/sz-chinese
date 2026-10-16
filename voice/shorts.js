@@ -875,16 +875,23 @@ async function w3View(env, h) {
   return { ok: true, list, pend: d.pend.map((p) => ({ task: p.task, sec: p.sec, res: p.res, at: p.at, title: p.title })), used: d.day.sec, cap: w3Cap(env), price: W3_PRICE, voiceMine: !!(await env.KV.get("voice:kr:" + h)) };
 }
 async function w3Voice(env, synth, h, voice, text) {
-  const speakText = await readable(env, text);
+  const speakText = await readable(env, text), why = [];
   if (voice === "mine") {
     const kr = await env.KV.get("voice:kr:" + h), mine = kr || (await env.KV.get("voice:" + h));
-    if (mine) { try { return { bytes: await sayMine(env, synth, mine, speakText, !!kr), ext: "mp3", ct: "audio/mpeg" }; } catch {} }
+    if (!mine) why.push("내 목소리 미등록");
+    else { try { return { bytes: await sayMine(env, synth, mine, speakText, !!kr), ext: "mp3", ct: "audio/mpeg" }; } catch (e) { why.push("CosyVoice: " + String(e.message || e).slice(0, 120)); } }
   }
-  const j = await dsPost(env, "/services/aigc/multimodal-generation/generation", { model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text: speakText, voice: voice === "Ethan" ? "Ethan" : "Cherry", language_type: "Korean" } });
-  const url = j.output && j.output.audio && j.output.audio.url;
-  if (!url) throw serr("대사 음성을 만들지 못했어요.", 502);
-  const r = await fetch(url); if (!r.ok) throw serr("대사 음성 받기 실패", 502);
-  return { bytes: new Uint8Array(await r.arrayBuffer()), ext: "wav", ct: "audio/wav" };
+  // AI 목소리(qwen-tts) — 모델 두 가지 순서로(2026-10-16 qwen3-tts-flash 400 빈 응답 사례)
+  for (const model of [env.SHORTS_TTS_MODEL || "qwen3-tts-flash", "qwen-audio-3.0-tts-flash"]) {
+    try {
+      const j = await dsPost(env, "/services/aigc/multimodal-generation/generation", { model, input: { text: speakText, voice: voice === "Ethan" ? "Ethan" : "Cherry", language_type: "Korean" } });
+      const url = j.output && j.output.audio && j.output.audio.url;
+      if (!url) { why.push(model + ": 결과 없음"); continue; }
+      const r = await fetch(url); if (!r.ok) { why.push(model + ": 받기 " + r.status); continue; }
+      return { bytes: new Uint8Array(await r.arrayBuffer()), ext: "wav", ct: "audio/wav" };
+    } catch (e) { why.push(model + ": " + String(e.message || e).slice(0, 120)); }
+  }
+  throw serr("대사 음성을 만들지 못했어요 — " + why.join(" / "), 502);
 }
 async function w3Make(env, b, h, synth) {
   // 참조 그림: data URL(화면) 또는 이미 R2 에 있는 키(자동 채널 `refKeys`)
