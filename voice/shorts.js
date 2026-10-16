@@ -1324,7 +1324,7 @@ export async function shortsSave(req, env, url, hashFn, allowed) {
 // R2 파일 — Range 지원
 export async function shortsFile(req, env, url) {
   const k = url.searchParams.get("k") || "";
-  if (!/^shorts\/[0-9a-f]{12}\/s[0-9a-z]{6,12}\/[\w.]+$/.test(k) || url.searchParams.get("s") !== (await hmac16(env, k))) return new Response("forbidden", { status: 403 });
+  if (!/^shorts\/[0-9a-f]{12}\/(s[0-9a-z]{2,12}|auto|auto-[0-9a-z-]+)\/[\w.-]+$/.test(k) || url.searchParams.get("s") !== (await hmac16(env, k))) return new Response("forbidden", { status: 403 });
   const rg = req.headers.get("range");
   const m = rg && /^bytes=(\d+)-(\d*)$/.exec(rg);
   if (m) {
