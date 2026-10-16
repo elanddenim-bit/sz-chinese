@@ -35,6 +35,7 @@ main{max-width:640px;margin:0 auto;padding:14px 16px 48px}h2{font-size:13px;colo
 <a href="/timecam"><i>🕰</i><b>타임머신 카메라</b><small>1930·1985·2080·눈</small></a>
 <a href="/signs"><i>🪧</i><b>간판 사냥</b><small>웃긴 중국어 간판 도감</small></a>
 <a href="/novel"><i>📖</i><b>우리 연재 소설</b><small>우리 기록이 한 화씩 소설로</small></a>
+<a href="/memoir"><i>🎙</i><b>구술 자서전</b><small>매일 밤 5분, 질문 하나에 답하면 책이 됩니다</small></a>
 <a href="/xiangqi"><i>♟</i><b>象棋 중국 장기</b><small>규칙 7가지 + 봇 대국, 오프라인</small></a>
 </div>
 <h2>보기</h2><div class="g">

@@ -37,6 +37,7 @@ import { CINE_HTML } from "./cine.js";
 import { briefApi, briefCron, briefMorning, briefGet, BRIEF_HTML } from "./brief.js";
 import { magApi, magCron, magGet } from "./mag.js";
 import { airApi, airGet, } from "./air.js";
+import { memoirApi, memoirGet, memoirPrompt, memoirCron, MEMOIR_HTML } from "./memoir.js";
 import ICON180 from "./icon-180.png";
 import ICON192 from "./icon-192.png";
 import ICON512 from "./icon-512.png";
@@ -109,6 +110,7 @@ export default {
       if (um < 15 && (uh === 1 || uh === 5 || uh === 11)) ctx.waitUntil(timingCron(env, uh).catch((e) => console.log("timingCron", e && e.message))); // ⏰ 숏츠 타이밍(중국 9·13·19시)
       if (uh >= 21 || uh <= 14) ctx.waitUntil(briefMorning(env).catch((e) => console.log("briefMorning", e && e.message))); // 중국 5~22시 '지금 출발'
       if (uh >= 21 || uh <= 14) ctx.waitUntil(magCron(env).catch((e) => console.log("magCron", e && e.message))); // 📰 출발 2시간 전 기내 잡지
+      if (um < 15) ctx.waitUntil(memoirCron(env, uh).catch((e) => console.log("memoirCron", e && e.message))); // 🎙 구술 자서전 밤 질문(정한 시각 정각 틱)
     }
   },
   async fetch(req, env, ctx) {
@@ -118,6 +120,11 @@ export default {
       if (url.pathname === "/ping") return json(req, { ok: true, host: host(env).replace(/^ws-[a-z0-9]{4}/, "ws-…"), key: !!env.DASHSCOPE_API_KEY });
       if (url.pathname === "/rt") return await realtime(req, env, ctx, url, false);
       if (url.pathname === "/agent") return await realtime(req, env, ctx, url, true);
+      if (url.pathname === "/memoir/ws") {
+        const code = url.searchParams.get("code") || "";
+        const custom = allowed(env, code) ? { app: "memoir", instructions: await memoirPrompt(env, await hash(code), url.searchParams.get("q") || ""), tools: [], silence: 900 } : true;
+        return await realtime(req, env, ctx, url, custom);
+      }
       if (FONTS[url.pathname]) return new Response(FONTS[url.pathname], { headers: { "content-type": "font/woff2", "cache-control": "public, max-age=31536000, immutable", "access-control-allow-origin": "*" } });
       if (ICONS[url.pathname]) return new Response(ICONS[url.pathname], { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (url.pathname === "/manifest.webmanifest") return new Response(MANIFEST, { headers: { "content-type": "application/manifest+json; charset=utf-8", "cache-control": "public, max-age=3600" } });
@@ -144,6 +151,7 @@ export default {
       if (url.pathname.startsWith("/brief/") && req.method === "GET") return await briefGet(req, env, url);
       if ((url.pathname === "/air" || url.pathname.startsWith("/air/")) && req.method === "GET") return await airGet(req, env, url, synth);
       if ((url.pathname === "/mag" || url.pathname.startsWith("/mag/")) && req.method === "GET") return await magGet(req, env, url, synth);
+      if ((url.pathname === "/memoir" || url.pathname.startsWith("/memoir/")) && req.method === "GET") return await memoirGet(req, env, url);
       if (url.pathname === "/hub" && req.method === "GET") return new Response(HUB_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/special" && req.method === "GET") return new Response(SPECIAL_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/xiangqi" && req.method === "GET") return new Response(XIANGQI_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
@@ -169,6 +177,8 @@ export default {
       if (url.pathname.startsWith("/mag/")) return json(req, await magApi(env, ctx, url.pathname, b, h, synth));
       if (url.pathname === "/air/new" || url.pathname === "/air/fill") return jsonStream(req, () => airApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/air/")) return json(req, await airApi(env, ctx, url.pathname, b, h));
+      if (url.pathname === "/memoir/save" || url.pathname === "/memoir/say" || url.pathname === "/memoir/state" || url.pathname === "/memoir/next") return jsonStream(req, () => memoirApi(env, ctx, url.pathname, b, h, synth));
+      if (url.pathname.startsWith("/memoir/")) return json(req, await memoirApi(env, ctx, url.pathname, b, h, synth));
       if (url.pathname.startsWith("/trend/")) return json(req, await trendApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/shorts/")) {
         const out = await shortsApi(env, ctx, url.pathname, b, h, synth);
@@ -189,6 +199,8 @@ const err = (code, message, status = 502) => Object.assign(new Error(message), {
 
 // ---------------- 실시간 통화 중계 ----------------
 async function realtime(req, env, ctx, url, agent) {
+  const custom = agent && typeof agent === "object" ? agent : null; // 지시문만 다른 세션(구술 자서전 등): 서버가 session.update, 도구 없음
+  const appName = custom ? custom.app : agent ? "pb" : "rt";
   if (req.headers.get("upgrade") !== "websocket") return new Response("websocket only", { status: 426 });
   const pair = new WebSocketPair();
   const client = pair[0], server = pair[1];
@@ -231,7 +243,7 @@ async function realtime(req, env, ctx, url, agent) {
     const sec = Math.ceil((Date.now() - t0) / 1000);
     done(Promise.all([
       env.KV.put(dayKey, String(used + sec), { expirationTtl: 3 * 86400 }).catch(() => {}),
-      logUse(env, agent ? "pb" : "rt", { session: 1, ...(sess.tools || {}) }, sec, who).catch(() => {}),
+      logUse(env, appName, { session: 1, ...(sess.tools || {}) }, sec, who).catch(() => {}),
     ]));
   };
   const timer = setTimeout(() => end("time_limit"), limit * 1000);
@@ -251,10 +263,10 @@ async function realtime(req, env, ctx, url, agent) {
     if (agent && typeof e.data === "string" && !e.data.startsWith('{"type":"response.audio.delta"')) {
       if (e.data.includes('"session.created"')) {
         toUp({ type: "session.update", session: {
-          modalities: ["text", "audio"], instructions: AGENT_PROMPT, tools: AGENT_TOOLS,
+          modalities: ["text", "audio"], instructions: custom ? custom.instructions : AGENT_PROMPT, tools: custom ? custom.tools || [] : AGENT_TOOLS,
           input_audio_format: "pcm16", output_audio_format: "pcm24",
           input_audio_transcription: { model: "qwen3-asr-flash-realtime" },
-          turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: 700 },
+          turn_detection: { type: "server_vad", threshold: 0.5, prefix_padding_ms: 300, silence_duration_ms: custom && custom.silence || 700 },
         } });
       } else if (e.data.includes('"response.function_call_arguments.done"')) {
         let m; try { m = JSON.parse(e.data); } catch {}
