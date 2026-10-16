@@ -20,6 +20,7 @@ async function cfg(env, h) { const c = (await env.KV.get(cfgKey(h), "json")) || 
 const saveCfg = (env, h, c) => env.KV.put(cfgKey(h), JSON.stringify(c));
 async function today(env, h, d = cnDay()) { return (await env.KV.get(dayKey(h, d), "json")) || null; }
 const saveDay = (env, h, d, doc) => env.KV.put(dayKey(h, d), JSON.stringify(doc), { expirationTtl: 60 * 86400 });
+async function unqueue(env, h, id) { if (!id) return; const q = await env.KV.get("shorts:q:" + h, "json"); if (q && q.items && q.items.some((x) => x.id === id)) { q.items = q.items.filter((x) => x.id !== id); await env.KV.put("shorts:q:" + h, JSON.stringify(q)); } }
 async function bark(env, h, title, body, url) { const bd = await env.KV.get("brief:" + h, "json"); if (!bd || !bd.bark) return false; try { await barkPush(bd.bark, title, body, url); return true; } catch (e) { console.log("auto bark", e && e.message); return false; } }
 function logAdd(c, line) { c.log.unshift({ at: Date.now(), t: String(line).slice(0, 160) }); c.log = c.log.slice(0, 30); }
 
@@ -141,7 +142,7 @@ export async function autoApi(env, ctx, path, b, h, synth) {
     if (doc && doc.st === "ready") throw aerr("오늘 영상이 이미 준비돼 있어요. 반려하면 다시 만들 수 있어요.");
     await start(env, h, synth, String(b.topic || "").trim().slice(0, 200) || undefined); return view();
   }
-  if (path === "/auto/retry") { const d = String(b.day || day), doc = await today(env, h, d); if (!doc) throw aerr("없는 날이에요."); await env.KV.delete(dayKey(h, d)); if (d === day) await start(env, h, synth, b.topic ? String(b.topic).slice(0, 200) : doc.topic); return view(); }
+  if (path === "/auto/retry") { const d = String(b.day || day), doc = await today(env, h, d); if (!doc) throw aerr("없는 날이에요."); await unqueue(env, h, doc.id); await env.KV.delete(dayKey(h, d)); if (d === day) await start(env, h, synth, b.topic ? String(b.topic).slice(0, 200) : doc.topic); return view(); }
   if (path === "/auto/approve") {
     const d = String(b.day || day), doc = await today(env, h, d);
     if (!doc || doc.st !== "ready" || !doc.id) throw aerr("승인할 영상이 없어요.");
@@ -153,6 +154,7 @@ export async function autoApi(env, ctx, path, b, h, synth) {
   if (path === "/auto/reject") {
     const d = String(b.day || day), doc = await today(env, h, d); if (!doc) throw aerr("없는 날이에요.");
     const note = String(b.note || "").trim().slice(0, 120);
+    await unqueue(env, h, doc.id); // 승인 뒤 반려하면 예약 발행도 빼 줌
     doc.st = "rejected"; doc.note = note; await saveDay(env, h, d, doc);
     if (note) { c.notes.push(note); c.notes = c.notes.slice(-8); } logAdd(c, "반려: " + doc.title + (note ? " — " + note : "")); await saveCfg(env, h, c);
     return view();
@@ -224,7 +226,7 @@ function draw(){
     if(t.url)h+='<video src="'+esc(t.url)+'" controls playsinline preload="metadata"></video>';
     if(t.err)h+='<div class="err">'+esc(t.err)+'</div>';
     if(t.st==='ready')h+='<div class="row"><button class="big ok" id="ap">✅ 승인 → 저녁에 공개</button><button class="big ghost" id="apu">비공개로</button></div><input type="text" id="rn" placeholder="반려 이유 (다음 대본에 반영돼요)" style="margin-top:8px"><button class="big ghost" id="rj">❌ 반려</button>';
-    if(t.st==='approved')h+='<p class="note">예약 발행 대기열에 들어갔어요. 숏츠 공방 📊 채널 탭에서 확인·취소.</p>';
+    if(t.st==='approved')h+='<p class="note">예약 발행 대기열에 들어갔어요(저녁 6~9시). 마음이 바뀌면 아래 반려 — 예약도 같이 빠져요.</p><input type="text" id="rn" placeholder="반려 이유 (다음 대본에 반영돼요)" style="margin-top:8px"><button class="big ghost" id="rj">❌ 반려 (예약 취소)</button>';
     if(t.st==='failed'||t.st==='rejected')h+='<input type="text" id="tp" placeholder="주제 (비우면 같은 화제로)" style="margin-top:8px"><button class="big" id="rt">↻ 다시 만들기</button>';
     if(t.zh)h+='<details style="margin-top:8px"><summary style="font-size:12px;color:var(--ink2)">AI 연출 보기</summary><span style="font-size:11px;white-space:pre-wrap">'+esc(t.zh)+'</span></details>';}
   h+='</div>';
