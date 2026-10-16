@@ -882,15 +882,19 @@ async function w3Voice(env, synth, h, voice, text) {
     else { try { return { bytes: await sayMine(env, synth, mine, speakText, !!kr), ext: "mp3", ct: "audio/mpeg" }; } catch (e) { why.push("CosyVoice: " + String(e.message || e).slice(0, 120)); } }
   }
   // AI 목소리(qwen-tts) — 모델 두 가지 순서로(2026-10-16 qwen3-tts-flash 400 빈 응답 사례)
-  for (const model of [env.SHORTS_TTS_MODEL || "qwen3-tts-flash", "qwen-audio-3.0-tts-flash"]) {
+  const tries = [];
+  for (const model of [env.SHORTS_TTS_MODEL || "qwen3-tts-flash", "qwen-audio-3.0-tts-flash"]) { tries.push([model, true]); tries.push([model, false]); } // language_type 있이/없이
+  for (const [model, lt] of tries) {
     try {
-      const j = await dsPost(env, "/services/aigc/multimodal-generation/generation", { model, input: { text: speakText, voice: voice === "Ethan" ? "Ethan" : "Cherry", language_type: "Korean" } });
+      const j = await dsPost(env, "/services/aigc/multimodal-generation/generation", { model, input: { text: speakText, voice: voice === "Ethan" ? "Ethan" : "Cherry", ...(lt ? { language_type: "Korean" } : {}) } });
       const url = j.output && j.output.audio && j.output.audio.url;
       if (!url) { why.push(model + ": 결과 없음"); continue; }
       const r = await fetch(url); if (!r.ok) { why.push(model + ": 받기 " + r.status); continue; }
       return { bytes: new Uint8Array(await r.arrayBuffer()), ext: "wav", ct: "audio/wav" };
-    } catch (e) { why.push(model + ": " + String(e.message || e).slice(0, 120)); }
+    } catch (e) { why.push(model + (lt ? "" : "(언어 지정 없이)") + ": " + String(e.message || e).slice(0, 120)); }
   }
+  // 마지막: 등록된 내 목소리라도(고른 목소리와 달라지지만 영상은 나오게)
+  if (voice !== "mine") { const kr = await env.KV.get("voice:kr:" + h); if (kr) { try { return { bytes: await sayMine(env, synth, kr, speakText, true), ext: "mp3", ct: "audio/mpeg", note: "AI 목소리 실패 → 내 목소리로 대체" }; } catch (e) { why.push("CosyVoice: " + String(e.message || e).slice(0, 120)); } } }
   throw serr("대사 음성을 만들지 못했어요 — " + why.join(" / "), 502);
 }
 async function w3Make(env, b, h, synth) {
