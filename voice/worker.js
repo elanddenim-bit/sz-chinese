@@ -37,6 +37,7 @@ import { CINE_HTML } from "./cine.js";
 import { briefApi, briefCron, briefMorning, briefGet, BRIEF_HTML } from "./brief.js";
 import { magApi, magCron, magGet } from "./mag.js";
 import { airApi, airGet, } from "./air.js";
+import { liveRelay, LIVE_HTML } from "./live.js";
 import { memoirApi, memoirGet, memoirPrompt, memoirCron, MEMOIR_HTML } from "./memoir.js";
 import ICON180 from "./icon-180.png";
 import ICON192 from "./icon-192.png";
@@ -120,6 +121,8 @@ export default {
       if (url.pathname === "/ping") return json(req, { ok: true, host: host(env).replace(/^ws-[a-z0-9]{4}/, "ws-…"), key: !!env.DASHSCOPE_API_KEY });
       if (url.pathname === "/rt") return await realtime(req, env, ctx, url, false);
       if (url.pathname === "/agent") return await realtime(req, env, ctx, url, true);
+      if (url.pathname === "/live/ws") return await liveRelay(req, env, ctx, url, allowed, hash);
+      if (url.pathname === "/live" && req.method === "GET") return new Response(LIVE_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/memoir/ws") {
         const code = url.searchParams.get("code") || "";
         const custom = allowed(env, code) ? { app: "memoir", instructions: await memoirPrompt(env, await hash(code), url.searchParams.get("q") || ""), tools: [], silence: 900 } : true;

@@ -20,6 +20,7 @@ export const APPS = {
   mag: { name: "기내 잡지", icon: "📰", f: { make: "묶음 생성", open: "열기", bark: "탑승 전 알림" } },
   brief: { name: "출장 브리핑", icon: "🧳", f: { send: "직접 보냄", auto: "자동 발송", preview: "미리 보기", morning: "아침 출발 알림" } },
   trend: { name: "오늘의 중국 인터넷", icon: "🔥", f: { open: "열어 봄", make: "새 판 만들기" } },
+  live: { name: "동시통역", icon: "🎧", f: { session: "통역", to_zh: "한→중", to_ko: "중→한", to_zh_ko: "자동" } },
   memoir: { name: "구술 자서전", icon: "🎙", f: { session: "인터뷰", save: "글 정리" } },
   novel: { name: "우리 연재 소설", icon: "📖", f: { write: "한 화 쓰기", s_warm: "잔잔한 에세이", s_sitcom: "시트콤", s_noir: "하드보일드" } },
   signs: { name: "간판 사냥", icon: "🪧", f: { hunt: "간판 잡기", t_engrish: "엉뚱한 영어", t_pun: "말장난", t_big: "과장 광고", t_name: "희한한 이름", t_wisdom: "생활 명언", t_rule: "이상한 안내문", t_plain: "평범" } },
