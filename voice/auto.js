@@ -233,7 +233,7 @@ function draw(){
   // 설정
   h+='<div class="card"><h2>캐릭터 · 설정</h2><div class="refs" id="refs"></div><p class="note">1번 = 진행자 캐릭터(공감툰 치비). 2~4번은 광저우 배경 사진(선택). 그림 밑 이름표는 AI가 역할로 씀.</p>'
     +'<p class="lbl">아침 시작 시각(중국)</p>'+chips([[6,'6시'],[7,'7시'],[8,'8시'],[9,'9시'],[12,'12시']],c.hour,'hour')
-    +'<p class="lbl">길이 · 화질</p>'+chips([[10,'10초'],[15,'15초'],[20,'20초']],c.sec,'sec')+'<div style="height:6px"></div>'+chips([['480P','480P ('+(c.sec*0.3).toFixed(1)+'위안/일)'],['720P','720P ('+(c.sec*0.6).toFixed(1)+'위안/일)']],c.res,'res')
+    +'<p class="lbl">길이 · 화질</p>'+chips([[10,'10초'],[15,'15초'],[20,'20초']],c.sec,'sec')+'<div style="height:6px"></div>'+chips([['480P','480P ('+(c.sec*0.45).toFixed(1)+'위안/일)'],['720P','720P ('+(c.sec*0.9).toFixed(1)+'위안/일)']],c.res,'res')
     +'<p class="lbl">목소리</p>'+chips([['mine','🎙 내 목소리'+(ST.voiceMine?'':' (미등록)')],['Ethan','Ethan'],['Cherry','Cherry']],c.voice,'voice')
     +'<p class="lbl">시리즈</p>'+chips(Object.keys(ST.series).map(function(k){return [k,ST.series[k]];}),c.series,'series')
     +(c.notes.length?'<p class="lbl">반려 메모(다음 대본에 반영 중)</p><div class="say" style="font-size:13px">'+c.notes.map(esc).join('<br>')+'</div><button class="chip" id="cn" style="margin-top:6px">메모 비우기</button>':'')

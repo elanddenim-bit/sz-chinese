@@ -867,7 +867,7 @@ async function cineDel(env, b, h) {
 const W3 = "sw3";
 const w3Key = (h) => "shorts:w3:" + h;
 const w3Cap = (env) => Number(env.SHORTS_W3_SEC) || 90;
-const W3_PRICE = { "480P": 0.3, "720P": 0.6, "1080P": 1.2 };
+const W3_PRICE = { "480P": 0.45, "720P": 0.9, "1080P": 1.8 }; // wan3.0-video-prime 콘솔 가격(2026-10-16 소유자 확인)
 async function w3Doc(env, h) { const d = (await env.KV.get(w3Key(h), "json")) || {}; d.list = d.list || []; d.pend = d.pend || []; if (!d.day || d.day.d !== cnDay()) d.day = { d: cnDay(), sec: 0 }; return d; }
 async function w3View(env, h) {
   const d = await w3Doc(env, h);
