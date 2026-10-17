@@ -650,7 +650,8 @@ async function asset(env, b, h, synth) {
     if (!prompt) throw serr("그림 설명이 비었어요.");
     const j = await dsPost(env, "/services/aigc/text2image/image-synthesis", {
       model: env.SHORTS_T2I_MODEL || "wan2.5-t2i-preview",
-      input: { prompt: prompt + "，竖构图，电影感写实摄影，自然光，细节丰富", negative_prompt: "文字，字幕，水印，logo，招牌文字，低质量，畸形的手" },
+      // soft: 결과 그림이 심사(Green net)에 걸렸을 때 다시 — 사람 얼굴·클로즈업 빼고 넓은 빈 장면으로(2026-10-17)
+      input: { prompt: prompt + (b.soft ? "，无人物面部，远景空镜，画面干净温和" : "") + "，竖构图，电影感写实摄影，自然光，细节丰富", negative_prompt: "文字，字幕，水印，logo，招牌文字，低质量，畸形的手" + (b.soft ? "，人脸特写，暴露，暴力" : "") },
       parameters: { size: "720*1280", n: 1, prompt_extend: true, watermark: false },
     }, true);
     await addCost(env, "img", 1);
@@ -2011,16 +2012,18 @@ function bindEditor(){
 function refreshSc(i){var el=document.querySelector('.sc[data-i="'+i+'"]');if(!el)return;readForm();var tmp=document.createElement('div');tmp.innerHTML=scHtml(D.scenes[i],i);el.replaceWith(tmp.firstChild);bindEditor();}
 function playSay(i){var u=F[sayKey(i)];if(!u)return;try{var a=new Audio(u);a.play();}catch(e){}}
 function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
-async function make(i,kind){
-  var s=D.scenes[i];BUSY[i]=kind==='img'?'그림 그리는 중':kind==='vid'?'클립 만드는 중(1~3분)':'목소리 입히는 중';refreshSc(i);
+async function make(i,kind,soft){
+  var s=D.scenes[i];BUSY[i]=kind==='img'?(soft?'그림 다시(순화)':'그림 그리는 중'):kind==='vid'?'클립 만드는 중(1~3분)':'목소리 입히는 중';refreshSc(i);
   try{
-    var r=await api('/shorts/asset',{id:D.id,n:i,kind:kind,text:kind==='img'?s.img:kind==='vid'?s.move:s.say});
+    var r=await api('/shorts/asset',{id:D.id,n:i,kind:kind,text:kind==='img'?s.img:kind==='vid'?s.move:s.say,soft:!!soft});
     if(!r.ok)throw new Error(r.detail||r.error);
     if(r.done){delete F[i+'.wav'];delete F[i+'.mp3'];F[i+(r.url.indexOf('.mp3')>0?'.mp3':'.wav')]=r.url;}
     else{var t0=Date.now();while(true){await sleep(kind==='vid'?8000:4000);var p=await api('/shorts/poll',{id:D.id,n:i,kind:kind,task:r.task});
       if(p.status==='done'){F[i+(kind==='vid'?'.mp4':'.jpg')]=p.url;break;}if(p.status==='failed')throw new Error(p.detail||'실패');if(Date.now()-t0>600000)throw new Error('시간 초과');}}
     BUSY[i]='';return true;
-  }catch(e){BUSY[i]='';toast('#'+(i+1)+' '+e.message);return false;}
+  }catch(e){BUSY[i]='';
+    if(kind==='img'&&!soft&&/Green net|inappropriate/i.test(e.message)){toast('#'+(i+1)+' 그림이 심사에 걸려 순화해서 다시 그려요');return make(i,'img',true);} // 결과 심사 실패 → 한 번 자동 재시도
+    toast('#'+(i+1)+' '+(/Green net|inappropriate/i.test(e.message)?'그림이 백련 심사에 걸렸어요 — 장면 설명(img)을 바꿔 다시 눌러 주세요':e.message));return false;}
 }
 async function makeAll(){
   readForm();api('/shorts/update',{id:D.id,draft:D});var b=$('allBtn'),pg=$('allProg');b.disabled=true;
