@@ -142,7 +142,7 @@ export async function autoApi(env, ctx, path, b, h, synth) {
     if (doc && doc.st === "ready") throw aerr("오늘 영상이 이미 준비돼 있어요. 반려하면 다시 만들 수 있어요.");
     await start(env, h, synth, String(b.topic || "").trim().slice(0, 200) || undefined); return view();
   }
-  if (path === "/auto/retry") { const d = String(b.day || day), doc = await today(env, h, d); if (!doc) throw aerr("없는 날이에요."); await unqueue(env, h, doc.id); await env.KV.delete(dayKey(h, d)); if (d === day) await start(env, h, synth, b.topic ? String(b.topic).slice(0, 200) : doc.topic); return view(); }
+  if (path === "/auto/retry") { const d = String(b.day || day), doc = await today(env, h, d); if (doc) await unqueue(env, h, doc.id); if (d !== day) await env.KV.delete(dayKey(h, d)); await start(env, h, synth, String(b.topic || "").trim().slice(0, 200) || (doc && doc.topic) || undefined); return view(); } // 문서가 없어도 새로 시작(2026-10-17 '없는 날이에요' — 이전 재시도가 삭제 뒤 실패하면 문서가 사라짐)
   if (path === "/auto/approve") {
     const d = String(b.day || day), doc = await today(env, h, d);
     if (!doc || doc.st !== "ready" || !doc.id) throw aerr("승인할 영상이 없어요.");
