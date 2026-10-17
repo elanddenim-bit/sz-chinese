@@ -495,7 +495,7 @@ async function render0(dry){
     if(ready&&(sc.cv||sc.pt))drawMark(g,sc,vw,vh,el);
     if(v.isImg&&CLIPS[sc.clip]&&CLIPS[sc.clip].kind==='blank'&&!sc.cap&&sc.say){var fb=fnt(800,48);g.font=fb;wrap(g,sc.say,W-160).slice(0,4).forEach(function(l,k,a){stroke(l,W/2,H*0.42+k*64-(a.length-1)*32,fb,'#FFFFFF',10);});}
     var gr=g.createLinearGradient(0,H*0.5,0,H);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,.55)');g.fillStyle=gr;g.fillRect(0,H*0.5,W,H*0.5);
-    if(sc.cap){var pop=Math.min(1,el/0.18),fs=Math.round(66*(0.85+0.15*pop)),fnt=fnt(900,fs);g.font=fnt;wrap(g,sc.cap,W-140).forEach(function(l,k){stroke(l,W/2,H*0.20+k*(fs+12),fnt,idx===0&&k===0?'#FFD84D':'#FFFFFF',14);});}
+    if(sc.cap){var pop=Math.min(1,el/0.18),fs=Math.round(66*(0.85+0.15*pop)),fc=fnt(900,fs);g.font=fc;wrap(g,sc.cap,W-140).forEach(function(l,k){stroke(l,W/2,H*0.20+k*(fs+12),fc,idx===0&&k===0?'#FFD84D':'#FFFFFF',14);});}
     // 내레이션 자막: 말하는 속도에 맞춰 한 토막씩(글자 수 비례로 시간 배분)
     var P=CUR,S=SPK,te=S?ac.currentTime-S.t0:-1,talking=!!(S&&te>=-0.05&&te<=S.nd+0.15),shown=false,Q=talking?{ck:S.ck,nd:S.nd,el:te}:(P&&!P.nd?{ck:P.ck,nd:0,el:el}:null);
     if(D.opts.subs&&Q&&Q.ck.length){var span=Q.nd||len,tt=Q.el/span,ci=-1,acc=0;
