@@ -1713,6 +1713,8 @@ export const SHORTS_HTML = String.raw`<!doctype html>
 <link rel="apple-touch-icon" href="/shorts-180.png"><link rel="icon" href="/shorts-192.png">
 <title>숏츠 공방</title>
 <style>
+@font-face{font-family:"BB BlackHan";src:url(/fonts/blackhan.woff) format("woff");font-display:swap}
+@font-face{font-family:"BB Lilita";src:url(/fonts/lilita.woff) format("woff");font-display:swap}
 :root{--sky:#1664B0;--bg:#EFE8DE;--card:#F7F2EA;--ink:#1A2330;--ink2:#5E6672;--line:#D9CEBD;--red:#D21624;--soft:#E6DCCB;--ok:#1F7A4D}
 @media (prefers-color-scheme:dark){:root{--bg:#141A22;--card:#1C2430;--ink:#EDE6DA;--ink2:#9AA3AE;--line:#2C3644;--soft:#253041;--ok:#5CC08C}}
 *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,"Apple SD Gothic Neo","PingFang SC",system-ui,sans-serif;-webkit-text-size-adjust:100%}
@@ -2079,7 +2081,12 @@ async function render(){
   var t0=ac.currentTime+0.3;
   segs.forEach(function(s){if(aud[s.i]){var b=ac.createBufferSource();b.buffer=aud[s.i];b.connect(dest);b.connect(ac.destination);b.start(t0+s.t0+0.15);}});
   function cover(src,sw,sh,z,dx,dy){var sc=Math.max(W/sw,H/sh)*z,w=sw*sc,h=sh*sc;g.drawImage(src,(W-w)/2+dx,(H-h)/2+dy,w,h);}
-  function stroke(txt,x,y,font,fill,lw){g.font=font;g.textAlign='center';g.lineJoin='round';g.lineWidth=lw;g.strokeStyle='rgba(0,0,0,.85)';g.strokeText(txt,x,y);g.fillStyle=fill;g.fillText(txt,x,y);}
+  // 자막 글꼴: 편집실과 같은 '게임 글꼴'(Black Han Sans + Lilita One, 남색 외곽선·아래 그림자·금색 그라데이션) — 2026-10-17
+  var GF='"BB Lilita","BB BlackHan",-apple-system,"Apple SD Gothic Neo",sans-serif';function fnt(px){return '400 '+px+'px '+GF;}
+  try{await Promise.all([document.fonts.load('400 60px "BB BlackHan"','가나'),document.fonts.load('400 60px "BB Lilita"','12')]);}catch(e){}
+  function stroke(txt,x,y,font,fill,lw){g.font=font;g.textAlign='center';g.lineJoin='round';g.lineCap='round';var m=font.match(/(\d+(?:\.\d+)?)px/),px=m?+m[1]:40,sh=Math.max(1.5,px*0.08),w=lw?Math.max(2.6,px*0.13):0;
+    if(w){g.lineWidth=w;g.strokeStyle='#0B1A2A';g.fillStyle='#0B1A2A';g.strokeText(txt,x,y+sh);g.fillText(txt,x,y+sh);g.strokeText(txt,x,y);}
+    if(/^#FFD84D$/i.test(fill)){var gr=g.createLinearGradient(0,y-px*0.8,0,y);gr.addColorStop(0,'#FFE866');gr.addColorStop(1,'#FFA726');g.fillStyle='#E8761A';g.fillText(txt,x,y+px*0.05);g.fillStyle=gr;}else g.fillStyle=fill;g.fillText(txt,x,y);}
   var started={};
   function frame(tt){
     var s=segs.filter(function(x){return tt>=x.t0&&tt<x.t1;})[0]||segs[segs.length-1],p=(tt-s.t0)/(s.t1-s.t0);
@@ -2092,9 +2099,9 @@ async function render(){
     // 위아래 그림자
     var gr=g.createLinearGradient(0,H*0.5,0,H);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,.6)');g.fillStyle=gr;g.fillRect(0,H*0.5,W,H*0.5);
     var sc=D.scenes[s.i];
-    if(sc.cap){var pop=Math.min(1,(tt-s.t0)/0.18),fs=Math.round(68*(0.85+0.15*pop));g.font='900 '+fs+'px -apple-system,"Apple SD Gothic Neo",sans-serif';var cl=wrap(g,sc.cap,W-140);cl.forEach(function(l,k){stroke(l,W/2,H*0.20+k*(fs+12),'900 '+fs+'px -apple-system,"Apple SD Gothic Neo",sans-serif',k===0&&s.i===0?'#FFD84D':'#FFFFFF',14);});}
-    if(sc.say){var fnt='700 36px -apple-system,"Apple SD Gothic Neo",sans-serif';g.font=fnt;var sl=wrap(g,sc.say,W-170).slice(0,4);sl.forEach(function(l,k){stroke(l,W/2-20,H*0.66+k*48-(sl.length-1)*24,fnt,'#FFFFFF',9);});}
-    g.font='600 22px -apple-system,sans-serif';g.textAlign='left';g.fillStyle='rgba(255,255,255,.75)';g.fillText('📍 광저우 广州',30,60);
+    if(sc.cap){var pop=Math.min(1,(tt-s.t0)/0.18),fs=Math.round(68*(0.85+0.15*pop));g.font=fnt(fs);var cl=wrap(g,sc.cap,W-140);cl.forEach(function(l,k){stroke(l,W/2,H*0.20+k*(fs+12),fnt(fs),k===0&&s.i===0?'#FFD84D':'#FFFFFF',14);});}
+    if(sc.say){var f36=fnt(36);g.font=f36;var sl=wrap(g,sc.say,W-170).slice(0,4);sl.forEach(function(l,k){stroke(l,W/2-20,H*0.66+k*48-(sl.length-1)*24,f36,'#FFFFFF',9);});}
+    g.font=fnt(22);g.textAlign='left';g.fillStyle='rgba(255,255,255,.75)';g.fillText('📍 광저우 广州',30,60);
     var b=$('rb');if(b)b.style.width=Math.min(100,tt/total*100)+'%';
   }
   frame(0);rec.start(500);

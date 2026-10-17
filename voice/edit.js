@@ -12,6 +12,8 @@ export const EDIT_HTML = String.raw`<!doctype html>
 <link rel="apple-touch-icon" href="/shorts-180.png"><link rel="icon" href="/shorts-192.png">
 <title>편집실</title>
 <style>
+@font-face{font-family:"BB BlackHan";src:url(/fonts/blackhan.woff) format("woff");font-display:swap}
+@font-face{font-family:"BB Lilita";src:url(/fonts/lilita.woff) format("woff");font-display:swap}
 :root{--sky:#1664B0;--bg:#EFE8DE;--card:#F7F2EA;--ink:#1A2330;--ink2:#5E6672;--line:#D9CEBD;--red:#D21624;--soft:#E6DCCB;--ok:#1F7A4D}
 @media (prefers-color-scheme:dark){:root{--bg:#141A22;--card:#1C2430;--ink:#EDE6DA;--ink2:#9AA3AE;--line:#2C3644;--soft:#253041;--ok:#5CC08C}}
 *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,"Apple SD Gothic Neo","PingFang SC",system-ui,sans-serif;-webkit-text-size-adjust:100%}
@@ -264,6 +266,7 @@ function editor(){
    +'<p class="lbl">내레이션 목소리</p>'+chipRow('voice',[['Cherry','👩 AI 여성'],['Ethan','👨 AI 남성'],['mine','🗣 내 목소리(AI 복제)'],['rec','🎙 직접 녹음']],o.voice||'Cherry')
    +((o.voice==='rec')?'<p class="note">구간마다 🎙 녹음을 눌러 직접 말하세요. 녹음은 이 화면을 닫으면 사라져요.</p>':(o.voice==='mine')?'<p class="note">실전 중국어 발음 탭에서 등록한 목소리로 한국어를 읽어요. 등록 전이면 AI 여성 목소리로 나와요.</p>':'')
    +'<p class="lbl">내레이션 크기</p>'+chipRow('nv',[[1,'보통'],[1.5,'크게'],[2,'아주 크게']],o.nv||1.5)
+   +'<p class="lbl">자막 글꼴</p>'+chipRow('font',[['game','🎮 게임 글꼴(블랙한 + 금색)'],['sys','아이폰 기본']],o.font||'game')+'<p class="note" style="font-family:&quot;BB Lilita&quot;,&quot;BB BlackHan&quot;,sans-serif;font-size:17px;color:#fff;-webkit-text-stroke:2px #0B1A2A;paint-order:stroke fill;text-shadow:0 2px 0 #0B1A2A;background:#1664B0;border-radius:8px;padding:6px 10px">광저우 물가 1분 · 15위안 = 2,900원</p>'
    +'<p class="lbl">내레이션 · 자막 · 끝 화면</p><div class="chips"><button class="chip'+(o.narr?' on':'')+'" data-o="narr">🔊 내레이션</button><button class="chip'+(o.subs?' on':'')+'" data-o="subs">💬 자막</button><button class="chip'+(o.end?' on':'')+'" data-o="end">🔔 끝에 구독 카드(2초)</button></div>'
    +'<p class="lbl">영상 속 말 자막 <span style="font-weight:400">(현지인 중국어·광둥어 → 한국어)</span></p><div class="chips"><button class="chip'+(o.osub?' on':'')+'" data-o="osub">🗣 영상 속 말 자막</button></div>'+(o.osub?osubHtml():'')
    +'<p class="lbl">배경음악</p><label class="pick" style="padding:12px"><input type="file" id="bgmIn" accept=".mp3,.m4a,.aac,.wav,audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,audio/aac"><b style="font-size:14.5px">🎵 '+(BGM?esc(BGM.name):'폰에 있는 음악 고르기')+'</b>'+(BGM?'눌러서 다른 곡으로':'유튜브 오디오 보관함처럼 저작권 걱정 없는 곡만')+'</label>'
@@ -314,7 +317,7 @@ function bind(){
   $('rwBtn').onclick=rewriteAll;if($('rwUndo'))$('rwUndo').onclick=function(){if(!RW_UNDO)return;D.scenes.forEach(function(x,k){var u=RW_UNDO[k];if(u){x.cap=u.cap;x.say=u.say;}});RW_UNDO=null;editor();saveSoon();toast('되돌렸어요');};
   $('addSeg').onclick=function(){readForm();if(D.scenes.length>=15)return;var c=CLIPS.length-1;D.scenes.push({clip:c,s:0,e:Math.min(3,CLIPS[c].dur),sp:1,cap:'',say:''});editor();saveSoon();};
   document.querySelectorAll('[data-o]').forEach(function(b){b.onclick=function(){var k=b.getAttribute('data-o'),v=b.getAttribute('data-v');
-    if(k==='fit'||k==='voice')D.opts[k]=v;else if(k==='orig'||k==='bgv'||k==='nv')D.opts[k]=+v;else D.opts[k]=!D.opts[k];readForm();editor();saveSoon();};});
+    if(k==='fit'||k==='voice'||k==='font')D.opts[k]=v;else if(k==='orig'||k==='bgv'||k==='nv')D.opts[k]=+v;else D.opts[k]=!D.opts[k];readForm();editor();saveSoon();};});
   $('bgmIn').onchange=function(){var f=this.files&&this.files[0];this.value='';if(!f)return;readForm();BGM={file:f,name:f.name.replace(/\.[^.]+$/,'').slice(0,30),buf:null};if(!D.opts.bgv)D.opts.bgv=0.12;editor();saveSoon();};
   if($('asrBtn'))$('asrBtn').onclick=makeAsr;
   $('renderBtn').onclick=function(){render(false);};
@@ -437,6 +440,7 @@ function render(dry){return render0(dry).catch(function(e){RUN=null;var b=$('ren
 async function render0(dry){
   readForm();
   if(RUN){RUN.stop=true;return;}
+  await fontsReady();
   var ac=getAC();
   // 구간마다 쓸 영상 요소: 같은 클립이 연달아 나오면 두 번째 요소(v2)를 번갈아 써서, 다음 구간을 미리 찾아 둘 수 있게
   var EL=[];D.scenes.forEach(function(sc,k){var c=CLIPS[sc.clip];if(!c){EL[k]=null;return;}if(c.kind==='photo'||c.kind==='blank'){EL[k]=c.v;return;}var prev=k>0&&D.scenes[k-1].clip===sc.clip?EL[k-1]:null;
@@ -474,7 +478,7 @@ async function render0(dry){
   function bgm(at,len,duck,fadeOut){var lv=D.opts.bgv*0.7;if(!BGM||!BGM.buf||!lv)return;var s=ac.createBufferSource(),gn=ac.createGain();s.buffer=BGM.buf;s.loop=true;s.connect(gn);gn.connect(BUS.comp);
     var l=lv*(duck?0.4:1),fo=Math.min(len,fadeOut||0.04);gn.gain.setValueAtTime(0,at);gn.gain.linearRampToValueAtTime(l,at+0.03);gn.gain.setValueAtTime(l,at+Math.max(0.03,len-fo));gn.gain.linearRampToValueAtTime(0,at+len);
     s.start(at,bgmPos%BGM.buf.duration);s.stop(at+len+0.05);bgmPos+=len;}
-  function stroke(txt,x,y,font,fill,lw){g.font=font;g.textAlign='center';g.lineJoin='round';g.lineWidth=lw;g.strokeStyle='rgba(0,0,0,.85)';g.strokeText(txt,x,y);g.fillStyle=fill;g.fillText(txt,x,y);}
+  function stroke(txt,x,y,font,fill,lw){drawTxt(g,txt,x,y,font,fill,lw);}
   function bar(el,len){var b=$('rb');if(b)b.style.width=Math.min(100,(doneT+Math.min(el,len))/total*100)+'%';}
   function draw(v,sc,el,len,idx){
     var vw=v.videoWidth,vh=v.videoHeight,ready=vw&&vh&&v.readyState>=2;
@@ -489,31 +493,31 @@ async function render0(dry){
       else{var cs=Math.max(W/vw,H/vh);g.drawImage(v,(W-vw*cs)/2,(H-vh*cs)/2,vw*cs,vh*cs);}
     }
     if(ready&&(sc.cv||sc.pt))drawMark(g,sc,vw,vh,el);
-    if(v.isImg&&CLIPS[sc.clip]&&CLIPS[sc.clip].kind==='blank'&&!sc.cap&&sc.say){var fb='800 48px -apple-system,"Apple SD Gothic Neo",sans-serif';g.font=fb;wrap(g,sc.say,W-160).slice(0,4).forEach(function(l,k,a){stroke(l,W/2,H*0.42+k*64-(a.length-1)*32,fb,'#FFFFFF',10);});}
+    if(v.isImg&&CLIPS[sc.clip]&&CLIPS[sc.clip].kind==='blank'&&!sc.cap&&sc.say){var fb=fnt(800,48);g.font=fb;wrap(g,sc.say,W-160).slice(0,4).forEach(function(l,k,a){stroke(l,W/2,H*0.42+k*64-(a.length-1)*32,fb,'#FFFFFF',10);});}
     var gr=g.createLinearGradient(0,H*0.5,0,H);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,.55)');g.fillStyle=gr;g.fillRect(0,H*0.5,W,H*0.5);
-    if(sc.cap){var pop=Math.min(1,el/0.18),fs=Math.round(66*(0.85+0.15*pop)),fnt='900 '+fs+'px -apple-system,"Apple SD Gothic Neo",sans-serif';g.font=fnt;wrap(g,sc.cap,W-140).forEach(function(l,k){stroke(l,W/2,H*0.20+k*(fs+12),fnt,idx===0&&k===0?'#FFD84D':'#FFFFFF',14);});}
+    if(sc.cap){var pop=Math.min(1,el/0.18),fs=Math.round(66*(0.85+0.15*pop)),fnt=fnt(900,fs);g.font=fnt;wrap(g,sc.cap,W-140).forEach(function(l,k){stroke(l,W/2,H*0.20+k*(fs+12),fnt,idx===0&&k===0?'#FFD84D':'#FFFFFF',14);});}
     // 내레이션 자막: 말하는 속도에 맞춰 한 토막씩(글자 수 비례로 시간 배분)
     var P=CUR,S=SPK,te=S?ac.currentTime-S.t0:-1,talking=!!(S&&te>=-0.05&&te<=S.nd+0.15),shown=false,Q=talking?{ck:S.ck,nd:S.nd,el:te}:(P&&!P.nd?{ck:P.ck,nd:0,el:el}:null);
     if(D.opts.subs&&Q&&Q.ck.length){var span=Q.nd||len,tt=Q.el/span,ci=-1,acc=0;
       if(tt>=0&&tt<=1.03){for(var q=0;q<Q.ck.length;q++){acc+=Q.ck[q].w;if(tt<=acc+1e-6){ci=q;break;}}if(ci<0)ci=Q.ck.length-1;}
-      if(ci>=0){var f2='800 44px -apple-system,"Apple SD Gothic Neo",sans-serif';g.font=f2;var sl=wrap(g,Q.ck[ci].t,W-150).slice(0,2);sl.forEach(function(l,k){stroke(l,W/2-20,H*0.67+k*56-(sl.length-1)*28,f2,'#FFFFFF',10);});shown=true;}}
+      if(ci>=0){var f2=fnt(800,44);g.font=f2;var sl=wrap(g,Q.ck[ci].t,W-150).slice(0,2);sl.forEach(function(l,k){stroke(l,W/2-20,H*0.67+k*56-(sl.length-1)*28,f2,'#FFFFFF',10);});shown=true;}}
     // 영상 속 말 자막: 내레이션이 안 나올 때 그 순간 말한 문장(한국어 크게 + 원문 작게)
     var A=D.opts.osub&&clipAsr(sc.clip);
     if(A&&!talking&&!shown){var mt=v.currentTime,row=null;for(var r=0;r<A.length;r++){if(A[r][3]&&mt>=A[r][0]-0.1&&mt<=A[r][1]+0.3){row=A[r];break;}}
-      if(row){var f3='800 42px -apple-system,"Apple SD Gothic Neo",sans-serif';g.font=f3;var kl=wrap(g,row[3],W-150).slice(0,2),y0=H*0.70-(kl.length-1)*27;
+      if(row){var f3=fnt(800,42);g.font=f3;var kl=wrap(g,row[3],W-150).slice(0,2),y0=H*0.70-(kl.length-1)*27;
         if(row[2]){var f4='600 26px -apple-system,"PingFang SC",sans-serif';g.font=f4;stroke(wrap(g,row[2],W-160)[0],W/2-20,y0-52,f4,'#FFD84D',7);}
         kl.forEach(function(l,k){stroke(l,W/2-20,y0+k*54,f3,'#FFFFFF',10);});}}
-    if(D.opts.tag){g.font='600 22px -apple-system,sans-serif';g.textAlign='left';g.fillStyle='rgba(255,255,255,.75)';g.fillText(D.opts.tag,30,60);}
+    if(D.opts.tag){g.font=fnt(600,22);g.textAlign='left';g.fillStyle='rgba(255,255,255,.75)';g.fillText(D.opts.tag,30,60);}
     bar(el,len);
   }
   function drawEnd(el){
     var a=Math.min(1,el/0.35);g.drawImage(sn,0,0);
     tg.drawImage(sn,0,0,tiny.width,tiny.height);g.globalAlpha=a;g.imageSmoothingEnabled=true;g.drawImage(tiny,-20,-20,W+40,H+40);g.fillStyle='rgba(10,20,35,.55)';g.fillRect(0,0,W,H);
-    var y=H*0.42;stroke('끝까지 봐 주셔서 고마워요',W/2,y,'700 38px -apple-system,"Apple SD Gothic Neo",sans-serif','#FFFFFF',8);
-    if(CH)stroke(CH,W/2,y+92,'900 64px -apple-system,"Apple SD Gothic Neo",sans-serif','#FFD84D',12);
+    var y=H*0.42;stroke('끝까지 봐 주셔서 고마워요',W/2,y,fnt(700,38),'#FFFFFF',8);
+    if(CH)stroke(CH,W/2,y+92,fnt(900,64),'#FFD84D',12);
     var pulse=1+0.05*Math.sin(el*7),bw=300*pulse,bh=96*pulse,bx=(W-bw)/2,by=y+150;
     g.fillStyle='#D21624';g.beginPath();var r=bh/2;g.moveTo(bx+r,by);g.lineTo(bx+bw-r,by);g.arc(bx+bw-r,by+r,r,-Math.PI/2,Math.PI/2);g.lineTo(bx+r,by+bh);g.arc(bx+r,by+r,r,Math.PI/2,Math.PI*1.5);g.closePath();g.fill();
-    g.font='800 44px -apple-system,"Apple SD Gothic Neo",sans-serif';g.textAlign='center';g.fillStyle='#FFFFFF';g.fillText('🔔 구독',W/2,by+bh/2+15);
+    g.font=fnt(800,44);g.textAlign='center';g.fillStyle='#FFFFFF';g.fillText('🔔 구독',W/2,by+bh/2+15);
     g.globalAlpha=1;bar(el,END);
   }
   var started=false,stopped=false,CUR=null,SPK=null,narrEnd=0,prevV=null,prevArgs=null,LEAD=0.3;
@@ -595,9 +599,20 @@ function upBlob(blob,type,onp){return new Promise(function(ok,no){var x=new XMLH
 // ---------- 6) ☁️ 클라우드 편집(알리바바) — 폰은 재료만 올리고 서버가 정확한 타임라인으로 합성(실시간 녹화 끊김 없음) ----------
 var CLOUD=null,OSSUP={};try{OSSUP=JSON.parse(localStorage.getItem('ed-oss')||'{}');}catch(e){}
 var KF='-apple-system,"Apple SD Gothic Neo",sans-serif';
+// 자막 글꼴 프리셋(2026-10-17 소유자 '게임에 썼던 폰트'): 게임(Bump & Blast)과 같은 Black Han Sans(한글) + Lilita One(숫자·영문), 남색 외곽선 + 아래 그림자, 강조는 금색 그라데이션. Worker /fonts/*.woff 에서 받음(중국 CDN 막힘 대비)
+var FONT_GAME='"BB Lilita","BB BlackHan",'+KF,FONTS_P=null;setTimeout(function(){fontsReady();},300);
+function gameFont(){return ((D&&D.opts&&D.opts.font)||'game')==='game';}
+function fnt(w,px){return gameFont()?'400 '+px+'px '+FONT_GAME:w+' '+px+'px '+KF;}
+function fontsReady(){if(!FONTS_P)FONTS_P=(document.fonts?Promise.all([document.fonts.load('400 60px "BB BlackHan"','가나다'),document.fonts.load('400 60px "BB Lilita"','123')]):Promise.resolve()).catch(function(){});return FONTS_P;}
+function drawTxt(g,txt,x,y,font,fill,lw){g.font=font;g.textAlign='center';g.lineJoin='round';g.lineCap='round';
+  if(gameFont()){var m=font.match(/(\d+(?:\.\d+)?)px/),px=m?+m[1]:40,sh=Math.max(1.5,px*0.08),w=lw?Math.max(2.6,px*0.13):0;
+    if(w){g.lineWidth=w;g.strokeStyle='#0B1A2A';g.fillStyle='#0B1A2A';g.strokeText(txt,x,y+sh);g.fillText(txt,x,y+sh);g.strokeText(txt,x,y);}
+    if(/^#FFD84D$/i.test(fill)){var gr=g.createLinearGradient(0,y-px*0.8,0,y);gr.addColorStop(0,'#FFE866');gr.addColorStop(1,'#FFA726');g.fillStyle='#E8761A';g.fillText(txt,x,y+px*0.05);g.fillStyle=gr;}else g.fillStyle=fill;
+    g.fillText(txt,x,y);return;}
+  if(lw){g.lineWidth=lw;g.strokeStyle='rgba(0,0,0,.85)';g.strokeText(txt,x,y);}g.fillStyle=fill;g.fillText(txt,x,y);}
 function ovC(){var c=document.createElement('canvas');c.width=720;c.height=1280;return c;}
 function cvBlob(c,type,q){return new Promise(function(ok,no){c.toBlob(function(b){b?ok(b):no(new Error('그림 만들기 실패'));},type||'image/png',q);});}
-function stk(g,txt,x,y,font,fill,lw){g.font=font;g.textAlign='center';g.lineJoin='round';if(lw){g.lineWidth=lw;g.strokeStyle='rgba(0,0,0,.85)';g.strokeText(txt,x,y);}g.fillStyle=fill;g.fillText(txt,x,y);}
+function stk(g,txt,x,y,font,fill,lw){drawTxt(g,txt,x,y,font,fill,lw);}
 // 📱 앱 투어 표시: 가리기 상자(불투명)·포인터 링 — 좌표는 영상 프레임 0~1000 정규화, 화면 맞춤(fit)대로 변환
 function vrect(vw,vh){var W=720,H=1280,s=(D.opts.fit==='full')?Math.min(W/vw,H/vh):Math.max(W/vw,H/vh);return {x:(W-vw*s)/2,y:(H-vh*s)/2,w:vw*s,h:vh*s};}
 function drawMark(g,sc,vw,vh,el){var r=vrect(vw,vh);
@@ -609,19 +624,19 @@ function ovMark(sc,vw,vh){var c=ovC(),g=c.getContext('2d');drawMark(g,sc,vw,vh,n
 function ovPhoto(x){var c=ovC(),g=c.getContext('2d'),W=720,H=1280,im=x.im,vw=im.videoWidth||im.naturalWidth||720,vh=im.videoHeight||im.naturalHeight||1280;
   if(vw>vh*1.1){var t=document.createElement('canvas');t.width=24;t.height=42;var tg=t.getContext('2d');tg.drawImage(im,0,0,24,42);var bs=Math.max(W/vw,H/vh)*1.1;g.imageSmoothingEnabled=true;g.drawImage(t,(W-vw*bs)/2,(H-vh*bs)/2,vw*bs,vh*bs);g.fillStyle='rgba(0,0,0,.45)';g.fillRect(0,0,W,H);var fs=Math.min(W/vw,H/vh);g.drawImage(im,(W-vw*fs)/2,(H-vh*fs)/2,vw*fs,vh*fs);}
   else{var cs=Math.max(W/vw,H/vh);g.drawImage(im,(W-vw*cs)/2,(H-vh*cs)/2,vw*cs,vh*cs);}
-  if(x.blank&&!x.cap&&x.say){var fb='800 48px '+KF;g.font=fb;wrap(g,x.say,560).slice(0,4).forEach(function(l,k,a){stk(g,l,360,538+k*64-(a.length-1)*32,fb,'#FFFFFF',10);});}
+  if(x.blank&&!x.cap&&x.say){var fb=fnt(800,48);g.font=fb;wrap(g,x.say,560).slice(0,4).forEach(function(l,k,a){stk(g,l,360,538+k*64-(a.length-1)*32,fb,'#FFFFFF',10);});}
   return cvBlob(c,'image/jpeg',0.88);}
-function ovCap(t,first){var c=ovC(),g=c.getContext('2d'),fs=66,f='900 '+fs+'px '+KF;g.font=f;wrap(g,t,580).forEach(function(l,k){stk(g,l,360,256+k*(fs+12),f,first&&k===0?'#FFD84D':'#FFFFFF',14);});return cvBlob(c);}
-function ovSub(t){var c=ovC(),g=c.getContext('2d'),f='800 44px '+KF;g.font=f;var sl=wrap(g,t,570).slice(0,2);sl.forEach(function(l,k){stk(g,l,340,858+k*56-(sl.length-1)*28,f,'#FFFFFF',10);});return cvBlob(c);}
-function ovAsr(ko,zh){var c=ovC(),g=c.getContext('2d'),f='800 42px '+KF;g.font=f;var kl=wrap(g,ko,570).slice(0,2),y0=896-(kl.length-1)*27;
+function ovCap(t,first){var c=ovC(),g=c.getContext('2d'),fs=66,f=fnt(900,fs);g.font=f;wrap(g,t,580).forEach(function(l,k){stk(g,l,360,256+k*(fs+12),f,first&&k===0?'#FFD84D':'#FFFFFF',14);});return cvBlob(c);}
+function ovSub(t){var c=ovC(),g=c.getContext('2d'),f=fnt(800,44);g.font=f;var sl=wrap(g,t,570).slice(0,2);sl.forEach(function(l,k){stk(g,l,340,858+k*56-(sl.length-1)*28,f,'#FFFFFF',10);});return cvBlob(c);}
+function ovAsr(ko,zh){var c=ovC(),g=c.getContext('2d'),f=fnt(800,42);g.font=f;var kl=wrap(g,ko,570).slice(0,2),y0=896-(kl.length-1)*27;
   if(zh){var f4='600 26px -apple-system,"PingFang SC",sans-serif';g.font=f4;stk(g,wrap(g,zh,560)[0],340,y0-52,f4,'#FFD84D',7);}kl.forEach(function(l,k){stk(g,l,340,y0+k*54,f,'#FFFFFF',10);});return cvBlob(c);}
 function ovBase(){var c=ovC(),g=c.getContext('2d'),gr=g.createLinearGradient(0,640,0,1280);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,.55)');g.fillStyle=gr;g.fillRect(0,640,720,640);
-  if(D.opts.tag){g.font='600 22px -apple-system,sans-serif';g.textAlign='left';g.fillStyle='rgba(255,255,255,.75)';g.fillText(D.opts.tag,30,60);}return cvBlob(c);}
+  if(D.opts.tag){g.font=fnt(600,22);g.textAlign='left';g.fillStyle='rgba(255,255,255,.75)';g.fillText(D.opts.tag,30,60);}return cvBlob(c);}
 async function frameJpg(v,t,end){var c=ovC(),g=c.getContext('2d'),W=720,H=1280;if(v){await seekTo(v,Math.max(0,t));var vw=v.videoWidth||W,vh=v.videoHeight||H,cs=Math.max(W/vw,H/vh);g.drawImage(v,(W-vw*cs)/2,(H-vh*cs)/2,vw*cs,vh*cs);}else{g.fillStyle='#1A2330';g.fillRect(0,0,W,H);}
   if(end){var t2=document.createElement('canvas');t2.width=24;t2.height=42;t2.getContext('2d').drawImage(c,0,0,24,42);g.imageSmoothingEnabled=true;g.drawImage(t2,-20,-20,W+40,H+40);g.fillStyle='rgba(10,20,35,.55)';g.fillRect(0,0,W,H);
-    var y=H*0.42;stk(g,'끝까지 봐 주셔서 고마워요',W/2,y,'700 38px '+KF,'#FFFFFF',8);if(CH)stk(g,CH,W/2,y+92,'900 64px '+KF,'#FFD84D',12);
+    var y=H*0.42;stk(g,'끝까지 봐 주셔서 고마워요',W/2,y,fnt(700,38),'#FFFFFF',8);if(CH)stk(g,CH,W/2,y+92,fnt(900,64),'#FFD84D',12);
     var bw=300,bh=96,bx=(W-bw)/2,by=y+150,r=bh/2;g.fillStyle='#D21624';g.beginPath();g.moveTo(bx+r,by);g.lineTo(bx+bw-r,by);g.arc(bx+bw-r,by+r,r,-Math.PI/2,Math.PI/2);g.lineTo(bx+r,by+bh);g.arc(bx+r,by+r,r,Math.PI/2,Math.PI*1.5);g.closePath();g.fill();
-    g.font='800 44px '+KF;g.textAlign='center';g.fillStyle='#FFFFFF';g.fillText('🔔 구독',W/2,by+bh/2+15);}
+    g.font=fnt(800,44);g.textAlign='center';g.fillStyle='#FFFFFF';g.fillText('🔔 구독',W/2,by+bh/2+15);}
   return cvBlob(c,'image/jpeg',0.9);}
 function ossPut(pol,key,blob,onp){return new Promise(function(ok,no){var f=new FormData();f.append('key',key);Object.keys(pol.fields).forEach(function(k){f.append(k,pol.fields[k]);});f.append('file',blob);
   var x=new XMLHttpRequest();x.open('POST',pol.host);x.upload.onprogress=function(e){if(e.lengthComputable&&onp)onp(e.loaded);};
@@ -629,7 +644,7 @@ function ossPut(pol,key,blob,onp){return new Promise(function(ok,no){var f=new F
   x.onerror=function(){no(new Error('업로드 네트워크 오류 — 와이파이 확인, 또는 버킷 CORS 설정(voice.zhnote.net · POST 허용) 확인'));};x.send(f);});}
 function extOf(name,type,def){var m=String(name||'').match(/\.(\w{2,4})$/);if(m)return m[1].toLowerCase();type=String(type||'');return type.indexOf('wav')>=0?'wav':type.indexOf('mpeg')>=0?'mp3':type.indexOf('mp4')>=0||type.indexOf('m4a')>=0||type.indexOf('aac')>=0?'m4a':type.indexOf('webm')>=0?'webm':type.indexOf('quicktime')>=0?'mov':def;}
 async function cloudRender(){
-  if(RUN)return;readForm();api('/shorts/update',{id:D.id,draft:draftBody()});
+  if(RUN)return;readForm();await fontsReady();api('/shorts/update',{id:D.id,draft:draftBody()});
   var btn=$('cloudBtn'),out=$('out'),ac=getAC(),lbl=btn.textContent,o=D.opts;btn.disabled=true;$('renderBtn').disabled=true;$('pvAll').disabled=true;
   function prog(t,f){out.innerHTML='<p class="prog">'+t+'</p><div class="bar"><i id="cb" style="width:'+Math.round((f||0)*100)+'%"></i></div>';}
   try{

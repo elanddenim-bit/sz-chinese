@@ -49,7 +49,9 @@ import SH192 from "./shorts-192.png";
 import SH512 from "./shorts-512.png";
 import PRE400 from "./fonts/pretendard-400.woff2";
 import PRE700 from "./fonts/pretendard-700.woff2";
-const FONTS = { "/fonts/pretendard-400.woff2": PRE400, "/fonts/pretendard-700.woff2": PRE700 }; // 같은 도메인에서 받음 — 중국에서 외부 글꼴 CDN 막힘 대비
+import BLACKHAN from "./fonts/blackhan.woff";
+import LILITA from "./fonts/lilita.woff";
+const FONTS = { "/fonts/pretendard-400.woff2": PRE400, "/fonts/pretendard-700.woff2": PRE700, "/fonts/blackhan.woff": BLACKHAN, "/fonts/lilita.woff": LILITA }; // 같은 도메인에서 받음 — 중국에서 외부 글꼴 CDN 막힘 대비. blackhan·lilita = 숏츠 자막 '게임 글꼴'(Black Han Sans·Lilita One, OFL)
 
 // 박비서 홈 화면 아이콘(소유자 지정 일러스트) · PWA manifest
 const ICONS = { "/icon-180.png": ICON180, "/apple-touch-icon.png": ICON180, "/icon-192.png": ICON192, "/icon-512.png": ICON512, "/shorts-180.png": SH180, "/shorts-192.png": SH192, "/shorts-512.png": SH512 };
@@ -131,7 +133,7 @@ export default {
         const custom = allowed(env, code) ? { app: "memoir", instructions: await memoirPrompt(env, await hash(code), url.searchParams.get("q") || ""), tools: [], silence: 900 } : true;
         return await realtime(req, env, ctx, url, custom);
       }
-      if (FONTS[url.pathname]) return new Response(FONTS[url.pathname], { headers: { "content-type": "font/woff2", "cache-control": "public, max-age=31536000, immutable", "access-control-allow-origin": "*" } });
+      if (FONTS[url.pathname]) return new Response(FONTS[url.pathname], { headers: { "content-type": url.pathname.endsWith(".woff2") ? "font/woff2" : "font/woff", "cache-control": "public, max-age=31536000, immutable", "access-control-allow-origin": "*" } });
       if (ICONS[url.pathname]) return new Response(ICONS[url.pathname], { headers: { "content-type": "image/png", "cache-control": "public, max-age=86400" } });
       if (url.pathname === "/manifest.webmanifest") return new Response(MANIFEST, { headers: { "content-type": "application/manifest+json; charset=utf-8", "cache-control": "public, max-age=3600" } });
       if (url.pathname === "/u" && req.method === "POST") return await beacon(req, env, ctx);
