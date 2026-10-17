@@ -34,12 +34,12 @@ async function owner(env, h) {
   if (o !== h) throw serr("숏츠 공방은 주인만 쓸 수 있어요.", 403, "not_owner");
 }
 
-async function dsPost(env, path, body, async_) {
+async function dsPost(env, path, body, async_, hst) {
   // 백련 쪽 일시 오류(520 등 5xx·429·연결 끊김)는 두 번까지 다시 시도
   let r = null;
   for (let k = 0; ; k++) {
     try {
-      r = await fetch("https://" + host(env) + "/api/v1" + path, {
+      r = await fetch("https://" + (hst || host(env)) + "/api/v1" + path, {
         method: "POST",
         headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json", ...(async_ ? { "X-DashScope-Async": "enable" } : {}) },
         body: JSON.stringify(body),
@@ -51,7 +51,9 @@ async function dsPost(env, path, body, async_) {
   const t = await r.text();
   let j = {};
   try { j = JSON.parse(t); } catch {}
-  if (!r.ok) throw serr("百炼 " + r.status + ": " + (j.message || j.code || t.slice(0, 160)), 502);
+  // 업무공간 주소가 모델을 모르면 설명 없는 400 '{}' 를 돌려줌(2026-10-17 qwen3-tts-flash) → 공용 주소로 한 번 더(같은 키)
+  if (!r.ok && r.status === 400 && t.replace(/\s/g, "").length <= 2 && !hst && host(env) !== "dashscope.aliyuncs.com") return dsPost(env, path, body, async_, "dashscope.aliyuncs.com");
+  if (!r.ok) throw serr("百炼 " + r.status + ": " + (j.message || j.code || t.slice(0, 160)) + (hst ? " (공용 주소)" : ""), 502);
   return j;
 }
 async function qwen(env, messages, opt = {}) {
@@ -720,11 +722,12 @@ async function poll(env, b, h) {
 const AVA = "savatar";
 const avaKey = (h) => "shorts:ava:" + h;
 const avaCap = (env) => Number(env.SHORTS_AVA_SEC) || 60;
-async function dsRaw(env, path, body, extra) {
-  const r = await fetch("https://" + host(env) + "/api/v1" + path, { method: body ? "POST" : "GET", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json", ...(extra || {}) }, body: body ? JSON.stringify(body) : undefined });
+async function dsRaw(env, path, body, extra, hst) {
+  const r = await fetch("https://" + (hst || host(env)) + "/api/v1" + path, { method: body ? "POST" : "GET", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json", ...(extra || {}) }, body: body ? JSON.stringify(body) : undefined });
   const t = await r.text();
   let j = {};
   try { j = JSON.parse(t); } catch {}
+  if (!r.ok && r.status === 400 && t.replace(/\s/g, "").length <= 2 && !hst && host(env) !== "dashscope.aliyuncs.com") return dsRaw(env, path, body, extra, "dashscope.aliyuncs.com");
   if (!r.ok) throw serr("百炼 " + r.status + ": " + (j.message || j.code || t.slice(0, 160)) + (r.headers.get("x-request-id") || r.headers.get("request-id") ? " [req " + (r.headers.get("x-request-id") || r.headers.get("request-id")) + "]" : "") + (t.length < 3 ? " (빈 응답 — 요청 형식·모델 권한 문제 가능)" : ""), 502);
   return j;
 }
