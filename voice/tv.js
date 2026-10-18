@@ -21,6 +21,7 @@ export function parseM3u(text, def) {
     } else if (ln.startsWith("#")) { continue; }
     else if (cur && /^https?:\/\//i.test(ln)) {
       const u = ln.split(/\s/)[0];
+      if (!/^https:\/\//i.test(u)) { cur = null; continue; } // http:// 는 https 화면에서 브라우저가 막음(혼합 콘텐츠) — 목록에서 뺌
       out.push({ i: (def.src || "m") + ":" + fnv(cur.id ? cur.id + "|" + u : cur.n + "|" + u), n: cur.n || "채널", l: cur.l, g: cur.g, u, c: cur.c || def.c || "", k: def.k || "tv" });
       cur = null;
     }
@@ -48,7 +49,7 @@ export async function tvRefresh(env) {
     for (let i = 0; i < hosts.length; i++) {
       try {
         const arr = JSON.parse(await fetchText("https://" + hosts[i] + "/json/stations/bycountrycodeexact/" + c + "?limit=" + RADIO_MAX + "&order=votes&reverse=true&hidebroken=true"));
-        for (const s of arr) { const u = s.url_resolved || s.url; if (!u || !/^https?:\/\//.test(u)) continue; radio.push({ i: "rb:" + String(s.stationuuid || fnv(u)).slice(0, 12), n: String(s.name || "").trim().slice(0, 60), l: s.favicon || "", g: String(s.tags || "").split(",")[0] || "", u, c, k: "radio", v: s.votes || 0 }); }
+        for (const s of arr) { const u = s.url_resolved || s.url; if (!u || !/^https:\/\//.test(u)) continue; radio.push({ i: "rb:" + String(s.stationuuid || fnv(u)).slice(0, 12), n: String(s.name || "").trim().slice(0, 60), l: s.favicon || "", g: String(s.tags || "").split(",")[0] || "", u, c, k: "radio", v: s.votes || 0 }); }
         break;
       } catch (e) { if (i === hosts.length - 1) err.push("radio " + c + ": " + String(e.message || e).slice(0, 80)); }
     }
@@ -82,7 +83,7 @@ async function myImport(env, h, b) {
   if (!/#EXTINF/i.test(body)) throw serr("m3u 형식이 아니에요(#EXTINF 줄이 없음).");
   const id = "my" + Date.now().toString(36);
   const items = parseM3u(body, { c: "", k: kind, src: id }).slice(0, MY_MAX);
-  if (!items.length) throw serr("채널을 하나도 못 읽었어요.");
+  if (!items.length) throw serr("채널을 하나도 못 읽었어요(http:// 주소만 있는 목록은 https 화면에서 재생이 안 돼 빼요).");
   d.lists.push({ id, name: name || (url ? url.replace(/^https?:\/\//, "").slice(0, 30) : "붙여 넣은 목록"), url: url || "", n: items.length, at: Date.now(), kind });
   d.items = d.items.concat(items);
   if (d.items.length > MY_MAX) d.items = d.items.slice(-MY_MAX);
@@ -262,7 +263,7 @@ var COUNTRIES=[['KR','🇰🇷','한국'],['CN','🇨🇳','중국'],['HK','🇭
 var GENRE={General:'종합',News:'뉴스',Entertainment:'예능',Music:'음악',Sports:'스포츠',Kids:'키즈',Movies:'영화',Documentary:'다큐',Education:'교육',Religious:'종교',Shop:'홈쇼핑',Business:'경제',Culture:'문화',Lifestyle:'라이프',Animation:'애니',Series:'드라마',Family:'가족',Legislative:'의회',Outdoor:'아웃도어',Science:'과학',Travel:'여행',Weather:'날씨',Comedy:'코미디',Classic:'클래식',Auto:'자동차',Cooking:'요리',Public:'공영',Undefined:'기타',Relax:'힐링'};
 var LIST={tv:[],radio:[],at:0,err:[]},MY={lists:[],items:[]},STAT={};
 var FAV=new Set(),RECENT=[];try{FAV=new Set(JSON.parse(localStorage.getItem('tv-fav')||'[]'));RECENT=JSON.parse(localStorage.getItem('tv-recent')||'[]')}catch(e){}
-var S={view:'home',genre:'all',q:'',cur:null,playing:false},ALL={};
+var S={view:'home',genre:'all',q:'',cur:null,playing:false,hideBad:localStorage.getItem('tv-hidebad')!=='0'},ALL={};
 function save(){try{localStorage.setItem('tv-fav',JSON.stringify([...FAV]));localStorage.setItem('tv-recent',JSON.stringify(RECENT.slice(0,30)))}catch(e){}}
 var tT;function toast(m){$('toast').textContent=m;$('toast').classList.add('on');clearTimeout(tT);tT=setTimeout(function(){$('toast').classList.remove('on')},2600)}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -276,7 +277,7 @@ function cardHtml(x){var cls='card'+(x.k==='radio'?' radio':'')+(S.cur&&S.cur.i=
   var inner=x.l?'<img src="'+esc(x.l)+'" loading="lazy" alt="" onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'txt\',textContent:this.nextSibling.textContent}))">':'<span class="txt">'+esc(x.n)+'</span>';
   return '<button class="'+cls+'" data-id="'+esc(x.i)+'">'+inner+'<span class="nm">'+esc(x.n)+'</span><span class="st '+st(x.i)+'"></span>'+(FAV.has(x.i)?'<span class="fav">♥</span>':'')+'</button>'}
 function row(title,items,sub){if(!items.length)return '';return '<section class="row"><h2>'+title+(sub?' <small>'+esc(sub)+'</small>':'')+'</h2><div class="strip">'+items.map(cardHtml).join('')+'</div></section>'}
-function filt(items){var q=S.q.trim().toLowerCase();return items.filter(function(x){var g=gname(x.g)||'기타';if(S.genre!=='all'&&g!==S.genre)return false;if(q&&(x.n+' '+g).toLowerCase().indexOf(q)<0)return false;return true})}
+function filt(items){var q=S.q.trim().toLowerCase();return items.filter(function(x){if(S.hideBad&&st(x.i)==='bad'&&!FAV.has(x.i))return false;var g=gname(x.g)||'기타';if(S.genre!=='all'&&g!==S.genre)return false;if(q&&(x.n+' '+g).toLowerCase().indexOf(q)<0)return false;return true})}
 function render(){var h='',v=S.view;
   var rec=RECENT.map(function(i){return ALL[i]}).filter(Boolean),fav=[...FAV].map(function(i){return ALL[i]}).filter(Boolean);
   if(v==='home'||v==='fav')h+=row('♥ 즐겨찾기',filt(fav));
@@ -288,8 +289,10 @@ function render(){var h='',v=S.view;
   $('rows').innerHTML=h;
   var gs={};[].concat(LIST.tv,MY.items).forEach(function(x){var g=gname(x.g)||'기타';gs[g]=(gs[g]||0)+1});
   var top=Object.keys(gs).sort(function(a,b){return gs[b]-gs[a]}).slice(0,12);
-  $('chips').innerHTML='<button class="chip'+(S.genre==='all'?' on':'')+'" data-g="all">전체</button>'+top.map(function(g){return '<button class="chip'+(S.genre===g?' on':'')+'" data-g="'+esc(g)+'">'+esc(g)+'</button>'}).join('');
-  $('chips').classList.toggle('hidden',v==='radio');
+  var nbad=Object.keys(STAT).filter(function(i){return ALL[i]&&st(i)==='bad'}).length;
+  $('chips').innerHTML='<button class="chip'+(S.genre==='all'?' on':'')+'" data-g="all">전체</button>'+top.map(function(g){return '<button class="chip'+(S.genre===g?' on':'')+'" data-g="'+esc(g)+'">'+esc(g)+'</button>'}).join('')+'<button class="chip'+(S.hideBad?' on':'')+'" id="hideBad" style="margin-left:auto">'+(S.hideBad?'🙈 안 열리는 채널 숨김':'👁 안 열리는 채널 보임')+(nbad?' '+nbad:'')+'</button>';
+  $('hideBad').onclick=function(){S.hideBad=!S.hideBad;localStorage.setItem('tv-hidebad',S.hideBad?'1':'0');render()};
+  $('chips').classList.remove('hidden');
   $('foot').innerHTML='채널 출처: iptv-org(공개 무료 방송 색인) · radio-browser.info'+(LIST.at?' · 목록 갱신 '+new Date(LIST.at).toLocaleString('ko-KR',{timeZone:'Asia/Shanghai',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'')+' · TV '+LIST.tv.length+' · 라디오 '+LIST.radio.length+(MY.items.length?' · 내 목록 '+MY.items.length:'')+'개'+(LIST.err&&LIST.err.length?'<br>⚠ '+LIST.err.map(esc).join(' / '):'')+'<br>재생은 폰이 방송 서버에 직접 접속해요 — 중국 회선에서 안 열리는 채널은 주황 점, 열린 채널은 초록 점. <button id="reBtn">목록 새로고침</button>';
   $('reBtn').onclick=refresh}
 function pick(x){S.cur=x;$('h1').textContent=x.n;$('kick').textContent=(x.k==='radio'?'RADIO · ':'TV · ')+flag(x.c)+' '+(gname(x.g)||'');$('desc').textContent=(x.k==='radio'?'라디오':'TV')+(st(x.i)==='ok'?' · 최근 재생 성공':st(x.i)==='bad'?' · 최근 재생 실패 — 중국에서 안 열릴 수 있어요':' · 아직 재생해 본 적 없음');
@@ -304,7 +307,7 @@ function play(x){if(!x)return;stop();pick(x);reported=false;$('err').classList.a
   if(x.k==='tv'){var ok=el.canPlayType('application/vnd.apple.mpegurl')||el.canPlayType('application/x-mpegURL');if(!ok&&/m3u8/i.test(x.u)){$('err').textContent='이 브라우저는 HLS 를 직접 못 틀어요 — 아이폰·아이패드·맥 사파리에서 열어 주세요.';$('err').classList.remove('hidden')}
     el.classList.remove('hidden');$('art').classList.add('hidden')}
   el.src=x.u;el.load();
-  var p=el.play();if(p&&p.catch)p.catch(function(e){if(S.playing)fail('재생 실패: '+(e&&e.message||e))});
+  var p=el.play();if(p&&p.catch)p.catch(function(e){if(!S.playing)return;var m=String(e&&e.message||e);fail(/not supported/i.test(m)?'이 형식은 브라우저가 못 틀어요(코덱·주소 형식) — 다른 채널로':/NotAllowed/i.test(e&&e.name)?'한 번 더 눌러 주세요(자동 재생 제한)':'재생 실패: '+m)});
   S.playing=true;$('shade').classList.add('playing');$('playBtn').innerHTML='<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg><span>멈춤</span>';
   $('mImg').src=x.l||'';$('mNm').firstChild.textContent=x.n;$('mSub').textContent=flag(x.c)+' '+(x.k==='radio'?'라디오':'TV');$('mini').classList.add('on');
   clearTimeout(watch);watch=setTimeout(function(){if(S.playing&&!reported)fail('12초 안에 안 열렸어요 — 중국 회선에서 막혔거나 꺼진 채널일 수 있어요.')},12000);
