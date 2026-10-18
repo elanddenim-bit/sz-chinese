@@ -25,6 +25,7 @@ import { questApi, questGet, QUEST_HTML } from "./quest.js";
 import { mysteryApi, mysteryGet, MYSTERY_HTML } from "./mystery.js";
 import { timecamApi, timecamGet, TIMECAM_HTML } from "./timecam.js";
 import { HUB_HTML } from "./hub.js";
+import { TV_HTML } from "./tv.js";
 import { XIANGQI_HTML } from "./xiangqi.js";
 import { SPECIAL_HTML } from "./special.js";
 import { signsApi, signsGet, SIGNS_HTML } from "./signs.js";
@@ -162,6 +163,7 @@ export default {
       if ((url.pathname === "/air" || url.pathname.startsWith("/air/")) && req.method === "GET") return await airGet(req, env, url, synth);
       if ((url.pathname === "/mag" || url.pathname.startsWith("/mag/")) && req.method === "GET") return await magGet(req, env, url, synth);
       if ((url.pathname === "/memoir" || url.pathname.startsWith("/memoir/")) && req.method === "GET") return await memoirGet(req, env, url);
+      if (url.pathname === "/tv" && req.method === "GET") return new Response(TV_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/hub" && req.method === "GET") return new Response(HUB_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/special" && req.method === "GET") return new Response(SPECIAL_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/xiangqi" && req.method === "GET") return new Response(XIANGQI_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });

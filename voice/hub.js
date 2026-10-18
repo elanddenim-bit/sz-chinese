@@ -38,6 +38,7 @@ main{max-width:640px;margin:0 auto;padding:14px 16px 48px}h2{font-size:13px;colo
 <a href="/novel"><i>📖</i><b>우리 연재 소설</b><small>우리 기록이 한 화씩 소설로</small></a>
 <a href="/memoir"><i>🎙</i><b>구술 자서전</b><small>매일 밤 5분, 질문 하나에 답하면 책이 됩니다</small></a>
 <a href="/xiangqi"><i>♟</i><b>象棋 중국 장기</b><small>규칙 7가지 + 봇 대국, 오프라인</small></a>
+<a href="/tv"><i>📺</i><b>박비서 TV</b><small>나만의 방송국 — TV·라디오·내 채널(준비 중)</small></a>
 </div>
 <h2>보기</h2><div class="g">
 <a href="/usage"><i>📊</i><b>앱 사용량</b><small>내 앱들 얼마나 썼나</small></a>
