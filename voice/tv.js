@@ -22,7 +22,7 @@ export function parseM3u(text, def) {
     else if (ln.startsWith("#")) { continue; }
     else if (cur && /^https?:\/\//i.test(ln)) {
       const u = ln.split(/\s/)[0];
-      if (!/^https:\/\//i.test(u)) { cur = null; continue; } // http:// 는 https 화면에서 브라우저가 막음(혼합 콘텐츠) — 목록에서 뺌
+      if (!def.keepHttp && !/^https:\/\//i.test(u)) { cur = null; continue; } // 공개 목록의 http:// 는 https 화면에서 브라우저가 막음(혼합 콘텐츠) — 뺌. 내 목록은 앱으로 열 수 있어 남김
       const it = { i: (def.src || "m") + ":" + fnv(cur.id ? cur.id + "|" + u : cur.n + "|" + u), n: cur.n || "채널", l: cur.l, g: cur.g, u, c: cur.c || def.c || "", k: def.k || "tv" };
       if (cur.o.length) it.o = cur.o; // 앱(VLC·TiviMate)용 헤더 옵션 — m3u 내보내기 때 그대로 씀
       out.push(it);
@@ -71,7 +71,7 @@ export async function tvCron(env, uh, um) {
     let changed = false;
     for (const L of d.lists) {
       if (!L.url) continue;
-      try { const items = parseM3u(await fetchText(L.url), { c: "", k: L.kind || "tv", src: L.id }); if (items.length) { d.items = d.items.filter((x) => !x.i.startsWith(L.id + ":")).concat(items.slice(0, MY_MAX)); L.n = items.length; L.at = Date.now(); changed = true; } } catch {}
+      try { const items = parseM3u(await fetchText(L.url), { c: "", k: L.kind || "tv", src: L.id, keepHttp: true }); if (items.length) { d.items = d.items.filter((x) => !x.i.startsWith(L.id + ":")).concat(items.slice(0, MY_MAX)); L.n = items.length; L.at = Date.now(); changed = true; } } catch {}
     }
     if (changed) await env.KV.put("tv:my:" + h, JSON.stringify(d));
   }
@@ -85,8 +85,8 @@ async function myImport(env, h, b) {
   if (url) { if (!/^https?:\/\//i.test(url)) throw serr("주소는 http(s)로 시작해야 해요."); try { body = await fetchText(url); } catch (e) { throw serr("목록을 못 받았어요: " + String(e.message || e).slice(0, 100)); } }
   if (!/#EXTINF/i.test(body)) throw serr("m3u 형식이 아니에요(#EXTINF 줄이 없음).");
   const id = "my" + Date.now().toString(36);
-  const items = parseM3u(body, { c: "", k: kind, src: id }).slice(0, MY_MAX);
-  if (!items.length) throw serr("채널을 하나도 못 읽었어요(http:// 주소만 있는 목록은 https 화면에서 재생이 안 돼 빼요).");
+  const items = parseM3u(body, { c: "", k: kind, src: id, keepHttp: true }).slice(0, MY_MAX);
+  if (!items.length) throw serr("채널을 하나도 못 읽었어요.");
   d.lists.push({ id, name: name || (url ? url.replace(/^https?:\/\//, "").slice(0, 30) : "붙여 넣은 목록"), url: url || "", n: items.length, at: Date.now(), kind });
   d.items = d.items.concat(items);
   if (d.items.length > MY_MAX) d.items = d.items.slice(-MY_MAX);
@@ -283,7 +283,7 @@ function index(){ALL={};[].concat(LIST.tv,LIST.radio,MY.items).forEach(function(
 function gname(g){if(!g)return '';var k=g.split(';')[0].trim();return GENRE[k]||k}
 function flag(c){var f=COUNTRIES.filter(function(x){return x[0]===c})[0];return f?f[1]:'📡'}
 function fmt(u){var m=/\.(m3u8|flv|ts|mp4|mp3|aac|m4a|ogg|opus|webm|mpd)(\?|$)/i.exec(u||''),e=m?m[1].toLowerCase():'';if(/^(rtmp|rtsp|mms|udp|rtp):/i.test(u||''))e=u.split(':')[0].toLowerCase();return e}
-function unplayable(x){var e=fmt(x.u);return e==='flv'||e==='ts'||e==='mpd'||e==='rtmp'||e==='rtsp'||e==='mms'||e==='udp'||e==='rtp'?e.toUpperCase():''}
+function unplayable(x){var e=fmt(x.u);if(/^http:\/\//i.test(x.u||''))return 'HTTP';return e==='flv'||e==='ts'||e==='mpd'||e==='rtmp'||e==='rtsp'||e==='mms'||e==='udp'||e==='rtp'?e.toUpperCase():''}
 function st(id){var s=STAT[id];if(!s)return '';return s[0]>=s[1]?'ok':'bad'}
 function cardHtml(x){var cls='card'+(x.k==='radio'?' radio':'')+(S.cur&&S.cur.i===x.i?' on':'');
   var inner=x.l?'<img src="'+esc(x.l)+'" loading="lazy" alt="" onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'txt\',textContent:this.nextSibling.textContent}))">':'<span class="txt">'+esc(x.n)+'</span>';
@@ -360,7 +360,7 @@ document.querySelectorAll('.seg .chip').forEach(function(b){b.onclick=function()
 function myLists(){$('myLists').innerHTML=MY.lists.map(function(L){return '<div><b>'+esc(L.name)+'</b><small>'+L.n+'개'+(L.url?' · 주소':' · 붙여 넣기')+'</small><button data-del="'+esc(L.id)+'">삭제</button></div>'}).join('')||'<div><small>아직 없음</small></div>';
   document.querySelectorAll('[data-del]').forEach(function(b){b.onclick=function(){if(!confirm('이 목록을 지울까요?'))return;post('/tv/my/del',{id:b.getAttribute('data-del')}).then(function(j){MY=j.my;index();render();myLists();toast('지웠어요')}).catch(function(e){toast(e.message)})}})}
 $('iGo').onclick=function(){var url=$('iUrl').value.trim(),text=$('iText').value;if(!url&&!text.trim())return toast('주소나 내용을 넣어 주세요');$('iGo').disabled=true;$('iGo').textContent='받는 중…';
-  post('/tv/import',{url:url,text:url?'':text,name:$('iName').value,kind:KIND}).then(function(j){MY=j.my;index();$('iUrl').value='';$('iText').value='';$('iName').value='';var L=j.my.lists[j.my.lists.length-1],its=j.my.items.filter(function(x){return x.i.indexOf(L.id+':')===0}),np=its.filter(unplayable).length;toast('추가 '+its.length+'개'+(np?' — 그중 '+np+'개는 FLV·TS 같은 앱 전용 형식이라 브라우저에선 안 틀려요':''));S.view='my';document.querySelectorAll('#nav button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-v')==='my')});render();myLists();$('sheet').classList.remove('on')}).catch(function(e){toast(e.message)}).then(function(){$('iGo').disabled=false;$('iGo').textContent='추가'})};
+  post('/tv/import',{url:url,text:url?'':text,name:$('iName').value,kind:KIND}).then(function(j){MY=j.my;index();$('iUrl').value='';$('iText').value='';$('iName').value='';var L=j.my.lists[j.my.lists.length-1],its=j.my.items.filter(function(x){return x.i.indexOf(L.id+':')===0}),np=its.filter(unplayable).length;toast('추가 '+its.length+'개'+(np?' — 그중 '+np+'개는 FLV·TS·http 라 브라우저에선 안 되고 📲 앱으로 열어요':''));S.view='my';document.querySelectorAll('#nav button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-v')==='my')});render();myLists();$('sheet').classList.remove('on')}).catch(function(e){toast(e.message)}).then(function(){$('iGo').disabled=false;$('iGo').textContent='추가'})};
 function refresh(){if(!needCode())return;toast('공개 목록 받는 중… 20초쯤 걸려요');post('/tv/refresh').then(function(j){toast('TV '+j.tv+' · 라디오 '+j.radio+'개'+(j.err.length?' (일부 실패)':''));return load()}).catch(function(e){toast(e.message)})}
 function load(){var p=CODE?post('/tv/state').then(function(j){LIST=j.list;MY=j.my||MY;STAT=j.stat||{}}):fetch('/tv/channels').then(function(r){return r.json()}).then(function(j){LIST=j});
   return p.then(function(){index();render();if(!S.cur){var first=(RECENT.map(function(i){return ALL[i]}).filter(Boolean)[0])||LIST.tv.filter(function(x){return x.c==='KR'})[0]||LIST.tv[0];if(first)pick(first)}
