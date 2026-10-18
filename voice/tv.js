@@ -211,7 +211,7 @@ a{color:inherit;text-decoration:none}
 .card:active{transform:scale(.97)}.card.on{outline:2px solid #fff;outline-offset:-2px}
 .card img{width:70%;height:60%;object-fit:contain;filter:drop-shadow(0 2px 6px rgba(0,0,0,.6))}
 .card .txt{font-family:var(--disp);font-size:clamp(14px,2.4vw,22px);padding:0 10px;text-align:center;color:#eee;line-height:1.1;word-break:keep-all}
-.card .txt+.nm{display:none}.card .nm{position:absolute;left:0;right:0;bottom:0;padding:16px 8px 6px;font-size:11px;font-weight:600;background:linear-gradient(0deg,rgba(0,0,0,.85),transparent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card.yt{background:linear-gradient(135deg,#2a0a0d,#1f1f1f);border:1px solid #3a1518}.card.yt .nm{display:block;color:#ff9b9b}.card.yt .nm u{margin-left:6px;color:#fff;cursor:pointer}.card .txt+.nm{display:none}.card .nm{position:absolute;left:0;right:0;bottom:0;padding:16px 8px 6px;font-size:11px;font-weight:600;background:linear-gradient(0deg,rgba(0,0,0,.85),transparent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card .st{position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:#555}.card .st.ok{background:var(--ok)}.card .st.bad{background:var(--bad)}
 .card .fav{position:absolute;top:2px;left:5px;font-size:14px;color:var(--red)}
 .card .tag{position:absolute;top:5px;left:6px;font-size:9px;font-weight:800;letter-spacing:.05em;background:var(--bad);color:#000;padding:1px 5px;border-radius:3px}.card.np{opacity:.45}
@@ -284,6 +284,11 @@ https://…/index.m3u8"></textarea>
 'use strict';
 var $=function(id){return document.getElementById(id)};
 var CODE=localStorage.getItem('pb-code')||'';
+// 한국 뉴스 공식 YouTube 라이브(합법·무료, VPN 필요) — 채널 /live 로 열고, 핸들이 바뀌면 검색(라이브 필터)으로
+var KRLIVE=[['YTN','ytnnews24'],['연합뉴스TV','yonhapnewstv'],['KBS 뉴스','newskbs'],['MBC 뉴스','MBCNEWS11'],['SBS 뉴스','SBSNEWS'],['JTBC 뉴스','JTBC_news'],['KBS World','kbsworldtv']];
+function ytLive(h){return 'https://www.youtube.com/@'+h+'/live'}
+function ytSearch(n){return 'https://www.youtube.com/results?search_query='+encodeURIComponent(n+' 실시간')+'&sp=EgJAAQ%253D%253D'}
+function krRow(){return '<section class="row"><h2><span class="flag">🇰🇷</span>한국 뉴스 라이브 <small>공식 YouTube · VPN 필요</small></h2><div class="strip">'+KRLIVE.map(function(c){return '<a class="card yt" href="'+ytLive(c[1])+'" target="_blank" rel="noopener"><span class="txt">'+esc(c[0])+'</span><span class="nm">▶ YouTube 라이브 <u data-ys="'+esc(c[0])+'">검색</u></span></a>'}).join('')+'</div></section>'}
 var COUNTRIES=[['KR','🇰🇷','한국'],['CN','🇨🇳','중국'],['HK','🇭🇰','홍콩'],['TW','🇹🇼','대만'],['JP','🇯🇵','일본']];
 var GENRE={General:'종합',News:'뉴스',Entertainment:'예능',Music:'음악',Sports:'스포츠',Kids:'키즈',Movies:'영화',Documentary:'다큐',Education:'교육',Religious:'종교',Shop:'홈쇼핑',Business:'경제',Culture:'문화',Lifestyle:'라이프',Animation:'애니',Series:'드라마',Family:'가족',Legislative:'의회',Outdoor:'아웃도어',Science:'과학',Travel:'여행',Weather:'날씨',Comedy:'코미디',Classic:'클래식',Auto:'자동차',Cooking:'요리',Public:'공영',Undefined:'기타',Relax:'힐링'};
 var LIST={tv:[],radio:[],at:0,err:[]},MY={lists:[],items:[]},STAT={},H='';
@@ -310,6 +315,7 @@ function render(){var h='',v=S.view;
   if(v==='home'||v==='fav')h+=row('♥ 즐겨찾기',filt(fav));
   if(v==='home'){h+=row('최근 본 채널',filt(rec));if(MY.items.length)h+=row('내 목록',filt(MY.items).slice(0,40))}
   if(v==='my'){MY.lists.forEach(function(L){h+=row('📂 '+esc(L.name),filt(MY.items.filter(function(x){return x.i.indexOf(L.id+':')===0})),L.n+'개')});if(!MY.lists.length)h+='<div class="empty">아직 내 목록이 없어요. 오른쪽 위 ＋ 로 m3u 주소나 내용을 붙여 넣으세요.</div>'}
+  if(v==='home'||v==='tv')h+=krRow();
   if(v==='home'||v==='tv')COUNTRIES.forEach(function(c){h+=row('<span class="flag">'+c[1]+'</span>'+c[2]+' TV',filt(LIST.tv.filter(function(x){return x.c===c[0]})))});
   if(v==='home'||v==='radio')COUNTRIES.forEach(function(c){h+=row('<span class="flag">'+c[1]+'</span>'+c[2]+' 라디오',filt(LIST.radio.filter(function(x){return x.c===c[0]})))});
   if(!h)h='<div class="empty">'+(v==='fav'?'카드를 길게 누르거나 ♡ 버튼으로 즐겨찾기를 담아 두세요.':'표시할 채널이 없어요.')+'</div>';
@@ -347,7 +353,7 @@ $('playBtn').onclick=function(){if(!S.cur)return toast('아래에서 채널을 �
 $('mStop').onclick=stop;
 $('favBtn').onclick=function(){if(!S.cur)return;var i=S.cur.i;if(FAV.has(i)){FAV.delete(i);toast('즐겨찾기에서 뺐어요')}else{FAV.add(i);toast('즐겨찾기에 담았어요')}save();render();pick(S.cur)};
 $('fsBtn').onclick=function(){var v=$('vid');if(v.classList.contains('hidden'))return toast('TV 채널을 재생한 뒤 눌러 주세요');if(v.webkitEnterFullscreen)v.webkitEnterFullscreen();else if(v.requestFullscreen)v.requestFullscreen()};
-document.addEventListener('click',function(e){var c=e.target.closest('.card');if(c){var x=ALL[c.getAttribute('data-id')];if(x)play(x);return}var g=e.target.closest('.chip[data-g]');if(g){S.genre=g.getAttribute('data-g');render();return}var n=e.target.closest('#nav button');if(n){S.view=n.getAttribute('data-v');document.querySelectorAll('#nav button').forEach(function(b){b.classList.toggle('on',b===n)});render();window.scrollTo({top:$('chips').offsetTop-70,behavior:'smooth'})}});
+document.addEventListener('click',function(e){var ys=e.target.closest('[data-ys]');if(ys){e.preventDefault();e.stopPropagation();window.open(ytSearch(ys.getAttribute('data-ys')),'_blank');return}var c=e.target.closest('.card:not(.yt)');if(c){var x=ALL[c.getAttribute('data-id')];if(x)play(x);return}var g=e.target.closest('.chip[data-g]');if(g){S.genre=g.getAttribute('data-g');render();return}var n=e.target.closest('#nav button');if(n){S.view=n.getAttribute('data-v');document.querySelectorAll('#nav button').forEach(function(b){b.classList.toggle('on',b===n)});render();window.scrollTo({top:$('chips').offsetTop-70,behavior:'smooth'})}});
 var pressT;document.addEventListener('touchstart',function(e){var c=e.target.closest('.card');if(!c)return;pressT=setTimeout(function(){var i=c.getAttribute('data-id');if(FAV.has(i))FAV.delete(i);else FAV.add(i);save();render();toast(FAV.has(i)?'♥ 즐겨찾기에 담았어요':'즐겨찾기에서 뺐어요')},600)},{passive:true});
 document.addEventListener('touchend',function(){clearTimeout(pressT)});document.addEventListener('touchmove',function(){clearTimeout(pressT)});
 $('sBtn').onclick=function(){$('searchBox').classList.toggle('on');if($('searchBox').classList.contains('on'))$('q').focus();else{S.q='';$('q').value='';render()}};
