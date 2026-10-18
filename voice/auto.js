@@ -10,7 +10,7 @@
 import { trendApi } from "./trend.js";
 import { barkPush } from "./brief.js";
 import { logUse } from "./usage.js";
-import { w3Make, w3Poll, ytQueueAdd, shortsQwen, draftKey, listKey, fileUrl, KR_RULES, TONE_RULES } from "./shorts.js";
+import { w3Make, w3Poll, ytQueueAdd, shortsQwen, draftKey, listKey, fileUrl, KR_RULES, TONE_RULES, CAM_RULES_ZH } from "./shorts.js";
 
 const cnDay = (t = Date.now()) => new Date(t + 8 * 3600e3).toISOString().slice(0, 10);
 const aerr = (message, status = 400) => Object.assign(new Error(message), { code: "auto", status });
@@ -36,7 +36,7 @@ async function plan(env, h, c, manualTopic) {
   const o = await shortsQwen(env, [
     { role: "system", content: "너는 한국 시청자용 유튜브 숏츠 채널의 자동 기획자다. 채널: 광저우 사는 한국인 40대 가장이 운영, 얼굴 대신 '치비 일러스트 캐릭터'가 진행자. " + KR_RULES + " " + TONE_RULES +
       " 오늘은 " + c.sec + "초짜리 한 토막: 캐릭터가 카메라를 보고 한 호흡으로 말한다. 시리즈 '" + SERIES[c.series] + "'. " +
-      "규칙: say 는 캐릭터의 대사 한 덩어리, " + maxSay + "자 이내(15초 안에 말해야 함), 첫 문장이 훅(숫자·질문·반전), 마지막은 댓글 유도 한 마디 또는 여운. 주제에 적힌 사실 밖은 말하지 않는다(지어내기 금지). scene 은 한국어 장면 지시: '2D 치비 일러스트 캐릭터(성인 남성 직장인, 검은 선글라스 항상 착용 — 어떤 컷에서도 벗지 않음) 그림체 그대로, 실사로 바꾸지 말 것'을 반드시 첫 문장에 쓰고, 컷마다 '선글라스 낀 채'를 다시 적고(아이·어린이 같은 단어는 쓰지 말 것), 캐릭터가 어디(광저우 느낌 배경)에서 어떤 소품·제스처로 말하는지, 카메라 1~2컷, 글자·로고 없음, 실존 인물 묘사 금지. title 은 유튜브 제목 8~18자(번호 없이), description 2~3문장, tags 8~12개." +
+      "규칙: say 는 캐릭터의 대사 한 덩어리, " + maxSay + "자 이내(15초 안에 말해야 함), 첫 문장이 훅(숫자·질문·반전), 마지막은 댓글 유도 한 마디 또는 여운. 주제에 적힌 사실 밖은 말하지 않는다(지어내기 금지). scene 은 한국어 장면 지시: '2D 치비 일러스트 캐릭터(성인 남성 직장인, 검은 선글라스 항상 착용 — 어떤 컷에서도 벗지 않음) 그림체 그대로, 실사로 바꾸지 말 것'을 반드시 첫 문장에 쓰고, 컷마다 '선글라스 낀 채'를 다시 적고(아이·어린이 같은 단어는 쓰지 말 것), 캐릭터가 어디(광저우 느낌 배경)에서 어떤 소품·제스처로 말하는지, 카메라 1~2컷(첫 컷은 미디엄샷 아이레벨 고정으로 상황+캐릭터, 두 번째가 있으면 핵심 한 마디에 맞춰 미디엄클로즈업으로 살짝 추진 — 과한 줌·회전 금지), 글자·로고 없음, 실존 인물 묘사 금지. title 은 유튜브 제목 8~18자(번호 없이), description 2~3문장, tags 8~12개." +
       (c.notes.length ? " 주인의 최근 반려 이유(반드시 반영): " + c.notes.slice(-5).join(" / ") : "") +
       ' JSON: {"pick":번호(1부터) 또는 0,"topic":"고른 화제 한 줄","title":"","say":"","scene":"","description":"","tags":[]}' },
     { role: "user", content: manualTopic ? "주제(직접 지정): " + manualTopic : "오늘의 화제 후보:\n" + topics.map((t, i) => (i + 1) + ". " + t.ko + (t.what ? " — " + t.what : "") + (t.why ? " (왜 뜨나: " + t.why + ")" : "") + (t.word && t.word.z ? " [유행어 " + t.word.z + " " + (t.word.k || "") + "]" : "")).join("\n") + "\n가장 한국 시청자가 멈출 만한 것 하나를 골라라." },
