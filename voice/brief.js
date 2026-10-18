@@ -179,6 +179,11 @@ async function sendFor(env, h, doc, d, dry, auto) {
 export async function briefApi(env, ctx, path, b, h) {
   await owner(env, h);
   const doc = await load(env, h);
+  if (path === "/brief/study") { // 📚 학습 알람 시험 발송·끄기/켜기 {test:1} | {off:true|false}
+    if (b.test) { await barkPush(doc.bark, "📚 중국어 30분 — 자기 전 학습 시간", "시험 알림이에요. 매일 중국 시각 " + (Number(env.STUDY_HOUR) || 21) + "시에 와요.", env.SZCN_URL || "https://elanddenim-bit.github.io/sz-chinese/"); return { ok: true, sent: true }; }
+    if (typeof b.off === "boolean") { if (b.off) await env.KV.put("study:off", "1"); else await env.KV.delete("study:off"); }
+    return { ok: true, off: !!(await env.KV.get("study:off")) };
+  }
   const view = () => ({ ok: true, trips: doc.trips, bark: !!barkOf(doc.bark), hour: doc.hour || 21, log: (doc.log || []).slice(0, 8), sent: doc.sent || {},
     home: !!(doc.home && doc.home.gps), morning: doc.morning !== false, msent: doc.msent || {} });
   if (path === "/brief/state") return view();
@@ -469,3 +474,20 @@ function send(dry){var d=$('pd').value;$('out').innerHTML='<p class="muted">'+(d
   });}
 load();
 </script></body></html>`;
+
+// 📚 중국어 학습 알람(2026-10-19 소유자 요청 "매일 저녁 9시, 자기 전 30분 중국어 학습"): 주인(usage:owner)에게 중국 21시(STUDY_HOUR) 정각 틱에 Bark 1회.
+// Bark 주소는 출장 브리핑과 같은 KV brief:<해시>.bark 재사용. 탭하면 실전 중국어 앱(SZCN_URL). 하루 1번 KV study:sent, 끄기 KV study:off=1.
+export async function studyCron(env, uh, um) {
+  if (um >= 15) return;
+  const hour = Number(env.STUDY_HOUR) || 21;
+  if ((uh + 8) % 24 !== hour) return;
+  const h = await env.KV.get("usage:owner"); if (!h) return;
+  if (await env.KV.get("study:off")) return;
+  const day = cnDay(); if ((await env.KV.get("study:sent")) === day) return;
+  const bd = await env.KV.get("brief:" + h, "json"); if (!bd || !bd.bark) return;
+  await env.KV.put("study:sent", day, { expirationTtl: 2 * 86400 });
+  const tips = ["오늘은 통화 모드 한 판(연습 난이도)으로 시작해 보세요.", "복습 탭 먼저 10분, 그다음 퀴즈 20분.", "HSK 단어 20개 + 발음 탭 5문장.", "현장 탭에서 오늘 공장에서 들은 말 한 줄 교정받기.", "롤플레이 하나 끝까지 — 틀린 문장은 '다시 걸기'로.", "영상 섀도잉 3분 클립 하나, 따라 말하기 3번.", "숫자 듣기 드릴 10분 — 단가 협상은 숫자가 반이에요."];
+  const tip = tips[new Date(Date.now() + 8 * 3600e3).getDay() % tips.length];
+  const url = env.SZCN_URL || "https://elanddenim-bit.github.io/sz-chinese/";
+  try { await barkPush(bd.bark, "📚 중국어 30분 — 자기 전 학습 시간", tip, url); } catch (e) { console.log("studyCron bark", e && e.message); }
+}

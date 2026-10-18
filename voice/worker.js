@@ -37,7 +37,7 @@ import { TOON_HTML } from "./toon.js";
 import { CINE_HTML } from "./cine.js";
 import { W3_HTML } from "./wan3.js";
 import { autoApi, autoCron, AUTO_HTML } from "./auto.js";
-import { briefApi, briefCron, briefMorning, briefGet, BRIEF_HTML } from "./brief.js";
+import { briefApi, briefCron, briefMorning, briefGet, studyCron, BRIEF_HTML } from "./brief.js";
 import { magApi, magCron, magGet } from "./mag.js";
 import { airApi, airGet, } from "./air.js";
 import { liveRelay, LIVE_HTML } from "./live.js";
@@ -118,6 +118,7 @@ export default {
       if (uh >= 21 || uh <= 14) ctx.waitUntil(magCron(env).catch((e) => console.log("magCron", e && e.message))); // 📰 출발 2시간 전 기내 잡지
       ctx.waitUntil(autoCron(env, uh, synth).catch((e) => console.log("autoCron", e && e.message))); // 🤖 자동 채널(아침 시작·렌더링 폴링)
       if (um < 15) ctx.waitUntil(memoirCron(env, uh).catch((e) => console.log("memoirCron", e && e.message)));
+      ctx.waitUntil(studyCron(env, uh, um).catch((e) => console.log("studyCron", e && e.message))); // 📚 중국어 학습 알람(중국 21시)
       ctx.waitUntil(tvCron(env, uh, um).catch((e) => console.log("tvCron", e && e.message))); // 📺 박비서 TV 채널 목록(중국 새벽 4시) // 🎙 구술 자서전 밤 질문(정한 시각 정각 틱)
     }
   },
