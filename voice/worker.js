@@ -25,7 +25,7 @@ import { questApi, questGet, QUEST_HTML } from "./quest.js";
 import { mysteryApi, mysteryGet, MYSTERY_HTML } from "./mystery.js";
 import { timecamApi, timecamGet, TIMECAM_HTML } from "./timecam.js";
 import { HUB_HTML } from "./hub.js";
-import { TV_HTML } from "./tv.js";
+import { TV_HTML, tvGet, tvApi, tvCron } from "./tv.js";
 import { XIANGQI_HTML } from "./xiangqi.js";
 import { SPECIAL_HTML } from "./special.js";
 import { signsApi, signsGet, SIGNS_HTML } from "./signs.js";
@@ -117,7 +117,8 @@ export default {
       if (uh >= 21 || uh <= 14) ctx.waitUntil(briefMorning(env).catch((e) => console.log("briefMorning", e && e.message))); // 중국 5~22시 '지금 출발'
       if (uh >= 21 || uh <= 14) ctx.waitUntil(magCron(env).catch((e) => console.log("magCron", e && e.message))); // 📰 출발 2시간 전 기내 잡지
       ctx.waitUntil(autoCron(env, uh, synth).catch((e) => console.log("autoCron", e && e.message))); // 🤖 자동 채널(아침 시작·렌더링 폴링)
-      if (um < 15) ctx.waitUntil(memoirCron(env, uh).catch((e) => console.log("memoirCron", e && e.message))); // 🎙 구술 자서전 밤 질문(정한 시각 정각 틱)
+      if (um < 15) ctx.waitUntil(memoirCron(env, uh).catch((e) => console.log("memoirCron", e && e.message)));
+      ctx.waitUntil(tvCron(env, uh, um).catch((e) => console.log("tvCron", e && e.message))); // 📺 박비서 TV 채널 목록(중국 새벽 4시) // 🎙 구술 자서전 밤 질문(정한 시각 정각 틱)
     }
   },
   async fetch(req, env, ctx) {
@@ -163,6 +164,7 @@ export default {
       if ((url.pathname === "/air" || url.pathname.startsWith("/air/")) && req.method === "GET") return await airGet(req, env, url, synth);
       if ((url.pathname === "/mag" || url.pathname.startsWith("/mag/")) && req.method === "GET") return await magGet(req, env, url, synth);
       if ((url.pathname === "/memoir" || url.pathname.startsWith("/memoir/")) && req.method === "GET") return await memoirGet(req, env, url);
+      if (url.pathname.startsWith("/tv/") && req.method === "GET") return await tvGet(req, env, url);
       if (url.pathname === "/tv" && req.method === "GET") return new Response(TV_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/hub" && req.method === "GET") return new Response(HUB_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/special" && req.method === "GET") return new Response(SPECIAL_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
@@ -183,6 +185,7 @@ export default {
       if (url.pathname.startsWith("/mystery/")) return json(req, await mysteryApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/timecam/")) return json(req, await timecamApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/signs/")) return json(req, await signsApi(env, ctx, url.pathname, b, h));
+      if (url.pathname.startsWith("/tv/")) return json(req, await tvApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/novel/")) return json(req, await novelApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/brief/")) return json(req, await briefApi(env, ctx, url.pathname, b, h));
       if (url.pathname === "/mag/today" || url.pathname === "/mag/radio/make") return jsonStream(req, () => magApi(env, ctx, url.pathname, b, h, synth));
