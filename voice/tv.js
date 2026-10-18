@@ -100,7 +100,22 @@ async function myDel(env, h, id) {
   return d;
 }
 
+const m3uLine = (x) => "#EXTINF:-1" + (x.l ? ' tvg-logo="' + x.l + '"' : "") + ' group-title="' + (x.g || "") + '",' + x.n + "\n" + ((x.o || []).length ? x.o.join("\n") + "\n" : "") + x.u;
+const m3uRes = (body, name) => new Response(body, { headers: { "content-type": "audio/x-mpegurl; charset=utf-8", "content-disposition": 'inline; filename="' + name + '"', "cache-control": "no-store", "access-control-allow-origin": "*" } });
 export async function tvGet(req, env, url) {
+  // 채널 1개짜리 m3u — APTV·IPTV 앱에 '목록 추가'로 넘길 때(앱들이 단일 스트림 딥링크는 없고 m3u 주소만 받음)
+  if (url.pathname === "/tv/one.m3u") {
+    const u = url.searchParams.get("u") || "", n = (url.searchParams.get("n") || "채널").slice(0, 60), o = (url.searchParams.get("o") || "").split("\n").filter((l) => /^#EXT/.test(l));
+    if (!/^https?:\/\//i.test(u) && !/^(rtmp|rtsp|mms|udp|rtp):/i.test(u)) return new Response("bad url", { status: 400 });
+    return m3uRes("#EXTM3U\n" + m3uLine({ n, u, o, l: url.searchParams.get("l") || "", g: url.searchParams.get("g") || "" }) + "\n", "parktv-one.m3u");
+  }
+  // 내 목록 전체 m3u — h = 초대 코드 해시(화면이 /tv/state 로 받음). APTV 구독 주소로 넣어 두면 앱이 알아서 다시 받음
+  if (url.pathname === "/tv/my.m3u") {
+    const h = url.searchParams.get("h") || "";
+    if (!/^[0-9a-f]{12}$/.test(h)) return new Response("bad", { status: 400 });
+    const d = await myLoad(env, h);
+    return m3uRes("#EXTM3U\n" + d.items.map(m3uLine).join("\n") + "\n", "parktv.m3u");
+  }
   if (url.pathname === "/tv/channels") {
     const d = (await env.KV.get("tv:list", "json")) || { at: 0, tv: [], radio: [], err: ["목록이 아직 없어요 — 새로고침을 눌러 주세요"] };
     return new Response(JSON.stringify(d), { headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=300" } });
@@ -110,7 +125,7 @@ export async function tvGet(req, env, url) {
 export async function tvApi(env, ctx, path, b, h) {
   if (path === "/tv/state") {
     const [list, my, stat] = await Promise.all([env.KV.get("tv:list", "json"), myLoad(env, h), env.KV.get("tv:stat:" + h, "json")]);
-    return { list: list || { at: 0, tv: [], radio: [], err: [] }, my, stat: stat || {} };
+    return { list: list || { at: 0, tv: [], radio: [], err: [] }, my, stat: stat || {}, h };
   }
   if (path === "/tv/refresh") {
     const k = "tv:re:" + new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 13);
@@ -255,7 +270,7 @@ a{color:inherit;text-decoration:none}
   <input id="iName" placeholder="목록 이름(선택)"><label class="btn gray" style="width:100%;justify-content:center;margin-bottom:8px;cursor:pointer">📄 m3u 파일 고르기 <input id="iFile" type="file" accept=".m3u,.m3u8,.txt,audio/x-mpegurl,application/vnd.apple.mpegurl,application/x-mpegurl,text/plain" style="display:none"></label><input id="iUrl" placeholder="또는 https://…/playlist.m3u 주소"><textarea id="iText" placeholder="#EXTM3U
 #EXTINF:-1 tvg-logo=&quot;…&quot; group-title=&quot;News&quot;,채널 이름
 https://…/index.m3u8"></textarea>
-  <div class="btns"><button class="btn red" id="iGo">추가</button><button class="btn gray" id="iExp">📤 m3u 내보내기</button><button class="btn gray" id="iClose">닫기</button></div>
+  <div class="btns"><button class="btn red" id="iGo">추가</button><button class="btn gray" id="iExp">📤 m3u 내보내기</button><button class="btn gray" id="iAptv">📺 APTV에 내 목록 구독</button><button class="btn gray" id="iClose">닫기</button></div>
   <p>내보내기 = 내 목록 + 즐겨찾기를 m3u 파일로(헤더 옵션 유지) → VLC·TiviMate·Infuse 에 넣어 앱에서 통째로 보기.</p>
   <div class="lst" id="myLists"></div>
 </div></div>
@@ -271,7 +286,7 @@ var $=function(id){return document.getElementById(id)};
 var CODE=localStorage.getItem('pb-code')||'';
 var COUNTRIES=[['KR','🇰🇷','한국'],['CN','🇨🇳','중국'],['HK','🇭🇰','홍콩'],['TW','🇹🇼','대만'],['JP','🇯🇵','일본']];
 var GENRE={General:'종합',News:'뉴스',Entertainment:'예능',Music:'음악',Sports:'스포츠',Kids:'키즈',Movies:'영화',Documentary:'다큐',Education:'교육',Religious:'종교',Shop:'홈쇼핑',Business:'경제',Culture:'문화',Lifestyle:'라이프',Animation:'애니',Series:'드라마',Family:'가족',Legislative:'의회',Outdoor:'아웃도어',Science:'과학',Travel:'여행',Weather:'날씨',Comedy:'코미디',Classic:'클래식',Auto:'자동차',Cooking:'요리',Public:'공영',Undefined:'기타',Relax:'힐링'};
-var LIST={tv:[],radio:[],at:0,err:[]},MY={lists:[],items:[]},STAT={};
+var LIST={tv:[],radio:[],at:0,err:[]},MY={lists:[],items:[]},STAT={},H='';
 var FAV=new Set(),RECENT=[];try{FAV=new Set(JSON.parse(localStorage.getItem('tv-fav')||'[]'));RECENT=JSON.parse(localStorage.getItem('tv-recent')||'[]')}catch(e){}
 var S={view:'home',genre:'all',q:'',cur:null,playing:false,hideBad:localStorage.getItem('tv-hidebad')!=='0'},ALL={};
 function save(){try{localStorage.setItem('tv-fav',JSON.stringify([...FAV]));localStorage.setItem('tv-recent',JSON.stringify(RECENT.slice(0,30)))}catch(e){}}
@@ -338,9 +353,10 @@ document.addEventListener('touchend',function(){clearTimeout(pressT)});document.
 $('sBtn').onclick=function(){$('searchBox').classList.toggle('on');if($('searchBox').classList.contains('on'))$('q').focus();else{S.q='';$('q').value='';render()}};
 $('q').oninput=function(){S.q=this.value;render()};
 // 📲 앱으로 열기: iOS URL 스킴(VLC·Infuse·nPlayer). 헤더가 필요한 스트림은 스킴으로 못 넘겨 m3u 내보내기로
-var APPS=[['VLC','vlc-x-callback://x-callback-url/stream?url=',1],['Infuse','infuse://x-callback-url/play?url=',1],['nPlayer','nplayer-',0],['OPlayer','oplayer://',0]];
-function openApp(x){if(!x)return;$('asTitle').textContent='📲 '+x.n;$('asList').innerHTML=APPS.map(function(a,i){return '<div><b>'+a[0]+'</b><small>'+(unplayable(x)||fmt(x.u).toUpperCase()||'스트림')+(x.o?' · 헤더 필요(앱에서 안 되면 m3u 내보내기)':'')+'</small><button data-app="'+i+'">열기</button></div>'}).join('');
-  document.querySelectorAll('[data-app]').forEach(function(b){b.onclick=function(){var a=APPS[+b.getAttribute('data-app')];location.href=a[1]+(a[2]?encodeURIComponent(x.u):x.u);toast(a[0]+' 여는 중… 안 열리면 앱이 없는 거예요')}});
+function oneM3u(x){return location.origin+'/tv/one.m3u?u='+encodeURIComponent(x.u)+'&n='+encodeURIComponent(x.n)+(x.g?'&g='+encodeURIComponent(x.g):'')+(x.l?'&l='+encodeURIComponent(x.l):'')+(x.o&&x.o.length?'&o='+encodeURIComponent(x.o.join('\n')):'')}
+var APPS=[['APTV',function(x){return 'https://add.aptv.app/'+oneM3u(x)},2,'채널 1개짜리 목록으로 추가 · 헤더 옵션도 같이'],['VLC','vlc-x-callback://x-callback-url/stream?url=',1],['Infuse','infuse://x-callback-url/play?url=',1],['nPlayer','nplayer-',0],['OPlayer','oplayer://',0]];
+function openApp(x){if(!x)return;$('asTitle').textContent='📲 '+x.n;$('asList').innerHTML=APPS.map(function(a,i){return '<div><b>'+a[0]+'</b><small>'+(a[3]?a[3]+' · ':'')+(unplayable(x)||fmt(x.u).toUpperCase()||'스트림')+(x.o?' · 헤더 필요(앱에서 안 되면 m3u 내보내기)':'')+'</small><button data-app="'+i+'">열기</button></div>'}).join('');
+  document.querySelectorAll('[data-app]').forEach(function(b){b.onclick=function(){var a=APPS[+b.getAttribute('data-app')];location.href=a[2]===2?a[1](x):a[1]+(a[2]?encodeURIComponent(x.u):x.u);toast(a[0]+' 여는 중… 안 열리면 앱이 없는 거예요')}});
   $('asCopy').onclick=function(){(navigator.clipboard?navigator.clipboard.writeText(x.u):Promise.reject()).then(function(){toast('주소 복사했어요')},function(){prompt('주소',x.u)})};
   $('appSheet').classList.add('on')}
 $('asClose').onclick=function(){$('appSheet').classList.remove('on')};$('appSheet').onclick=function(e){if(e.target===$('appSheet'))$('appSheet').classList.remove('on')};
@@ -351,6 +367,7 @@ function exportM3u(){var items=MY.items.concat([...FAV].map(function(i){return A
   if(navigator.canShare&&navigator.canShare({files:[f]}))navigator.share({files:[f],title:'박비서 TV 목록'}).catch(function(){});
   else{var a=document.createElement('a');a.href=URL.createObjectURL(f);a.download='parktv.m3u';document.body.appendChild(a);a.click();a.remove()}}
 $('iExp').onclick=exportM3u;
+$('iAptv').onclick=function(){if(!H)return toast('초대 코드가 필요해요');if(!MY.items.length)return toast('내 목록이 비어 있어요');var u=location.origin+'/tv/my.m3u?h='+H;(navigator.clipboard?navigator.clipboard.writeText(u):Promise.resolve()).catch(function(){});toast('APTV 로 넘겨요 — 구독 주소도 복사했어요');location.href='https://add.aptv.app/'+u};
 // 내 목록(m3u 가져오기)
 var KIND='tv';
 $('addBtn').onclick=function(){if(!needCode())return;$('sheet').classList.add('on');myLists()};
@@ -363,7 +380,7 @@ $('iFile').onchange=function(){var f=this.files&&this.files[0];this.value='';if(
 $('iGo').onclick=function(){var url=$('iUrl').value.trim(),text=$('iText').value;if(!url&&!text.trim())return toast('주소나 내용을 넣어 주세요');$('iGo').disabled=true;$('iGo').textContent='받는 중…';
   post('/tv/import',{url:url,text:url?'':text,name:$('iName').value,kind:KIND}).then(function(j){MY=j.my;index();$('iUrl').value='';$('iText').value='';$('iName').value='';var L=j.my.lists[j.my.lists.length-1],its=j.my.items.filter(function(x){return x.i.indexOf(L.id+':')===0}),np=its.filter(unplayable).length;toast('추가 '+its.length+'개'+(np?' — 그중 '+np+'개는 FLV·TS·http 라 브라우저에선 안 되고 📲 앱으로 열어요':''));S.view='my';document.querySelectorAll('#nav button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-v')==='my')});render();myLists();$('sheet').classList.remove('on')}).catch(function(e){toast(e.message)}).then(function(){$('iGo').disabled=false;$('iGo').textContent='추가'})};
 function refresh(){if(!needCode())return;toast('공개 목록 받는 중… 20초쯤 걸려요');post('/tv/refresh').then(function(j){toast('TV '+j.tv+' · 라디오 '+j.radio+'개'+(j.err.length?' (일부 실패)':''));return load()}).catch(function(e){toast(e.message)})}
-function load(){var p=CODE?post('/tv/state').then(function(j){LIST=j.list;MY=j.my||MY;STAT=j.stat||{}}):fetch('/tv/channels').then(function(r){return r.json()}).then(function(j){LIST=j});
+function load(){var p=CODE?post('/tv/state').then(function(j){LIST=j.list;MY=j.my||MY;STAT=j.stat||{};H=j.h||''}):fetch('/tv/channels').then(function(r){return r.json()}).then(function(j){LIST=j});
   return p.then(function(){index();render();if(!S.cur){var first=(RECENT.map(function(i){return ALL[i]}).filter(Boolean)[0])||LIST.tv.filter(function(x){return x.c==='KR'})[0]||LIST.tv[0];if(first)pick(first)}
     if(!LIST.at&&CODE)refresh()}).catch(function(e){$('rows').innerHTML='<div class="empty">목록을 못 받았어요: '+esc(e.message)+'</div>'})}
 load();
