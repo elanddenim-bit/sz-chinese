@@ -196,6 +196,7 @@ a{color:inherit;text-decoration:none}
 .card .txt+.nm{display:none}.card .nm{position:absolute;left:0;right:0;bottom:0;padding:16px 8px 6px;font-size:11px;font-weight:600;background:linear-gradient(0deg,rgba(0,0,0,.85),transparent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .card .st{position:absolute;top:6px;right:6px;width:8px;height:8px;border-radius:50%;background:#555}.card .st.ok{background:var(--ok)}.card .st.bad{background:var(--bad)}
 .card .fav{position:absolute;top:2px;left:5px;font-size:14px;color:var(--red)}
+.card .tag{position:absolute;top:5px;left:6px;font-size:9px;font-weight:800;letter-spacing:.05em;background:var(--bad);color:#000;padding:1px 5px;border-radius:3px}.card.np{opacity:.45}
 .card.radio{aspect-ratio:1/1;flex-basis:calc(25% - 6px)}.card.radio img{width:60%;height:60%;border-radius:8px}
 @media(min-width:700px){.card{flex-basis:calc(20% - 7px)}.card.radio{flex-basis:calc(14.28% - 7px)}}
 @media(min-width:1100px){.card{flex-basis:calc(14.28% - 7px)}.card.radio{flex-basis:calc(10% - 8px)}}
@@ -272,12 +273,14 @@ function needCode(){if(CODE)return true;var c=prompt('초대 코드(한 번만 �
 function index(){ALL={};[].concat(LIST.tv,LIST.radio,MY.items).forEach(function(x){ALL[x.i]=x})}
 function gname(g){if(!g)return '';var k=g.split(';')[0].trim();return GENRE[k]||k}
 function flag(c){var f=COUNTRIES.filter(function(x){return x[0]===c})[0];return f?f[1]:'📡'}
+function fmt(u){var m=/\.(m3u8|flv|ts|mp4|mp3|aac|m4a|ogg|opus|webm|mpd)(\?|$)/i.exec(u||''),e=m?m[1].toLowerCase():'';if(/^(rtmp|rtsp|mms|udp|rtp):/i.test(u||''))e=u.split(':')[0].toLowerCase();return e}
+function unplayable(x){var e=fmt(x.u);return e==='flv'||e==='ts'||e==='mpd'||e==='rtmp'||e==='rtsp'||e==='mms'||e==='udp'||e==='rtp'?e.toUpperCase():''}
 function st(id){var s=STAT[id];if(!s)return '';return s[0]>=s[1]?'ok':'bad'}
 function cardHtml(x){var cls='card'+(x.k==='radio'?' radio':'')+(S.cur&&S.cur.i===x.i?' on':'');
   var inner=x.l?'<img src="'+esc(x.l)+'" loading="lazy" alt="" onerror="this.replaceWith(Object.assign(document.createElement(\'span\'),{className:\'txt\',textContent:this.nextSibling.textContent}))">':'<span class="txt">'+esc(x.n)+'</span>';
-  return '<button class="'+cls+'" data-id="'+esc(x.i)+'">'+inner+'<span class="nm">'+esc(x.n)+'</span><span class="st '+st(x.i)+'"></span>'+(FAV.has(x.i)?'<span class="fav">♥</span>':'')+'</button>'}
+  var bad=unplayable(x);return '<button class="'+cls+(bad?' np':'')+'" data-id="'+esc(x.i)+'">'+inner+'<span class="nm">'+esc(x.n)+'</span><span class="st '+st(x.i)+'"></span>'+(bad?'<span class="tag">'+bad+'</span>':'')+(FAV.has(x.i)?'<span class="fav">♥</span>':'')+'</button>'}
 function row(title,items,sub){if(!items.length)return '';return '<section class="row"><h2>'+title+(sub?' <small>'+esc(sub)+'</small>':'')+'</h2><div class="strip">'+items.map(cardHtml).join('')+'</div></section>'}
-function filt(items){var q=S.q.trim().toLowerCase();return items.filter(function(x){if(S.hideBad&&st(x.i)==='bad'&&!FAV.has(x.i))return false;var g=gname(x.g)||'기타';if(S.genre!=='all'&&g!==S.genre)return false;if(q&&(x.n+' '+g).toLowerCase().indexOf(q)<0)return false;return true})}
+function filt(items){var q=S.q.trim().toLowerCase();return items.filter(function(x){if(S.hideBad&&(st(x.i)==='bad'||unplayable(x))&&!FAV.has(x.i))return false;var g=gname(x.g)||'기타';if(S.genre!=='all'&&g!==S.genre)return false;if(q&&(x.n+' '+g).toLowerCase().indexOf(q)<0)return false;return true})}
 function render(){var h='',v=S.view;
   var rec=RECENT.map(function(i){return ALL[i]}).filter(Boolean),fav=[...FAV].map(function(i){return ALL[i]}).filter(Boolean);
   if(v==='home'||v==='fav')h+=row('♥ 즐겨찾기',filt(fav));
@@ -302,12 +305,13 @@ var watch=null,reported=false;
 function report(ok){if(reported||!S.cur)return;reported=true;var id=S.cur.i;var s=STAT[id]||[0,0,0];if(ok)s[0]++;else s[1]++;s[2]=Date.now();STAT[id]=s;if(CODE)post('/tv/stat',{id:id,ok:ok}).catch(function(){});render();pick(S.cur);$('dot').classList.toggle('live',ok)}
 function stop(){var v=$('vid'),a=$('aud');clearTimeout(watch);try{v.pause();v.removeAttribute('src');v.load()}catch(e){}try{a.pause();a.removeAttribute('src');a.load()}catch(e){}v.classList.add('hidden');S.playing=false;$('art').classList.toggle('hidden',!(S.cur&&S.cur.l));$('shade').classList.remove('playing');$('mini').classList.remove('on');$('dot').classList.remove('live');$('playBtn').innerHTML='<svg viewBox="0 0 24 24"><path d="M6 4l14 8-14 8z"/></svg><span>재생</span>'}
 function play(x){if(!x)return;stop();pick(x);reported=false;$('err').classList.add('hidden');
+  var np=unplayable(x);if(np){$('err').textContent=np+' 스트림은 브라우저가 직접 못 틀어요(앱 전용 형식). 이 목록은 HLS(m3u8) 채널만 재생돼요.';$('err').classList.remove('hidden');return}
   RECENT=[x.i].concat(RECENT.filter(function(i){return i!==x.i}));save();
   var el=x.k==='radio'?$('aud'):$('vid');
   if(x.k==='tv'){var ok=el.canPlayType('application/vnd.apple.mpegurl')||el.canPlayType('application/x-mpegURL');if(!ok&&/m3u8/i.test(x.u)){$('err').textContent='이 브라우저는 HLS 를 직접 못 틀어요 — 아이폰·아이패드·맥 사파리에서 열어 주세요.';$('err').classList.remove('hidden')}
     el.classList.remove('hidden');$('art').classList.add('hidden')}
   el.src=x.u;el.load();
-  var p=el.play();if(p&&p.catch)p.catch(function(e){if(!S.playing)return;var m=String(e&&e.message||e);fail(/not supported/i.test(m)?'이 형식은 브라우저가 못 틀어요(코덱·주소 형식) — 다른 채널로':/NotAllowed/i.test(e&&e.name)?'한 번 더 눌러 주세요(자동 재생 제한)':'재생 실패: '+m)});
+  var p=el.play();if(p&&p.catch)p.catch(function(e){if(!S.playing)return;var m=String(e&&e.message||e);fail(/not supported/i.test(m)?'이 형식은 브라우저가 못 틀어요 — '+(fmt(x.u)||'확장자 없음')+' · '+x.u.replace(/^https?:\/\//,'').slice(0,60):/NotAllowed/i.test(e&&e.name)?'한 번 더 눌러 주세요(자동 재생 제한)':'재생 실패: '+m)});
   S.playing=true;$('shade').classList.add('playing');$('playBtn').innerHTML='<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg><span>멈춤</span>';
   $('mImg').src=x.l||'';$('mNm').firstChild.textContent=x.n;$('mSub').textContent=flag(x.c)+' '+(x.k==='radio'?'라디오':'TV');$('mini').classList.add('on');
   clearTimeout(watch);watch=setTimeout(function(){if(S.playing&&!reported)fail('12초 안에 안 열렸어요 — 중국 회선에서 막혔거나 꺼진 채널일 수 있어요.')},12000);
@@ -333,7 +337,7 @@ document.querySelectorAll('.seg .chip').forEach(function(b){b.onclick=function()
 function myLists(){$('myLists').innerHTML=MY.lists.map(function(L){return '<div><b>'+esc(L.name)+'</b><small>'+L.n+'개'+(L.url?' · 주소':' · 붙여 넣기')+'</small><button data-del="'+esc(L.id)+'">삭제</button></div>'}).join('')||'<div><small>아직 없음</small></div>';
   document.querySelectorAll('[data-del]').forEach(function(b){b.onclick=function(){if(!confirm('이 목록을 지울까요?'))return;post('/tv/my/del',{id:b.getAttribute('data-del')}).then(function(j){MY=j.my;index();render();myLists();toast('지웠어요')}).catch(function(e){toast(e.message)})}})}
 $('iGo').onclick=function(){var url=$('iUrl').value.trim(),text=$('iText').value;if(!url&&!text.trim())return toast('주소나 내용을 넣어 주세요');$('iGo').disabled=true;$('iGo').textContent='받는 중…';
-  post('/tv/import',{url:url,text:url?'':text,name:$('iName').value,kind:KIND}).then(function(j){MY=j.my;index();$('iUrl').value='';$('iText').value='';$('iName').value='';toast('추가했어요 — 내 목록 '+MY.items.length+'개');S.view='my';document.querySelectorAll('#nav button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-v')==='my')});render();myLists();$('sheet').classList.remove('on')}).catch(function(e){toast(e.message)}).then(function(){$('iGo').disabled=false;$('iGo').textContent='추가'})};
+  post('/tv/import',{url:url,text:url?'':text,name:$('iName').value,kind:KIND}).then(function(j){MY=j.my;index();$('iUrl').value='';$('iText').value='';$('iName').value='';var L=j.my.lists[j.my.lists.length-1],its=j.my.items.filter(function(x){return x.i.indexOf(L.id+':')===0}),np=its.filter(unplayable).length;toast('추가 '+its.length+'개'+(np?' — 그중 '+np+'개는 FLV·TS 같은 앱 전용 형식이라 브라우저에선 안 틀려요':''));S.view='my';document.querySelectorAll('#nav button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-v')==='my')});render();myLists();$('sheet').classList.remove('on')}).catch(function(e){toast(e.message)}).then(function(){$('iGo').disabled=false;$('iGo').textContent='추가'})};
 function refresh(){if(!needCode())return;toast('공개 목록 받는 중… 20초쯤 걸려요');post('/tv/refresh').then(function(j){toast('TV '+j.tv+' · 라디오 '+j.radio+'개'+(j.err.length?' (일부 실패)':''));return load()}).catch(function(e){toast(e.message)})}
 function load(){var p=CODE?post('/tv/state').then(function(j){LIST=j.list;MY=j.my||MY;STAT=j.stat||{}}):fetch('/tv/channels').then(function(r){return r.json()}).then(function(j){LIST=j});
   return p.then(function(){index();render();if(!S.cur){var first=(RECENT.map(function(i){return ALL[i]}).filter(Boolean)[0])||LIST.tv.filter(function(x){return x.c==='KR'})[0]||LIST.tv[0];if(first)pick(first)}
