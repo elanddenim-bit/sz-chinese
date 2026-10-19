@@ -5,22 +5,8 @@
 //               모델의 도구 호출(response.function_call_arguments.done)을 여기서 실행해 결과를 돌려준다.
 //               앱은 마이크 오디오만 보낸다. 앱 → {type:'agent.gps', loc:'lng,lat'} 로 현재 위치(WGS84) 전달.
 // 도구: 날씨(Open-Meteo) · 환율(ECB) · 디디 주소록 검색 · 방문 동선(디디→高德) · 스페인 여행 · 현재 시각
-// 바인딩: DIDI(서비스 바인딩 → didi-address), 시크릿 DIDI_ACCESS_KEY
+// 바인딩: DIDI(서비스 바인딩 → didi-address), SPAIN(→ threepark-spain /api/trip), 시크릿 DIDI_ACCESS_KEY
 // =========================================================
-
-const SPAIN = {
-  depart: "2026-12-23T21:30:00+08:00",
-  lines: [
-    "12/23(수) 21:30 바이윈공항 T2 도착 → 12/24 00:20 CZ377 출발",
-    "12/24(목) 08:00 마드리드 T4S 도착, 마드리드 1박",
-    "12/25(금) 07:54 iryo 마드리드 아토차 → 세비야, 세비야 1박",
-    "12/26(토) 오전 알카사르·대성당, 18:50 VY1391 세비야 → 바르셀로나",
-    "12/27(일) 09:30 가우디 반일 투어, 15:45 사그라다 파밀리아",
-    "12/28(월) 구엘 공원·그라시아 / 12/29(화) 몬세라트",
-    "12/30(수) iryo 바르셀로나 → 마드리드",
-    "12/31(목) 10:50 CZ378 마드리드 T4S 출발 → 1/1 06:30 광저우 도착",
-  ],
-};
 
 export const AGENT_TOOLS = [
   fn("get_weather", "查询某个城市今天起三天的天气（最高/最低气温、降雨概率）。city 用中文或英文城市名。", { city: { type: "string", description: "城市名，例如 广州、深圳、Madrid、Seoul" } }, ["city"]),
@@ -87,7 +73,7 @@ export async function agentAsk(env, b, h) {
 export async function runTool(env, sess, name, args) {
   try {
     if (name === "now") return nowText();
-    if (name === "trip_info") return tripText();
+    if (name === "trip_info") return await tripText(env);
     if (name === "get_weather") return await weather(String(args.city || ""));
     if (name === "convert_currency") return await fx(Number(args.amount), String(args.from || ""), String(args.to || ""));
     if (name === "find_place") return await findPlace(env, sess, String(args.query || ""));
@@ -102,9 +88,34 @@ function nowText() {
   const w = "日一二三四五六"[d.getUTCDay()];
   return "广州时间 " + d.toISOString().slice(0, 16).replace("T", " ") + "，星期" + w;
 }
-function tripText() {
-  const days = Math.ceil((new Date(SPAIN.depart) - Date.now()) / 86400e3);
-  return (days > 0 ? "出发还有 " + days + " 天。" : days > -9 ? "现在正在旅行中。" : "旅行已结束。") + "\n日程（韩语）：\n" + SPAIN.lines.join("\n");
+// 스페인 일정: 사본을 들고 있지 않고 threepark-spain 의 /api/trip 을 서비스 바인딩(SPAIN)으로 읽음(2026-10-19)
+// 못 읽으면 KV trip:spain(마지막 성공 응답), 그것도 없으면 못 불러왔다고 답함
+async function tripLoad(env) {
+  try {
+    if (!env.SPAIN) throw new Error("no binding");
+    const r = await env.SPAIN.fetch("https://threepark-spain/api/trip");
+    if (!r.ok) throw new Error("trip " + r.status);
+    const j = await r.json();
+    if (!j || !j.depart || !Array.isArray(j.days) || !j.days.length) throw new Error("trip empty");
+    try { await env.KV.put("trip:spain", JSON.stringify({ at: Date.now(), d: j })); } catch (_) {}
+    return { d: j, old: 0 };
+  } catch (e) {
+    console.log("trip_info", e && e.message);
+    const c = await env.KV.get("trip:spain", "json").catch(() => null);
+    return c && c.d ? { d: c.d, old: c.at || 1 } : null;
+  }
+}
+async function tripText(env) {
+  const t = await tripLoad(env);
+  if (!t) return "西班牙旅行日程暂时无法读取。请用韩语告诉用户：일정을 못 불러왔어요. 잠시 뒤 다시 물어봐 주세요。不要猜测日程。";
+  const { d } = t, days = Math.ceil((new Date(d.depart) - Date.now()) / 86400e3);
+  const lines = d.days.map((x) => {
+    const sl = (x.slots || []).map((s) => [s.t, s.what, s.note ? "(" + s.note + ")" : ""].filter(Boolean).join(" ")).join(" · ");
+    return x.date + (x.dow ? "(" + x.dow + ")" : "") + " " + (x.city || "") + ": " + (sl || "자유 일정") + (x.stay ? " / 숙소 " + x.stay : "");
+  });
+  return (days > 0 ? "出发还有 " + days + " 天（出发 " + d.depart + "）。" : days > -10 ? "现在正在旅行中。" : "旅行已结束。")
+    + (t.old ? "（实时日程读取失败，以下是 " + new Date(t.old + 8 * 3600e3).toISOString().slice(0, 16).replace("T", " ") + " 保存的副本）" : "")
+    + "\n日程（韩语，按时间回答，不要编造）：\n" + lines.join("\n");
 }
 async function getJ(u, init) {
   const r = await fetch(u, init);

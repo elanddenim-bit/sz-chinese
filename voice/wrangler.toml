@@ -31,5 +31,10 @@ bucket_name = "sz-chinese-video"
 binding = "DIDI"
 service = "didi-address"
 
+# 박비서 trip_info: 스페인 일정 원본(threepark-spain /api/trip) — 2026-10-19
+[[services]]
+binding = "SPAIN"
+service = "threepark-spain"
+
 # 시크릿(대시보드): DASHSCOPE_API_KEY, DASHSCOPE_WS_HOST(예: ws-xxxx.cn-beijing.maas.aliyuncs.com), ALLOWED_CODES, DIDI_ACCESS_KEY(박비서)
 # 선택 변수: RT_MODEL(기본 qwen3.8-omni-flash-realtime), RT_DAY_MIN(코드당 하루 분, 기본 30), TTS_MODEL(기본 cosyvoice-v3.5-plus)
