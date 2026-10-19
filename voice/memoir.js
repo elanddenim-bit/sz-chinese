@@ -8,7 +8,7 @@
 //  POST /memoir/entry {id} · /memoir/edit {id,title,text} · /memoir/del {id} · /memoir/say {id} → 내 목소리 조각 URL[]
 //  POST /memoir/cfg {hour} · /memoir/export → markdown
 //  GET  /memoir/a?h&id&n&s            읽어 주기 오디오(HMAC, R2 tts/memoir/<h>/<id>/<n>)
-//  memoirCron: 15분 틱 — 주인(usage:owner)에게 정한 시각(기본 21시)에 오늘 질문 Bark(출장 브리핑의 bark 주소)
+//  memoirCron: 15분 틱 — 주인(usage:owner)에게 정한 시각(기본 20시, 중국어 학습 알람 21시와 분리)에 오늘 질문 Bark(출장 브리핑의 bark 주소)
 // KV memoir:<h> {cfg{hour}, cur{id,era,q,at,day}, entries[{id,at,era,title,summary,n}], facts[], threads[], sent, asked[]}
 //    memoir:<h>:<id> {turns, title, era, text, summary, facts, threads, at}
 // [필수] AI 는 百炼(千问·Omni·CosyVoice·qwen-tts)만 — Anthropic 호출 없음
@@ -44,7 +44,9 @@ async function qwen(env, messages, opt = {}) {
   throw merr(last || "千问 실패", 502);
 }
 const dkey = (h) => "memoir:" + h;
-async function load(env, h) { const d = (await env.KV.get(dkey(h), "json")) || {}; d.cfg = d.cfg || { hour: 21 }; d.entries = d.entries || []; d.facts = d.facts || []; d.threads = d.threads || []; d.asked = d.asked || []; return d; }
+async function load(env, h) { const d = (await env.KV.get(dkey(h), "json")) || {}; d.cfg = d.cfg || { hour: 20, set: 1 };
+  // 2026-10-19: 중국어 학습 알람(21시)과 겹쳐 자서전 질문을 20시로 옮김 — 사용자가 직접 정한 적 없는 21시만 20시로
+  if (d.cfg.hour === 21 && !d.cfg.set) { d.cfg.hour = 20; d.cfg.set = 1; } d.entries = d.entries || []; d.facts = d.facts || []; d.threads = d.threads || []; d.asked = d.asked || []; return d; }
 async function save(env, h, d) { await env.KV.put(dkey(h), JSON.stringify(d)); }
 function coverage(d) { const c = {}; ERAS.forEach(([k]) => (c[k] = 0)); d.entries.forEach((e) => { if (c[e.era] != null) c[e.era]++; }); return c; }
 
@@ -149,7 +151,7 @@ export async function memoirApi(env, ctx, path, b, h, synth) {
     for (let n = 0; n < cs.length; n++) { const key = await sayPiece(env, h, id, n, cs[n], synth); urls.push("/memoir/a?h=" + h + "&id=" + id + "&n=" + n + "&x=" + key.slice(-3) + "&s=" + (await hmac16(env, h + "|" + id + "|" + n))); }
     return { ok: true, urls, pieces: cs.length };
   }
-  if (path === "/memoir/cfg") { const hr = Math.round(Number(b.hour)); if (hr >= 6 && hr <= 23) d.cfg.hour = hr; if (b.bark === "") d.cfg.noBark = true; else if (b.bark === "on") d.cfg.noBark = false; await save(env, h, d); return { ok: true, cfg: d.cfg }; }
+  if (path === "/memoir/cfg") { const hr = Math.round(Number(b.hour)); if (hr >= 6 && hr <= 23) { d.cfg.hour = hr; d.cfg.set = 1; } if (b.bark === "") d.cfg.noBark = true; else if (b.bark === "on") d.cfg.noBark = false; await save(env, h, d); return { ok: true, cfg: d.cfg }; }
   if (path === "/memoir/export") {
     const by = {}; for (const m of d.entries) { const e = await env.KV.get(dkey(h) + ":" + m.id, "json"); if (!e) continue; (by[m.era] = by[m.era] || []).push({ ...e, id: m.id, at: m.at }); }
     let md = "# 구술 자서전\n\n" + d.entries.length + "편 · " + cnDay() + " 내보냄\n\n";
@@ -162,7 +164,7 @@ export async function memoirApi(env, ctx, path, b, h, synth) {
 export async function memoirCron(env, uh) {
   const h = await env.KV.get("usage:owner"); if (!h) return;
   const d = await load(env, h), day = cnDay(), ch = (uh + 8) % 24;
-  if (d.cfg.noBark || ch !== (d.cfg.hour || 21) || d.sent === day) return;
+  if (d.cfg.noBark || ch !== (d.cfg.hour || 20) || d.sent === day) return;
   const bd = await env.KV.get("brief:" + h, "json"); if (!bd || !bd.bark) return;
   if (!d.cur || d.cur.day !== day) { d.cur = await nextQuestion(env, d); d.asked.push(d.cur.q); d.asked = d.asked.slice(-60); }
   d.sent = day; await save(env, h, d);
@@ -302,7 +304,7 @@ function playEntry(id,btn){if(AUD){try{AUD.pause()}catch(e){}AUD=null;document.q
     btn.textContent='■ 멈추기';nx()})}
 // ---------- 설정 ----------
 function setting(){var c=ST.cfg||{};
-  $('main').innerHTML='<div class="card"><h2>밤 질문 알림</h2><p class="m">매일 이 시각(중국)에 오늘 질문을 아이폰 알림(Bark)으로 보내요. Bark 주소는 출장 브리핑 화면에 넣은 것을 그대로 씁니다.</p><div class="row"><select id="hr" style="padding:7px;border:1px solid var(--line);border-radius:8px;background:#fff">'+[18,19,20,21,22,23].map(function(x){return '<option value="'+x+'"'+(x===(c.hour||21)?' selected':'')+'>'+x+':00</option>'}).join('')+'</select><label style="font-size:13px"><input type="checkbox" id="nb"'+(c.noBark?'':' checked')+'> 알림 켜기</label><button class="b2" id="svc">저장</button></div></div>'
+  $('main').innerHTML='<div class="card"><h2>밤 질문 알림</h2><p class="m">매일 이 시각(중국)에 오늘 질문을 아이폰 알림(Bark)으로 보내요. Bark 주소는 출장 브리핑 화면에 넣은 것을 그대로 씁니다.</p><div class="row"><select id="hr" style="padding:7px;border:1px solid var(--line);border-radius:8px;background:#fff">'+[18,19,20,21,22,23].map(function(x){return '<option value="'+x+'"'+(x===(c.hour||20)?' selected':'')+'>'+x+':00</option>'}).join('')+'</select><label style="font-size:13px"><input type="checkbox" id="nb"'+(c.noBark?'':' checked')+'> 알림 켜기</label><button class="b2" id="svc">저장</button></div></div>'
     +'<div class="card"><h2>내보내기</h2><p class="m">시기별로 묶은 글(markdown)을 받아요. 책으로 만들 때 쓰세요.</p><button class="b2" id="ex">📄 markdown 내보내기</button></div>'
     +'<div class="card"><h2>어떻게 되나요</h2><p class="m">밤마다 질문 하나 → 5분 대화(박비서 실시간 음성) → 千问이 내 말투 그대로 1인칭 글로 정리 → 책 탭에 쌓임. 다음 질문은 비어 있는 시기와 지난 이야기의 실마리에서 골라요. 내 목소리(숏츠용 한국어 목소리)가 등록돼 있으면 그 목소리로 읽어 줍니다.</p></div>';
   $('svc').onclick=function(){api('/memoir/cfg',{hour:+$('hr').value,bark:$('nb').checked?'on':''}).then(function(r){if(r.ok){ST.cfg=r.cfg;toast('저장했어요')}else toast(r.detail||r.error)})};
