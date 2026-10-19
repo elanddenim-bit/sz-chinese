@@ -60,6 +60,7 @@ function cleanTrips(a) {
     arr: /^\d{1,2}:\d{2}$/.test(x.arr || "") ? x.arr : "",
     dep: String(x.dep || "").trim().slice(0, 40), seat: String(x.seat || "").trim().slice(0, 30),
     meet: String(x.meet || "").trim().slice(0, 400),
+    go: /^\d{1,2}:\d{2}$/.test(x.go || "") ? x.go : "", // 직접 정한 집(숙소) 출발 시각 — 있으면 아침 알림·브리핑이 이 시각을 씀
   })).filter((x) => x.d && (x.to || x.from)).sort((a, b) => (a.d + a.t).localeCompare(b.d + b.t));
 }
 
@@ -102,6 +103,7 @@ async function wx(city, d) {
 
 // 권장 출발: 비행기 이륙 2시간 반(광저우 바이윈 집 기준)/2시간 전, 고속철 1시간 반/1시간 전 — 대략
 function leaveAt(tr) {
+  if (tr.go) return tr.go;
   if (!tr.t || tr.how === "stay") return "";
   const [H, M] = tr.t.split(":").map(Number);
   const gz = /广州|광저우/.test(tr.from);
@@ -264,17 +266,22 @@ export async function briefMorning(env) {
     const [H, M] = tr.t.split(":").map(Number), tm = H * 60 + M;
     if (nm < tm - 300 || nm > tm - 20) continue;
     // 숙소: 이 일정 출발 도시에 머문 전날 일정의 숙소
-    const prev = doc.trips.filter((x) => x.d < day && x.to === tr.from && x.stay).pop();
-    const e = await eta(env, doc, { ...tr, stay0: tr.stay0 || (prev && prev.stay) || "" });
-    const drive = e ? Math.ceil(e.sec / 60) : (/广州/.test(tr.from) ? 60 : 40);
-    const leave = tm - STATION_MIN[tr.how] - drive - 10;
+    let e = null, drive = 0, leave;
+    if (tr.go) { const [gH, gM] = tr.go.split(":").map(Number); leave = gH * 60 + gM; } // 직접 정한 출발 시각(교통 계산 생략)
+    else {
+      const prev = doc.trips.filter((x) => x.d < day && x.to === tr.from && x.stay).pop();
+      e = await eta(env, doc, { ...tr, stay0: tr.stay0 || (prev && prev.stay) || "" });
+      drive = e ? Math.ceil(e.sec / 60) : (/广州/.test(tr.from) ? 60 : 40);
+      leave = tm - STATION_MIN[tr.how] - drive - 10;
+    }
     if (nm < leave - 20) continue;
     const late = nm > leave;
     const title = (late ? "⚠️ 서둘러야 해요 — " : "🚕 ") + hm(leave) + " 출발 " + (tr.how === "plane" ? "(이륙 " : "(발차 ") + tr.t + ")";
     const body = [HOW[tr.how] + " " + [tr.no, tr.from + "→" + tr.to].filter(Boolean).join(" ") + (tr.seat ? " · " + tr.seat : ""),
-      "📍 " + (e ? e.to.name : (tr.dep || tr.from)) + "까지 차로 " + drive + "분" + (e ? "(지금 교통)" : "(교통 정보 없음, 대략)"),
+      tr.go ? "📍 " + (tr.dep || tr.from) + " · 직접 정한 출발 시각" : "📍 " + (e ? e.to.name : (tr.dep || tr.from)) + "까지 차로 " + drive + "분" + (e ? "(지금 교통)" : "(교통 정보 없음, 대략)"),
       (tr.how === "plane" ? "공항 도착 목표 " : "역 도착 목표 ") + hm(tm - STATION_MIN[tr.how]) + " · 여권 챙기기"].join("\n");
-    const link = e ? "https://uri.amap.com/navigation?to=" + e.to.loc + "," + encodeURIComponent(e.to.name) + "&mode=car&callnative=1" : "https://voice.zhnote.net/brief";
+    const link = e ? "https://uri.amap.com/navigation?to=" + e.to.loc + "," + encodeURIComponent(e.to.name) + "&mode=car&callnative=1"
+      : tr.dep ? "https://uri.amap.com/search?keyword=" + encodeURIComponent(tr.dep) + "&callnative=1" : "https://voice.zhnote.net/brief";
     try {
       await barkPush(doc.bark, title, body, link);
       doc.msent[tr.id + day] = Date.now();
@@ -426,7 +433,7 @@ function journeys(){var td=today(),ts=S.trips.map(function(x,i){return {x:x,i:i}
 function legHtml(o){var x=o.x,i=o.i,past=x.d<today();
   var l1=(HOWI[x.how]||'')+' '+(x.how==='stay'?esc(x.to||x.from)+' 현지 일정':esc(x.from||'?')+' → '+esc(x.to||'?'))+
     (x.t?'<span class="lt">'+esc(x.t)+(x.arr?'–'+esc(x.arr):'')+'</span>':'')+(x.no?'<span class="lno">'+esc(x.no)+'</span>':'');
-  var l2=[x.dep?esc(x.dep):'',x.seat?esc(x.seat):'',x.stay?'🏨 '+esc(x.stay):'',x.meet?esc(x.meet.split('\n')[0]):''].filter(Boolean).join(' · ');
+  var l2=[x.go?'🚪 '+esc(x.go)+' 출발':'',x.dep?esc(x.dep):'',x.seat?esc(x.seat):'',x.stay?'🏨 '+esc(x.stay):'',x.meet?esc(x.meet.split('\n')[0]):''].filter(Boolean).join(' · ');
   return '<div class="leg'+(past?' past':'')+(EDIT===i?' on':'')+'" data-e="'+i+'"><div class="ld"><b>'+esc(md(x.d))+'</b><span>'+wd(x.d)+'</span></div>'+
     '<div class="lm"><div class="l1">'+l1+'</div>'+(l2?'<div class="l2">'+l2+'</div>':'')+'</div><div class="lr">'+(S.sent[x.d]?'<span class="ok">✓</span>':'')+'<span class="chev">'+(EDIT===i?'⌃':'›')+'</span></div></div>'+
     (EDIT===i?editHtml(x,i):'');}
@@ -439,6 +446,7 @@ function editHtml(x,i){var isNew=i==='new';
     '<div class="g2">'+fld('출발 도시','<input data-k="from" value="'+esc(x.from)+'" placeholder="广州">')+fld('도착 도시','<input data-k="to" value="'+esc(x.to)+'" placeholder="汕头">')+'</div>'+
     '<div class="g3">'+fld('출발 시각','<input type="time" data-k="t" value="'+esc(x.t)+'">')+fld('도착 시각','<input type="time" data-k="arr" value="'+esc(x.arr||'')+'">')+fld('좌석','<input data-k="seat" value="'+esc(x.seat||'')+'" placeholder="26H">')+'</div>'+
     '<div class="g2">'+fld('출발 공항·역','<input data-k="dep" value="'+esc(x.dep||'')+'" placeholder="白云机场T2 / 广州南站">')+fld((x.to||'도착 도시')+' 숙소','<input data-k="stay" value="'+esc(x.stay)+'" placeholder="호텔 이름 — 다음 날 아침 출발 계산">')+'</div>'+
+    '<div class="g2">'+fld('집·숙소에서 나갈 시각(선택)','<input type="time" data-k="go" value="'+esc(x.go||'')+'">')+'<p class="muted" style="align-self:end;margin:0 0 10px">비우면 교통으로 계산 · 넣으면 그 20분 전에 알림</p></div>'+
     fld('미팅·공장 메모','<textarea data-k="meet" placeholder="예: 오후 2시 雅丝婷 — 춘절 전 출고 협의">'+esc(x.meet)+'</textarea>')+
     (isNew?'':noStay(x))+
     '<div class="btns"><button id="ev-save">'+(isNew?'추가':'저장')+'</button><button class="ghost" id="ev-cancel">취소</button>'+(isNew?'':'<button class="del" id="ev-del">삭제</button>')+'</div></div>';}
