@@ -557,6 +557,30 @@
   .modal .mbtn.ghost{background:#fff;border:1px solid var(--hair);color:var(--navy)}
   .modal .mstat{font-size:12px;margin-top:10px;line-height:1.5}
   footer{position:fixed;bottom:0;left:0;right:0;background:var(--sky);color:#CFE0F3;font-size:10px;padding:7px 14px;text-align:center;letter-spacing:0.2px;z-index:30}
+  /* ===== 🌙 오늘의 30분 ===== */
+  .nt-card{display:block;width:100%;text-align:left;border:none;border-radius:16px;padding:16px 16px 14px;margin-bottom:12px;background:linear-gradient(135deg,#0E3F73,#1664B0);color:#fff;cursor:pointer;font-family:inherit}
+  .nt-card .l1{font-size:12px;color:#CFE0F3;font-weight:700}
+  .nt-card .l2{font-size:18px;font-weight:800;margin-top:3px}
+  .nt-card .l3{font-size:11.5px;color:#DCE7F3;margin-top:6px;line-height:1.55}
+  .nt-steps{display:flex;gap:5px;margin-top:10px}
+  .nt-steps span{flex:1;height:5px;border-radius:3px;background:rgba(255,255,255,.25)}
+  .nt-steps span.on{background:#EFE8DE}.nt-steps span.cur{background:#D21624}
+  .nt-bar{position:fixed;left:10px;right:10px;bottom:calc(34px + env(safe-area-inset-bottom,0px));z-index:40;background:var(--navy);color:#fff;border-radius:14px;padding:9px 10px 9px 13px;display:none;align-items:center;gap:10px;box-shadow:0 6px 18px rgba(26,35,48,.28)}
+  .nt-bar.show{display:flex}
+  body.nt-on{padding-bottom:116px}
+  .nt-bar .nt-t{flex:1;min-width:0;font-size:12.5px;line-height:1.35}
+  .nt-bar .nt-t b{font-size:13.5px}
+  .nt-bar .nt-t small{display:block;color:#AFC3D9;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nt-bar .nt-clk{font-variant-numeric:tabular-nums;font-weight:800;font-size:15px}
+  .nt-bar button{border:none;border-radius:9px;padding:8px 11px;font-size:12.5px;font-weight:800;font-family:inherit;cursor:pointer;background:#EFE8DE;color:var(--navy)}
+  .nt-bar button.go{background:#D21624;color:#fff}
+  .nt-bar .nt-x{background:transparent;color:#AFC3D9;padding:6px 4px;font-size:14px}
+  .nt-list{margin:6px 0 4px}
+  .nt-row{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--hair);font-size:13px}
+  .nt-row .i{font-size:20px;width:28px;text-align:center}
+  .nt-row .m{margin-left:auto;color:var(--grey);font-size:12px;white-space:nowrap}
+  .nt-row.done{opacity:.55}
+  .nt-btn{display:block;width:100%;margin-top:14px;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:800;font-family:inherit;cursor:pointer;background:var(--sky);color:#fff}
   /* ===== 백업 / 보호 ===== */
   #guardBanner{display:none;background:#FFF4E5;color:#8A5A00;border-bottom:1px solid #F0D9B0;padding:11px 14px;font-size:12.5px;line-height:1.65}
   #guardBanner b{color:#D21624}
@@ -787,7 +811,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#EFE8DE" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:#CFE0F3;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.10.4</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.11.0</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -6752,6 +6776,8 @@ function renderHome(){
   const wpct=Math.min(100,Math.round(wsum/wgoal*100));
 
   var html='<div class="hgreet">'+greet+'</div><div class="hsub2">'+tip+'</div>';
+  var ntN=ntState(), ntFirst=h>=18||ntN.i>=0||(ntTotal(ntN)>0&&!ntN.fin);
+  if(ntFirst)html+=ntHomeCard();
   // 복습 우선
   if(wn>0){
     var nearN=wrongIds().filter(function(id){return (state.prog[id].streak||0)>=1;}).length;
@@ -6762,6 +6788,7 @@ function renderHome(){
   html+='<button class="hcta main" id="ctaDaily"><div class="l1">오늘의 학습</div>'
     +'<div class="l2">10문제 시작<span class="arrow">→</span></div>'
     +'<div class="l3">'+(d.n?('오늘 '+d.n+'문 완료 · 정답률 '+(d.n?Math.round(d.c/d.n*100):0)+'%'):'아직 시작 전입니다')+'</div></button>';
+  if(!ntFirst)html+=ntHomeCard();
   // 바로가기
   var gtop=(typeof gramTop==='function')?gramTop(1).filter(function(x){return x.count>=2&&x.count>x.fixed;}):[];
   if(gtop.length){
@@ -6787,6 +6814,7 @@ function renderHome(){
     +'<div style="font-size:11.5px;color:var(--grey);margin-top:8px">'
     +(wpct>=100?'이번 주 목표 달성! 👏':(wpct>=60?'좋은 페이스입니다':'조금만 더 하면 따라잡습니다'))+'</div></div>';
   el.innerHTML=html;
+  var nb=document.getElementById('ctaNight'); if(nb)nb.addEventListener('click',function(){var n=ntState();if(n.i>=0&&!n.fin)ntLaunch(ntSteps()[n.i].k);else ntOpen(false);});
   var r=document.getElementById('ctaRev'); if(r)r.addEventListener('click',startReview);
   var gg=document.getElementById('ctaGram'); if(gg)gg.addEventListener('click',startGramDrill);
   document.getElementById('ctaDaily').addEventListener('click',function(){startDaily('pick','word');});
@@ -9052,7 +9080,124 @@ function callHomeCard(){
   return h;
 }
 
-loadState();
+// ================= 🌙 오늘의 30분 (2026-10-19, 밤 9시 학습 알람 → ?s=night) =================
+// state.night={d,i,sec:[단계별 초],fin} (하루 단위, 날짜 바뀌면 새로), stats.days[d].nt=분·nd=1 완료
+const NT_MIN=30;
+function ntSteps(){
+  var wd=new Date().getDay(), wn=wrongIds().length;
+  var say=[['rp','🎭','롤플레잉 한 판','틀린 문장은 다시 써 보기'],['pron','🎙','발음 5문장','80점 넘을 때까지'],['pattern','📐','패턴 드릴','반복 실수 문법 위주']][wd%3];
+  return [
+    {k:'rev',ic:'🔁',t:wn?'오답 복습':'단어 10문',s:wn?'복습 대기 '+wn+'개 — 틀린 것부터':'오답이 없어 단어 퀴즈로',m:8},
+    {k:'fill',ic:'✏️',t:'빈칸 채우기',s:'문장 속 단어 — 틀리면 복습으로',m:8},
+    {k:'ear',ic:'📞',t:'통화 듣기',s:'AI 상대와 전화 — 점수 낮은 상황부터',m:8},
+    {k:say[0],ic:say[1],t:say[2],s:say[3],m:6}
+  ];
+}
+function ntState(){
+  var d=today(), n=state.night;
+  if(!n||n.d!==d)n=state.night={d:d,i:-1,sec:[0,0,0,0],fin:false};
+  if(!n.sec||n.sec.length<4)n.sec=[0,0,0,0];
+  return n;
+}
+function ntTotal(n){return n.sec.reduce(function(a,b){return a+(b||0);},0);}
+function ntFmt(s){s=Math.max(0,Math.round(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
+function ntWeek(){
+  var c=0,d=new Date();
+  for(var i=0;i<7;i++){var r=state.stats.days[fmt(d)];if(r&&r.nd)c++;d.setDate(d.getDate()-1);}
+  return c;
+}
+function ntCallKey(){
+  var c=callState(), last=c.log.length?c.log[c.log.length-1].key:'', keys=[];
+  CALL_GROUPS.forEach(function(g){g[1].forEach(function(k){keys.push(k);});});
+  keys=keys.filter(function(k){return k!==last;});
+  keys.sort(function(a,b){return ((c.score&&c.score[a])||0)-((c.score&&c.score[b])||0)||Math.random()-.5;});
+  return keys[0]||'delay';
+}
+function ntLaunch(k){
+  if(k==='rev'){if(wrongIds().length)startReview();else startDaily('pick','word');}
+  else if(k==='fill')startDaily('fill','word');
+  else if(k==='ear'){goTab('p0');selectView('rp');try{callOpen(ntCallKey());}catch(e){startDaily('number','word');}}
+  else if(k==='num')startDaily('number','word');
+  else if(k==='rp'){goTab('p0');selectView('rp');}
+  else if(k==='pron'){goTab('p6');renderPron();}
+  else if(k==='pattern'){goTab('p1');qzMode='pattern';reviewMode=false;if(setMode){setMode=false;document.getElementById('setToggle').classList.remove('on');setState=null;renderSetBar();}updateQzSel();ptStart();}
+  window.scrollTo(0,0);
+}
+function ntGo(i){
+  var n=ntState(), st=ntSteps();
+  if(i>=st.length){ntFinish();return;}
+  n.i=i;saveState();uT('night_'+st[i].k);
+  ntLaunch(st[i].k);ntBar();
+}
+function ntFinish(){
+  var n=ntState(), r=dayRec(), tot=ntTotal(n);
+  n.fin=true;n.i=-1;r.nt=Math.round(tot/60);if(tot>=20*60)r.nd=1;
+  saveState();ntBar();goTab('ph');renderHome();
+  openSheet('<div style="text-align:center;padding:10px 4px 4px"><div style="font-size:40px">🌙</div>'
+    +'<div style="font-size:19px;font-weight:800;margin-top:6px">오늘 '+Math.round(tot/60)+'분 했습니다</div>'
+    +'<div style="font-size:13px;color:var(--grey);margin-top:6px;line-height:1.6">'+(r.nd?'오늘 30분 완료로 기록했습니다.':'20분 넘으면 완료로 칩니다. 내일 다시 이어가요.')
+    +'<br>이번 주 완료 '+ntWeek()+'/7일 · 복습 대기 '+wrongIds().length+'개</div>'
+    +'<button class="nt-btn" onclick="closeSheet()">닫기</button></div>');
+}
+function ntStop(){var n=ntState();n.i=-1;saveState();ntBar();renderHome();}
+function ntBar(){
+  var el=document.getElementById('ntBar');
+  if(!el){el=document.createElement('div');el.id='ntBar';el.className='nt-bar';document.body.appendChild(el);}
+  var n=ntState();
+  if(n.i<0||n.fin){el.classList.remove('show');el.innerHTML='';document.body.classList.remove('nt-on');return;}
+  var st=ntSteps(), s=st[n.i], left=s.m*60-(n.sec[n.i]||0), last=n.i===st.length-1;
+  el.innerHTML='<button class="nt-x" id="ntX" aria-label="그만">✕</button>'
+    +'<div class="nt-t"><b>'+s.ic+' '+(n.i+1)+'/'+st.length+' '+esc(s.t)+'</b><small>전체 <span id="ntTot">'+ntFmt(ntTotal(n))+'</span> / '+NT_MIN+':00'+(s.k==='ear'?' · 통화가 안 되면 → 숫자 듣기':'')+'</small></div>'
+    +'<div class="nt-clk" id="ntClk">'+(left>0?ntFmt(left):'✓')+'</div>'
+    +(s.k==='ear'?'<button id="ntAlt">🔢</button>':'')
+    +'<button id="ntNext" class="'+(left<=0?'go':'')+'">'+(last?'끝':'다음')+'</button>';
+  el.classList.add('show');document.body.classList.add('nt-on');
+  document.getElementById('ntX').onclick=ntStop;
+  document.getElementById('ntNext').onclick=function(){if(typeof callS!=='undefined'&&callS)callClose();ntGo(n.i+1);};
+  var a=document.getElementById('ntAlt');if(a)a.onclick=function(){if(callS)callClose();ntLaunch('num');};
+}
+function ntOpen(fromAlarm){
+  var n=ntState(), st=ntSteps();
+  var h='<div style="padding:4px 2px"><div style="font-size:19px;font-weight:800">🌙 오늘의 30분</div>'
+    +'<div style="font-size:12.5px;color:var(--grey);margin-top:4px;line-height:1.55">'+(fromAlarm?'자기 전 학습 시간입니다. ':'')+'순서대로 하면 끝납니다. 단계 시간이 지나면 다음 버튼이 빨개집니다.</div>'
+    +'<div class="nt-list">';
+  st.forEach(function(s,i){h+='<div class="nt-row'+((n.sec[i]||0)>=s.m*60?' done':'')+'"><span class="i">'+s.ic+'</span><div><b>'+esc(s.t)+'</b><div style="font-size:11.5px;color:var(--grey)">'+esc(s.s)+'</div></div><span class="m">'+(n.sec[i]?ntFmt(n.sec[i])+' / ':'')+s.m+'분</span></div>';});
+  var start=0;for(var i=0;i<st.length;i++){if((n.sec[i]||0)<st[i].m*60){start=i;break;}start=i;}
+  if(n.fin)start=0;
+  h+='</div><button class="nt-btn" id="ntStart">'+(ntTotal(n)>0&&!n.fin?(start+1)+'단계부터 이어 하기':'시작')+'</button></div>';
+  openSheet(h);
+  document.getElementById('ntStart').addEventListener('click',function(){unlockAudio();closeSheet();if(n.fin)n.fin=false;ntGo(start);});
+  if(fromAlarm)uT('night_alarm');
+}
+function ntHomeCard(){
+  var n=ntState(), st=ntSteps(), tot=ntTotal(n), wk=ntWeek();
+  var bars=st.map(function(s,i){return '<span class="'+(n.i===i?'cur':((n.sec[i]||0)>=s.m*60?'on':''))+'"></span>';}).join('');
+  var done=(state.stats.days[today()]||{}).nd;
+  var l2=n.fin?(done?'오늘 '+Math.round(tot/60)+'분 완료 ✓':'오늘 '+Math.round(tot/60)+'분 · 한 번 더 →'):(n.i>=0?(n.i+1)+'단계 진행 중 →':(tot?'이어 하기 '+ntFmt(tot)+' →':'30분 코스 시작 →'));
+  return '<button class="nt-card" id="ctaNight"><div class="l1">🌙 오늘의 30분 · 이번 주 '+wk+'/7일</div><div class="l2">'+l2+'</div>'
+    +'<div class="l3">복습 8 → 빈칸 8 → 통화 듣기 8 → '+esc(st[3].t)+' 6분</div><div class="nt-steps">'+bars+'</div></button>';
+}
+// 활동 중인 동안 현재 단계 시간 누적 (통화·발음 화면은 손을 안 대도 셈)
+setInterval(function(){
+  var n=state.night; if(!n||n.i<0||n.fin||n.d!==today()||document.visibilityState!=='visible')return;
+  var busy=document.getElementById('callOv')||document.querySelector('.pr-ov')||document.getElementById('hfPlay');
+  if(!busy&&Date.now()-lastAct>90000)return;
+  n.sec[n.i]=(n.sec[n.i]||0)+1;
+  var s=ntSteps()[n.i], left=s.m*60-n.sec[n.i], c=document.getElementById('ntClk');
+  if(c)c.textContent=left>0?ntFmt(left):'✓';
+  var tt=document.getElementById('ntTot');if(tt)tt.textContent=ntFmt(ntTotal(n));
+  if(left===0){var b=document.getElementById('ntNext');if(b)b.classList.add('go');}
+  if(n.sec[n.i]%15===0){var r=dayRec();r.nt=Math.round(ntTotal(n)/60);if(ntTotal(n)>=NT_MIN*60&&!r.nd)r.nd=1;saveState();}
+},1000);
+
+loadState().then(function(){
+  ntBar();
+  var q=new URLSearchParams(location.search);
+  if(q.get('s')==='night'){
+    try{history.replaceState(null,'',location.pathname);}catch(e){}
+    if(cfg&&cfg.sid&&!ntState().fin){goTab('ph');ntOpen(true);}
+  }
+});
 // 접속 가능한 동안 음성 파일을 기기에 저장해 둔다 (중국 네트워크 대비)
 setTimeout(function(){
   try{prefetchAudio(collectSentences(),600);}catch(e){}
