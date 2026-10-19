@@ -1,7 +1,7 @@
 // 📅 데일리 업무 체크(To-Do-List 저장소) ↔ 캘린더 (2026-10-19)
 //  ① GET /todo/ics?k=<공간 코드> → live ICS(아이폰 구독용)
 //  ② POST /todo/sync {k} / POST /todo/status {k} / 크론 todoCron — 네이버 캘린더에 CalDAV 로 직접 추가·수정·삭제(네이버 위젯용, 소유자 선택 B)
-//     시크릿 NAVER_ID·NAVER_PW(2단계 인증 켜면 앱 비밀번호), 선택 NAVER_CAL(캘린더 이름, 기본 '업무 일정' — 네이버 웹에서 먼저 만들어 둠).
+//     시크릿 NAVER_ID·NAVER_PW(2단계 인증 켜면 앱 비밀번호), 선택 NAVER_CAL(캘린더 이름, 기본 '업무 일정', 띄어쓰기 무시 — 네이버 웹에서 먼저 만들어 둠. Workers fetch 는 MKCALENDAR 불가).
 //     네이버 '해외 로그인 차단'은 꺼져 있어야 함(Cloudflare 는 해외). 공간 코드는 KV todo:ws 에(크론이 쓰려고), 진행 상태 KV todo:sync {map{uid:해시}, cal, at, ok, err}.
 //     서버 → 네이버 한 방향. 관리 대상 UID 는 *@eland-dailywork 뿐이라 다른 일정은 건드리지 않음. 한 번에 최대 40건(무료 플랜 서브리퀘스트 50), 남으면 다음 호출·크론.
 const SUPA_URL = "https://emoblnrvyqezitvymwbr.supabase.co";
@@ -90,23 +90,23 @@ async function discover(env) {
   const home = pick(r.text, "calendar-home-set");
   if (!home) throw new Error("calendar-home 을 찾지 못함: " + r.text.slice(0, 200));
   r = await P(abs(home), 1, '<?xml version="1.0"?><d:propfind xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:prop><d:displayname/><d:resourcetype/><d:current-user-privilege-set/></d:prop></d:propfind>');
-  const cals = [];
+  const cals = [], homeAbs = abs(home).replace(/\/?$/, "/");
   for (const x of responses(r.text)) {
-    const href = (x.match(/<(?:[\w-]+:)?href[^>]*>([^<]+)</i) || [])[1];
-    if (!href || !/<(?:[\w-]+:)?calendar\s*\/?>/i.test(x)) continue;
-    const dn = (x.match(/<(?:[\w-]+:)?displayname[^>]*>([^<]*)</i) || [])[1] || "";
-    const ro = /current-user-privilege-set/i.test(x) && !/<(?:[\w-]+:)?write(?:-content)?\s*\/?>/i.test(x);
-    cals.push({ href: href.trim(), name: dn.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim(), ro });
+    const href = ((x.match(/<(?:[\w-]+:)?href[^>]*>([^<]+)</i) || [])[1] || "").trim();
+    if (!href) continue;
+    const full = abs(href).replace(/\/?$/, "/");
+    if (full === homeAbs) continue;                                   // 홈 자신
+    const isCal = /<(?:[\w-]+:)?calendar[\s/>]/i.test(x);             // <C:calendar xmlns:C="…"/> 처럼 속성이 붙어도
+    const dn = ((x.match(/<(?:[\w-]+:)?displayname[^>]*>([\s\S]*?)<\/(?:[\w-]+:)?displayname>/i) || [])[1] || "")
+      .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#(\d+);/g, (m, n) => String.fromCharCode(+n)).trim();
+    if (!isCal && !dn) continue;
+    cals.push({ href: full, name: dn || decodeURIComponent(href.split("/").filter(Boolean).pop() || ""), isCal });
   }
   const norm = (x) => String(x || "").replace(/\s+/g, "").toLowerCase(); // "업무 일정" = "업무일정"
   const hit = cals.find((c) => c.name === name) || cals.find((c) => norm(c.name) === norm(name));
-  if (hit) return { href: abs(hit.href).replace(/\/?$/, "/"), name: hit.name, cals: cals.map((c) => c.name) };
-  // 없으면 만들어 봄(네이버가 MKCALENDAR 를 막으면 안내)
-  const slug = "work-" + Date.now().toString(36);
-  const mk = await dav(env, "MKCALENDAR", abs(home).replace(/\/?$/, "/") + slug + "/", { "content-type": "application/xml; charset=utf-8" },
-    '<?xml version="1.0"?><c:mkcalendar xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:caldav"><d:set><d:prop><d:displayname>' + name.replace(/[<&]/g, "") + '</d:displayname></d:prop></d:set></c:mkcalendar>');
-  if (mk.status === 201) return { href: abs(home).replace(/\/?$/, "/") + slug + "/", name, cals: cals.map((c) => c.name).concat(name) };
-  throw new Error("네이버에 '" + name + "' 캘린더가 없어요. 네이버 캘린더 웹에서 그 이름으로 캘린더를 하나 만들어 주세요. (있는 캘린더: " + cals.map((c) => c.name).join(", ") + ")");
+  if (hit) return { href: hit.href, name: hit.name, cals: cals.map((c) => c.name) };
+  // Cloudflare fetch 는 MKCALENDAR 를 못 보냄 → 네이버 웹에서 만들어 달라고 안내(찾은 이름을 그대로 보여 줌)
+  throw new Error("네이버에서 '" + name + "' 캘린더를 못 찾았어요. 찾은 캘린더: " + (cals.map((c) => c.name).join(", ") || "(없음 · 응답 " + r.status + ")"));
 }
 
 const SYNC_KEY = "todo:sync";
