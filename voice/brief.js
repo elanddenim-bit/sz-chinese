@@ -421,7 +421,7 @@ function journeys(){var td=today(),ts=S.trips.map(function(x,i){return {x:x,i:i}
   .sort(function(a,b){return (a.x.d+(a.x.t||'')).localeCompare(b.x.d+(b.x.t||''));});
   var js=[],cur=null;ts.forEach(function(o){var day=Date.UTC(+o.x.d.slice(0,4),+o.x.d.slice(5,7)-1,+o.x.d.slice(8));
     if(!cur||day-cur.end>86400e3){cur={legs:[],start:o.x.d,end:day,key:o.x.d};js.push(cur);}cur.legs.push(o);cur.end=Math.max(cur.end,day);cur.last=o.x.d;});
-  js.forEach(function(j){var c=[];j.legs.forEach(function(o){[o.x.from,o.x.to].forEach(function(v){if(v&&!/广州/.test(v)&&c.indexOf(v)<0)c.push(v);});});
+  js.forEach(function(j){var c=[];j.legs.forEach(function(o){[o.x.from,o.x.to].forEach(function(v){v=String(v||'').replace(/(东|南|西|北)?(火车)?站$/,'').replace(/(机场|T\d)$/,'');if(v&&!/广州/.test(v)&&c.indexOf(v)<0)c.push(v);});});
     j.title=(c.length?c.slice(0,3).join('·'):'광저우')+' 출장';j.range=md(j.start)+(j.last!==j.start?'~'+md(j.last):'');j.past=j.last<td;});return js;}
 function legHtml(o){var x=o.x,i=o.i,past=x.d<today();
   var l1=(HOWI[x.how]||'')+' '+(x.how==='stay'?esc(x.to||x.from)+' 현지 일정':esc(x.from||'?')+' → '+esc(x.to||'?'))+

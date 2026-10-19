@@ -115,7 +115,7 @@ export default {
         ctx.waitUntil(briefCron(env).catch((e) => console.log("briefCron", e && e.message))); // 🧳 출장 전날 브리핑(정한 시각에만 보냄)
       }
       if (um < 15 && (uh === 1 || uh === 5 || uh === 11)) ctx.waitUntil(timingCron(env, uh).catch((e) => console.log("timingCron", e && e.message))); // ⏰ 숏츠 타이밍(중국 9·13·19시)
-      if (uh >= 21 || uh <= 14) ctx.waitUntil(briefMorning(env).catch((e) => console.log("briefMorning", e && e.message))); // 중국 5~22시 '지금 출발'
+      if (uh >= 19 || uh <= 14) ctx.waitUntil(briefMorning(env).catch((e) => console.log("briefMorning", e && e.message))); // 중국 3~22시 '지금 출발'(새벽 6시대 고속철이면 알림이 5시 전)
       if (uh >= 21 || uh <= 14) ctx.waitUntil(magCron(env).catch((e) => console.log("magCron", e && e.message))); // 📰 출발 2시간 전 기내 잡지
       ctx.waitUntil(autoCron(env, uh, synth).catch((e) => console.log("autoCron", e && e.message))); // 🤖 자동 채널(아침 시작·렌더링 폴링)
       if (um < 15) ctx.waitUntil(memoirCron(env, uh).catch((e) => console.log("memoirCron", e && e.message)));
