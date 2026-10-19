@@ -186,7 +186,12 @@ export async function briefApi(env, ctx, path, b, h) {
   }
   const view = () => ({ ok: true, trips: doc.trips, bark: !!barkOf(doc.bark), hour: doc.hour || 21, log: (doc.log || []).slice(0, 8), sent: doc.sent || {},
     home: !!(doc.home && doc.home.gps), morning: doc.morning !== false, msent: doc.msent || {} });
-  if (path === "/brief/state") return view();
+  if (path === "/brief/state") { // 지난 일정은 60일 지나면 자동 삭제(화면에는 '지난 일정' 접힘으로만 보임)
+    const cut = new Date(Date.now() + 8 * 3600e3 - 60 * 86400e3).toISOString().slice(0, 10);
+    const keep = doc.trips.filter((x) => !x.d || x.d >= cut);
+    if (keep.length !== doc.trips.length) { doc.trips = keep; await store(env, h, doc); }
+    return view();
+  }
   if (path === "/brief/save") {
     if (b.trips) doc.trips = cleanTrips(b.trips);
     if (typeof b.bark === "string") {
@@ -375,7 +380,7 @@ button.ghost{background:transparent;color:var(--sky);border:1px solid var(--sky)
 .btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .trip{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}.trip:first-of-type{border:0;margin:0;padding:0}
 .th{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-weight:600}
-.past{opacity:.5}.ok{color:#2E7D5B;font-size:13px}.muted{color:var(--ink2);font-size:13px}
+.past{opacity:.6}.pastbox{margin-top:14px;border-top:1px dashed var(--line);padding-top:8px}.pastbox summary{cursor:pointer;color:var(--ink2);font-size:13px;padding:6px 0}.pastbox .trip:first-of-type{border-top:1px solid var(--line);margin-top:10px;padding-top:10px}.ok{color:#2E7D5B;font-size:13px}.muted{color:var(--ink2);font-size:13px}
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;display:none;max-width:90%;z-index:9}
 pre{white-space:pre-wrap;font:14px/1.5 -apple-system,system-ui;margin:6px 0 0}
 ol{margin:4px 0 0;padding-left:20px}
@@ -420,7 +425,9 @@ function draw(){
   h+='<div class="card"><h2>🚕 당일 아침 출발 알림</h2><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="mo" style="width:auto"'+(S.morning?' checked':'')+'> 출발 당일, 지금 교통 기준으로 나갈 시각 20분 전에 알림</label>'+
     '<p class="muted">광저우 출발은 집에서, 다른 도시는 전날 숙소에서 공항·역까지 차 시간을 高德로 계산해요. 알림을 누르면 高德 길안내.</p>'+
     '<p class="'+(S.home?'ok':'muted')+'">'+(S.home?'✓ 집 위치 저장됨':'집 위치가 없어요 — 집에서 아래 버튼을 눌러 주세요')+'</p><div class="btns"><button class="ghost" id="hm">📍 지금 위치를 집으로 저장</button></div></div>';
-  h+='<div class="card"><h2>출장 일정</h2>'+S.trips.map(tripHtml).join('')+'<div class="btns"><button class="ghost" id="add">+ 일정 추가</button><button id="st">일정 저장</button></div></div>';
+  var td=today(),up=[],pa=[];S.trips.forEach(function(x,i){(x.d&&x.d<td?pa:up).push(tripHtml(x,i));});
+  h+='<div class="card"><h2>출장 일정</h2>'+(up.length?up.join(''):'<p class="muted">다가오는 일정이 없어요 — 아래에서 추가하거나 예약 캡처를 올려 주세요.</p>')+
+    (pa.length?'<details class="pastbox"><summary>지난 일정 '+pa.length+'건 · 60일 지나면 자동 삭제</summary>'+pa.join('')+'</details>':'')+'<div class="btns"><button class="ghost" id="add">+ 일정 추가</button><button id="st">일정 저장</button></div></div>';
   h+='<div class="card"><h2>미리 보기 · 바로 보내기</h2><div class="row"><input type="date" id="pd" value="'+tom+'"><span class="muted" style="align-self:center">'+(has?'내일 일정 있음 — 오늘 '+S.hour+'시 자동 발송':'내일 일정 없음')+'</span></div>'+
     '<div class="btns"><button class="ghost" id="pv">미리 보기</button><button id="sn">지금 보내기</button></div><div id="out"></div></div>';
   h+=fontCard();
@@ -430,7 +437,7 @@ function draw(){
   if($('ping'))$('ping').onclick=function(){api('/brief/ping').then(function(r){toast(r.error?(r.detail||r.error):'보냈어요. 폰을 확인해 보세요');});};
   $('add').onclick=function(){S.trips=collect();var last=S.trips[S.trips.length-1];S.trips.push({id:'',d:today(1),from:last?last.to:'广州',to:'',how:'plane',t:'',no:'',stay:'',meet:''});draw();};
   $('st').onclick=saveTrips;
-  Array.prototype.forEach.call(document.querySelectorAll('[data-del]'),function(b){b.onclick=function(){S.trips=collect();S.trips.splice(+b.getAttribute('data-del'),1);saveTrips();};});
+  Array.prototype.forEach.call(document.querySelectorAll('[data-del]'),function(b){b.onclick=function(){var el=b.closest('.trip');el.parentNode.removeChild(el);saveTrips();};});
   $('pv').onclick=function(){send(true);};$('sn').onclick=function(){send(false);};
   $('mo').onchange=function(){api('/brief/save',{morning:$('mo').checked}).then(function(r){if(!r.error){S=r;toast(S.morning?'아침 알림 켬':'아침 알림 끔');}});};
   $('hm').onclick=function(){if(!navigator.geolocation)return toast('위치를 쓸 수 없어요');toast('위치 확인 중…');
@@ -464,7 +471,7 @@ function fontCard(){var f=document.documentElement.getAttribute('data-f')||'pre'
   return '<div class="card"><h2>글꼴 · 글자 크기 (이 기기에만 저장)</h2><div class="chips">'+c('font','pre',f,'프리텐다드','font-family:Pretendard')+c('font','sys',f,'아이폰 기본','font-family:-apple-system,sans-serif')+c('font','myeong',f,'명조','font-family:AppleMyungjo,serif')+'</div>'+
     '<div class="chips">'+c('size','m',z,'보통')+c('size','l',z,'크게')+c('size','xl',z,'아주 크게')+'</div><p class="muted">알림을 눌러 여는 브리핑 화면에도 같이 적용돼요.</p></div>';}
 function collect(){return Array.prototype.map.call(document.querySelectorAll('.trip'),function(el){var o={id:(S.trips[+el.getAttribute('data-i')]||{}).id||''};
-  Array.prototype.forEach.call(el.querySelectorAll('[data-k]'),function(f){o[f.getAttribute('data-k')]=f.value.trim();});return o;});}
+  Array.prototype.forEach.call(el.querySelectorAll('[data-k]'),function(f){o[f.getAttribute('data-k')]=f.value.trim();});return o;}).sort(function(a,b){return ((a.d||'9')+(a.t||'')).localeCompare((b.d||'9')+(b.t||''));});}
 function saveTrips(){api('/brief/save',{trips:collect()}).then(function(r){if(r.error)return toast(r.detail||r.error);S=r;draw();toast('일정 저장');});}
 function send(dry){var d=$('pd').value;$('out').innerHTML='<p class="muted">'+(dry?'만드는 중…':'만들어 보내는 중…')+'</p>';
   api('/brief/save',{trips:collect()}).then(function(){return api('/brief/send',{d:d,dry:dry});}).then(function(r){
