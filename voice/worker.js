@@ -26,7 +26,7 @@ import { mysteryApi, mysteryGet, MYSTERY_HTML } from "./mystery.js";
 import { timecamApi, timecamGet, TIMECAM_HTML } from "./timecam.js";
 import { HUB_HTML } from "./hub.js";
 import { TV_HTML, tvGet, tvApi, tvCron } from "./tv.js";
-import { todoIcs } from "./todo.js";
+import { todoIcs, todoApi, todoCron } from "./todo.js";
 import { XIANGQI_HTML } from "./xiangqi.js";
 import { SPECIAL_HTML } from "./special.js";
 import { signsApi, signsGet, SIGNS_HTML } from "./signs.js";
@@ -120,7 +120,8 @@ export default {
       ctx.waitUntil(autoCron(env, uh, synth).catch((e) => console.log("autoCron", e && e.message))); // 🤖 자동 채널(아침 시작·렌더링 폴링)
       if (um < 15) ctx.waitUntil(memoirCron(env, uh).catch((e) => console.log("memoirCron", e && e.message)));
       ctx.waitUntil(studyCron(env, uh, um).catch((e) => console.log("studyCron", e && e.message))); // 📚 중국어 학습 알람(중국 21시)
-      ctx.waitUntil(tvCron(env, uh, um).catch((e) => console.log("tvCron", e && e.message))); // 📺 박비서 TV 채널 목록(중국 새벽 4시) // 🎙 구술 자서전 밤 질문(정한 시각 정각 틱)
+      ctx.waitUntil(tvCron(env, uh, um).catch((e) => console.log("tvCron", e && e.message)));
+      ctx.waitUntil(todoCron(env).catch((e) => console.log("todoCron", e && e.message))); // 📅 업무 일정 → 네이버 캘린더 보정 동기화 // 📺 박비서 TV 채널 목록(중국 새벽 4시) // 🎙 구술 자서전 밤 질문(정한 시각 정각 틱)
     }
   },
   async fetch(req, env, ctx) {
@@ -179,6 +180,7 @@ export default {
       if (req.method !== "POST") return json(req, { error: "not_found" }, 404);
       let b;
       try { b = await req.json(); } catch { return json(req, { error: "bad_json" }, 400); }
+      if (url.pathname.startsWith("/todo/")) return json(req, await todoApi(env, url.pathname, b)); // 📅 업무 일정 → 네이버 캘린더(초대 코드 대신 공간 코드)
       if (!allowed(env, b.code)) return json(req, { error: "not_allowed" }, 403);
       if (url.pathname === "/usage/data") return json(req, await usageData(env, b));
       if (!env.DASHSCOPE_API_KEY) return json(req, { error: "config", detail: "DASHSCOPE_API_KEY 시크릿 없음" }, 500);
