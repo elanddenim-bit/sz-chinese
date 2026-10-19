@@ -98,7 +98,8 @@ async function discover(env) {
     const ro = /current-user-privilege-set/i.test(x) && !/<(?:[\w-]+:)?write(?:-content)?\s*\/?>/i.test(x);
     cals.push({ href: href.trim(), name: dn.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim(), ro });
   }
-  const hit = cals.find((c) => c.name === name) || cals.find((c) => c.name.toLowerCase() === name.toLowerCase());
+  const norm = (x) => String(x || "").replace(/\s+/g, "").toLowerCase(); // "업무 일정" = "업무일정"
+  const hit = cals.find((c) => c.name === name) || cals.find((c) => norm(c.name) === norm(name));
   if (hit) return { href: abs(hit.href).replace(/\/?$/, "/"), name: hit.name, cals: cals.map((c) => c.name) };
   // 없으면 만들어 봄(네이버가 MKCALENDAR 를 막으면 안내)
   const slug = "work-" + Date.now().toString(36);
