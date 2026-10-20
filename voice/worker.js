@@ -33,6 +33,7 @@ import { signsApi, signsGet, SIGNS_HTML } from "./signs.js";
 import { novelApi, novelGet, NOVEL_HTML } from "./novel.js";
 import { trendApi, trendGet, TREND_HTML } from "./trend.js";
 import { dailyGet, dailyCron } from "./daily.js";
+import { artGet } from "./art.js";
 import { shortsApi, shortsSave, shortsFile, ytCallback, legalPage, SHORTS_HTML, shortsCron, weekCron, timingCron } from "./shorts.js";
 import { EDIT_HTML } from "./edit.js";
 import { TOON_HTML } from "./toon.js";
@@ -162,6 +163,7 @@ export default {
       if (url.pathname.startsWith("/signs/") && req.method === "GET") return await signsGet(req, env, url);
       if (url.pathname === "/novel" && req.method === "GET") return new Response(NOVEL_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname.startsWith("/novel/") && req.method === "GET") return await novelGet(req, env, url);
+      if ((url.pathname === "/art" || url.pathname.startsWith("/art/")) && req.method === "GET") return await artGet(req, env, ctx, url); // 🖼 명화 한 점(공개)
       if ((url.pathname === "/daily" || url.pathname.startsWith("/daily/")) && req.method === "GET") return await dailyGet(req, env, ctx, url); // 🌏 오늘의 중국(공개)
       if (url.pathname === "/trend" && req.method === "GET") return new Response(TREND_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname.startsWith("/trend/") && req.method === "GET") return await trendGet(req, env, url, synth);

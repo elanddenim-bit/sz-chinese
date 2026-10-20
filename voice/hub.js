@@ -31,6 +31,7 @@ main{max-width:640px;margin:0 auto;padding:14px 16px 48px}h2{font-size:13px;colo
 <a href="/trend"><i>🔥</i><b>오늘의 중국 인터넷</b><small>지금 뜨는 이슈·유행어</small></a>
 </div>
 <h2>놀기</h2><div class="g">
+<a href="/art"><i>🖼</i><b>명화 한 점</b><small>그림 한 점, 1분 쉬기 · 액자 모드</small></a>
 <a href="/quest"><i>🧭</i><b>주말 탐험</b><small>오늘 갈 곳 3곳 미션</small></a>
 <a href="/mystery"><i>🕵️</i><b>광저우 미스터리</b><small>실제 장소 추리 게임</small></a>
 <a href="/air/"><i>✈️</i><b>미스터리 기내편</b><small>그림·심문, 비행기 모드 OK</small></a>
