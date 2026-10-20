@@ -33,7 +33,7 @@ import { signsApi, signsGet, SIGNS_HTML } from "./signs.js";
 import { novelApi, novelGet, NOVEL_HTML } from "./novel.js";
 import { trendApi, trendGet, TREND_HTML } from "./trend.js";
 import { dailyGet, dailyCron } from "./daily.js";
-import { artGet, artSay } from "./art.js";
+import { artGet, artSay, artCron } from "./art.js";
 import { shortsApi, shortsSave, shortsFile, ytCallback, legalPage, SHORTS_HTML, shortsCron, weekCron, timingCron } from "./shorts.js";
 import { EDIT_HTML } from "./edit.js";
 import { TOON_HTML } from "./toon.js";
@@ -124,6 +124,7 @@ export default {
       ctx.waitUntil(studyCron(env, uh, um).catch((e) => console.log("studyCron", e && e.message))); // 📚 중국어 학습 알람(중국 21시)
       ctx.waitUntil(tvCron(env, uh, um).catch((e) => console.log("tvCron", e && e.message)));
       ctx.waitUntil(dailyCron(env, ctx, uh, um).catch((e) => console.log("dailyCron", e && e.message))); // 🌏 오늘의 중국 — 중국 06시 판 만들기
+      ctx.waitUntil(artCron(env, ctx, uh, um).catch((e) => console.log("artCron", e && e.message))); // 🖼 오늘의 그림 — 중국 06시
       ctx.waitUntil(todoCron(env).catch((e) => console.log("todoCron", e && e.message))); // 📅 업무 일정 → 네이버 캘린더 보정 동기화 // 📺 박비서 TV 채널 목록(중국 새벽 4시) // 🎙 구술 자서전 밤 질문(정한 시각 정각 틱)
     }
   },

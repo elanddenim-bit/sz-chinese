@@ -19,7 +19,7 @@ export const APPS = {
   air: { name: "미스터리 기내편", icon: "✈️", f: { new: "사건 생성", solve: "해결", wrong: "오답" } },
   mag: { name: "기내 잡지", icon: "📰", f: { make: "묶음 생성", open: "열기", bark: "탑승 전 알림" } },
   brief: { name: "출장 브리핑", icon: "🧳", f: { send: "직접 보냄", auto: "자동 발송", preview: "미리 보기", morning: "아침 출발 알림" } },
-  art: { name: "명화 한 점", icon: "🖼", f: { open: "열기", next: "다음 그림", info: "해설 보기", fav: "좋아요", frame: "액자 모드", breath: "숨 고르기", say: "해설 듣기" } },
+  art: { name: "명화 한 점", icon: "🖼", f: { open: "열기", next: "다음 그림", info: "해설 보기", fav: "좋아요", frame: "액자 모드", breath: "숨 고르기", say: "해설 듣기", today: "오늘의 그림", docent: "1분 도슨트", card: "공유 카드", week: "모아 보기" } },
   daily: { name: "오늘의 중국(공개)", icon: "🌏", f: { open: "방문", quiz: "3문제 완료", share: "결과 공유", say: "듣기" } },
   trend: { name: "오늘의 중국 인터넷", icon: "🔥", f: { open: "열어 봄", make: "새 판 만들기" } },
   live: { name: "동시통역", icon: "🎧", f: { session: "통역", to_zh: "한→중", to_ko: "중→한", to_zh_ko: "자동" } },
