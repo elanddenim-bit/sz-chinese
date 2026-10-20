@@ -143,10 +143,48 @@ async function img(req, url, ctx) {
   return res;
 }
 
+// 🔊 해설을 내 목소리로(2026-10-20 소유자 요청): 박비서 초대 코드(pb-code)의 숏츠용 한국어 복제 목소리 voice:kr:<해시> → 없으면 qwen3-tts Ethan
+async function hmac16(env, s) {
+  const k = await crypto.subtle.importKey("raw", new TextEncoder().encode("art|" + (env.ALLOWED_CODES || "") + (env.DASHSCOPE_API_KEY || "")), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return [...new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(s)))].slice(0, 8).map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+export async function artSay(env, b, h, synth) {
+  const id = String(b.id || "");
+  if (!/^c?\d{1,9}$/.test(id)) throw new Error("id");
+  const n = await env.KV.get("art:n:" + id, "json");
+  if (!n || !n.ko) throw new Error("해설을 먼저 열어 주세요");
+  const k = n.ko, text = [k.title + ".", k.artist ? k.artist.replace(/·/g, ",") + "." : "", ...(k.lines || []), k.look ? "지금 볼 곳. " + k.look : ""].filter(Boolean).join(" ").slice(0, 600);
+  const key = "tts/art/" + h + "/" + id;
+  let ext = null;
+  for (const e of [".mp3", ".wav"]) if (await env.R2.head(key + e)) { ext = e; break; }
+  let mine = false;
+  if (!ext) {
+    const kr = await env.KV.get("voice:kr:" + h);
+    let audio = null; ext = ".mp3";
+    if (kr) { try { audio = await synth(env, kr, text, null, { language_hints: ["ko"], rate: 1.0, volume: 100 }); mine = true; } catch { audio = null; } }
+    if (!audio) {
+      const r = await fetch("https://" + host(env) + "/api/v1/services/aigc/multimodal-generation/generation", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
+        body: JSON.stringify({ model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text, voice: "Ethan", language_type: "Korean" } }) });
+      const j = await r.json().catch(() => ({})), u = j.output && j.output.audio && j.output.audio.url;
+      if (!u) throw new Error("음성 합성 실패: " + (j.message || r.status));
+      const a = await fetch(u); if (!a.ok) throw new Error("오디오 받기 실패");
+      audio = new Uint8Array(await a.arrayBuffer()); ext = ".wav";
+    }
+    await env.R2.put(key + ext, audio, { httpMetadata: { contentType: ext === ".mp3" ? "audio/mpeg" : "audio/wav" } });
+  } else mine = ext === ".mp3";
+  return { ok: true, mine, url: "/art/a?h=" + h + "&id=" + id + "&x=" + ext.slice(1) + "&s=" + (await hmac16(env, h + "|" + id)) };
+}
 export async function artGet(req, env, ctx, url) {
   const p = url.pathname;
   if (p === "/art" || p === "/art/") return new Response(ART_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
   if (p === "/art/img") return img(req, url, ctx);
+  if (p === "/art/a") {
+    const h = String(url.searchParams.get("h") || ""), id = String(url.searchParams.get("id") || ""), x = url.searchParams.get("x") === "wav" ? "wav" : "mp3";
+    if (!/^[0-9a-f]{12}$/.test(h) || !/^c?\d{1,9}$/.test(id) || url.searchParams.get("s") !== (await hmac16(env, h + "|" + id))) return new Response("forbidden", { status: 403 });
+    const o = await env.R2.get("tts/art/" + h + "/" + id + "." + x);
+    if (!o) return new Response("not found", { status: 404 });
+    return new Response(o.body, { headers: { "content-type": x === "mp3" ? "audio/mpeg" : "audio/wav", "cache-control": "private, max-age=86400" } });
+  }
   try {
     if (p === "/art/next") { ctx.waitUntil(logUse(env, "art", { next: 1 }, 0).catch(() => {})); return json(await next(env)); }
     if (p === "/art/note") {
@@ -207,6 +245,8 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15.5px
 <div id="breath"><i></i><span id="bt">들이쉬고…</span></div>
 <div id="sheet"></div>
 <script>
+var PB='';try{PB=localStorage.getItem('pb-code')||'';}catch(e){}
+var AU=null,SAY={};
 var CUR=null,NOTE={},PRE=null,FRAME=0,FT=null,WL=null,CNT={open:1},T0=Date.now();
 function $(i){return document.getElementById(i);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -216,6 +256,7 @@ function imgW(){return Math.min(2400,Math.round(Math.max(window.innerWidth,windo
 function src(a){return '/art/img?i='+encodeURIComponent(a.img)+'&w='+imgW();}
 function fetchNext(){return fetch('/art/next').then(function(r){return r.json();}).then(function(a){if(a.error)throw new Error(a.error);var im=new Image();im.src=src(a);return {a:a,im:im};});}
 function show(p){
+  if(AU)AU.pause();
   CUR=p.a;var pic=$('pic');pic.classList.remove('on');$('wait').style.display='none';
   var go=function(){pic.src=p.im.src;requestAnimationFrame(function(){pic.classList.add('on');});};
   if(p.im.complete&&p.im.naturalWidth)setTimeout(go,350);else{p.im.onload=function(){setTimeout(go,100);};p.im.onerror=function(){next();};}
@@ -234,10 +275,27 @@ function sheet(){
   else h+='<p class="wait">'+(n&&n.err?esc(n.err):'해설 쓰는 중…')+'</p>';
   var cm=String(CUR.id).charAt(0)==='c';
   h+='<div class="meta">'+esc([CUR.date,CUR.medium,CUR.place].filter(Boolean).join(' · '))+'<br>'+(cm?'클리블랜드 미술관 소장 · CC0':'시카고 미술관 소장 · 퍼블릭 도메인')+' · 해설은 AI가 써서 틀릴 수 있어요</div>';
+  if(k)h+='<div class="row"><button id="sSay" style="border-color:var(--sky);background:var(--sky)">🔊 내 목소리로 듣기</button></div>';
   h+='<div class="row"><button id="sClose">닫기</button><button id="sFavs">♥ 좋아한 그림 '+(lg('art-fav')||[]).length+'</button><a href="'+(cm?'https://www.clevelandart.org/art/'+esc(String(CUR.id).slice(1)):'https://www.artic.edu/artworks/'+CUR.id)+'" target="_blank" rel="noopener" style="color:var(--ink2);font-size:13px;align-self:center">미술관 페이지 ↗</a></div>';
   $('sheet').innerHTML=h;$('sheet').classList.add('on');CNT.info=(CNT.info||0)+1;
-  $('sClose').onclick=function(){$('sheet').classList.remove('on');};
+  $('sClose').onclick=function(){$('sheet').classList.remove('on');if(AU)AU.pause();};
   $('sFavs').onclick=favList;
+  if($('sSay'))$('sSay').onclick=sayNote;
+}
+// 해설 읽어 주기: 박비서 초대 코드가 이 기기에 있어야 함(내 목소리 = 숏츠용 한국어 복제 목소리). iOS 는 탭 순간 Audio 를 깨워 둠
+function sayNote(){
+  var b=$('sSay');if(!CUR)return;
+  if(AU&&!AU.paused&&AU._id===CUR.id){AU.pause();b.textContent='🔊 내 목소리로 듣기';return;}
+  if(!PB){var c=prompt('박비서 초대 코드를 넣어 주세요 (내 목소리를 쓰려면 한 번만)');if(!c)return;PB=c.trim();try{localStorage.setItem('pb-code',PB);}catch(e){}}
+  if(!AU)AU=new Audio();AU.src='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';try{AU.play().catch(function(){});}catch(e){}
+  var id=CUR.id;AU._id=id;b.textContent='🔊 목소리 만드는 중…';CNT.say=(CNT.say||0)+1;
+  var go=function(u,mine){if(!CUR||CUR.id!==id)return;AU.src=u;AU.onended=function(){b.textContent='🔊 다시 듣기';};var p=AU.play();if(p&&p.catch)p.catch(function(){b.textContent='▶ 한 번 더 누르세요';SAY[id]={u:u,m:mine};});b.textContent=(mine?'⏸ 내 목소리':'⏸ AI 목소리(내 목소리 미등록)');};
+  if(SAY[id])return go(SAY[id].u,SAY[id].m);
+  fetch('/art/say',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:PB,id:id})}).then(function(r){return r.json();}).then(function(j){
+    if(j.error==='not_allowed'){PB='';try{localStorage.removeItem('pb-code');}catch(e){}b.textContent='🔊 내 목소리로 듣기';toast('초대 코드가 맞지 않아요');return;}
+    if(!j.ok){b.textContent='🔊 내 목소리로 듣기';toast(j.detail||j.error||'실패');return;}
+    SAY[id]={u:j.url,m:j.mine};go(j.url,j.mine);
+  },function(){b.textContent='🔊 내 목소리로 듣기';toast('네트워크를 확인해 주세요');});
 }
 function favList(){var f=lg('art-fav')||[];if(!f.length){toast('아직 없어요. ♡ 를 눌러 모아 보세요');return;}
   $('sheet').innerHTML='<h2>♥ 좋아한 그림</h2><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px">'+f.map(function(x,i){return '<div data-f="'+i+'" style="cursor:pointer"><img src="/art/img?i='+encodeURIComponent(x.i)+'&w=400" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px"><div style="font-size:11.5px;color:var(--ink2);margin-top:3px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">'+esc(x.t)+'</div></div>';}).join('')+'</div><div class="row"><button id="sClose">닫기</button></div>';

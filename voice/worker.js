@@ -33,7 +33,7 @@ import { signsApi, signsGet, SIGNS_HTML } from "./signs.js";
 import { novelApi, novelGet, NOVEL_HTML } from "./novel.js";
 import { trendApi, trendGet, TREND_HTML } from "./trend.js";
 import { dailyGet, dailyCron } from "./daily.js";
-import { artGet } from "./art.js";
+import { artGet, artSay } from "./art.js";
 import { shortsApi, shortsSave, shortsFile, ytCallback, legalPage, SHORTS_HTML, shortsCron, weekCron, timingCron } from "./shorts.js";
 import { EDIT_HTML } from "./edit.js";
 import { TOON_HTML } from "./toon.js";
@@ -204,6 +204,7 @@ export default {
       if (url.pathname.startsWith("/air/")) return json(req, await airApi(env, ctx, url.pathname, b, h));
       if (url.pathname === "/memoir/save" || url.pathname === "/memoir/say" || url.pathname === "/memoir/state" || url.pathname === "/memoir/next") return jsonStream(req, () => memoirApi(env, ctx, url.pathname, b, h, synth));
       if (url.pathname.startsWith("/memoir/")) return json(req, await memoirApi(env, ctx, url.pathname, b, h, synth));
+      if (url.pathname === "/art/say") { try { return json(req, await artSay(env, b, h, synth)); } catch (e) { return json(req, { error: "say", detail: String(e.message || e) }, 400); } } // 🖼 명화 해설 내 목소리
       if (url.pathname.startsWith("/trend/")) return json(req, await trendApi(env, ctx, url.pathname, b, h));
       if (url.pathname === "/auto/run" || url.pathname === "/auto/retry") return jsonStream(req, () => autoApi(env, ctx, url.pathname, b, h, synth));
       if (url.pathname.startsWith("/auto/")) return json(req, await autoApi(env, ctx, url.pathname, b, h, synth));
