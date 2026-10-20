@@ -206,6 +206,14 @@ function splitText(t, n = 170) {
   if (cur.trim()) out.push(cur.trim());
   return out.filter(Boolean);
 }
+const isWav = (b) => b && b.length > 2000 && String.fromCharCode(...b.subarray(0, 4)) === "RIFF" && String.fromCharCode(...b.subarray(8, 12)) === "WAVE";
+// R2 에 있는 음성이 정상 wav 인지(머리 12바이트) — 깨진 파일이면 없는 셈 치고 다시 만듦(덮어쓰기)
+async function goodWav(env, key) {
+  const o = await env.R2.get(key, { range: { offset: 0, length: 12 } }).catch(() => null);
+  if (!o) return false;
+  const b = new Uint8Array(await o.arrayBuffer());
+  return o.size > 2000 && String.fromCharCode(...b.subarray(0, 4)) === "RIFF" && String.fromCharCode(...b.subarray(8, 12)) === "WAVE";
+}
 function wavParts(u8) {
   const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength); let fmt = null, data = null;
   for (let o = 12; o + 8 <= u8.length;) { const id = String.fromCharCode(...u8.subarray(o, o + 4)); let sz = dv.getUint32(o + 4, true);
@@ -235,7 +243,9 @@ async function ttsOne(env, text, voice) {
       const j = await r.json().catch(() => ({})), u = j.output && j.output.audio && j.output.audio.url;
       if (!u) { why.push((hh === "dashscope.aliyuncs.com" ? "" : "업무공간 ") + model + " " + r.status + " " + String(j.message || j.code || "").slice(0, 40)); continue; }
       const a = await fetch(u); if (!a.ok) { why.push(model + " 받기 " + a.status); continue; }
-      return new Uint8Array(await a.arrayBuffer());
+      const b = new Uint8Array(await a.arrayBuffer());
+      if (!isWav(b)) { why.push(model + " wav 아님(" + b.length + "B " + String.fromCharCode(...b.subarray(0, 4)).replace(/[^ -~]/g, "?") + ")"); continue; }
+      return b;
     } catch (e) { why.push(model + ": " + String(e.message || e).slice(0, 60)); }
   }
   throw new Error("음성 합성 실패 — " + why.slice(-4).join(" / "));
@@ -248,9 +258,9 @@ async function qwenTts(env, text, voice) {
 // 1분 도슨트 음성: qwen3-tts-flash Cherry(공개용 — 소유자 복제 목소리 아님) → R2 tts/art/day/<날짜>.wav, 날짜마다 한 번
 // ▶ 해설 듣기(2026-10-20 소유자 '다음 그림엔 목소리가 없네'): 오늘의 그림이 아닌 그림도 3줄 해설을 AI 목소리(Cherry)로
 //   R2 tts/art/ai/<id>.wav 그림마다 한 번, 새로 만드는 건 하루 ART_VOICE_DAY(기본 150)개까지(KV art:vday:<날짜>)
-async function noteVoice(env, id) {
+async function noteVoice(env, id, force) {
   const key = "tts/art/ai/" + id + ".wav";
-  if (await env.R2.head(key)) return key;
+  if (!force && (await env.R2.head(key))) return key;
   const n = await env.KV.get("art:n:" + id, "json");
   if (!n || !n.ko) throw new Error("해설을 먼저 열어 주세요");
   const dk = "art:vday:" + cnDay(), used = Number(await env.KV.get(dk)) || 0;
@@ -266,10 +276,10 @@ async function noteVoice(env, id) {
     return key;
   } finally { await env.KV.delete(lk).catch(() => {}); }
 }
-async function docent(env, d) {
+async function docent(env, d, force) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error("날짜");
   const key = "tts/art/day/" + d + ".wav";
-  if (await env.R2.head(key)) return key;
+  if (!force && (await env.R2.head(key))) return key;
   const doc = await env.KV.get("art:today:" + d, "json");
   if (!doc) throw new Error("그날 그림이 없어요");
   const lk = "art:alock:" + d;
@@ -344,7 +354,7 @@ export async function artGet(req, env, ctx, url) {
     const id = String(url.searchParams.get("id") || "");
     if (!/^c?\d{1,9}$/.test(id)) return json({ error: "id" }, 400);
     const key = "tts/art/ai/" + id + ".wav";
-    if (!(await env.R2.head(key))) return voiceLater(env, ctx, "v:" + id, () => noteVoice(env, id));
+    if (!(await goodWav(env, key))) return voiceLater(env, ctx, "v:" + id, () => noteVoice(env, id, true));
     const o = await env.R2.get(key);
     if (!o) return new Response("not found", { status: 404 });
     return new Response(o.body, { headers: { "content-type": "audio/wav", "cache-control": "public, max-age=86400", "content-length": String(o.size) } });
@@ -352,7 +362,7 @@ export async function artGet(req, env, ctx, url) {
   if (p === "/art/d") {
     const d = String(url.searchParams.get("d") || "");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return json({ error: "날짜" }, 400);
-    if (!(await env.R2.head("tts/art/day/" + d + ".wav"))) return voiceLater(env, ctx, "d:" + d, () => docent(env, d));
+    if (!(await goodWav(env, "tts/art/day/" + d + ".wav"))) return voiceLater(env, ctx, "d:" + d, () => docent(env, d, true));
     const o = await env.R2.get("tts/art/day/" + d + ".wav", { range: req.headers.has("range") ? req.headers : undefined });
     if (!o) return new Response("not found", { status: 404 });
     const hd = { "content-type": "audio/wav", "cache-control": "public, max-age=86400", "accept-ranges": "bytes" };
@@ -504,9 +514,11 @@ function playDoc(dd){
     if(r.status===503)return r.json().then(function(j){fail('음성 실패: '+(j.error||503));});
     if(!r.ok)return r.json().then(function(j){fail('음성 실패: '+(j.error||r.status));},function(){fail('음성 실패: '+r.status);});
     return r.blob().then(function(bl){if(DA!==me)return;clearInterval(tm);me._ok=1;
-      me.src=URL.createObjectURL(bl);me.ontimeupdate=function(){var p=$('dProg');if(p&&me.duration)p.firstChild.style.width=(me.currentTime/me.duration*100)+'%';};
+      var bu=URL.createObjectURL(bl);me._cur=bu;me.src=bu;me.ontimeupdate=function(){var p=$('dProg');if(p&&me.duration)p.firstChild.style.width=(me.currentTime/me.duration*100)+'%';};
       me.onplay=me.onpause=me.onended=function(){if($('sDoc'))docUi(dd);};
-      me.onerror=function(){fail('이 기기에서 음성을 재생하지 못했어요');};
+      me.onerror=function(){if(!me._cur||me.src.indexOf(me._cur)<0)return; // 깨우기용 무음의 오류는 무시
+        if(!me._re){me._re=1;var du=dd.u+(dd.u.indexOf('?')<0?'?':'&')+'t='+Date.now();me._cur=du;me.src=du;var q=me.play();if(q&&q.catch)q.catch(function(){});return;}
+        fail('재생 실패(코드 '+(me.error&&me.error.code)+' · '+Math.round(bl.size/1024)+'KB '+(bl.type||'?')+')');};
       var p=me.play();if(p&&p.catch)p.catch(function(){if($('sDoc'))$('sDoc').textContent='▶ 한 번 더 누르세요';});});
   }).catch(function(){fail('네트워크를 확인해 주세요');});};
   go();
