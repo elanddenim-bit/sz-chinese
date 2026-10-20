@@ -1,5 +1,5 @@
 // =========================================================
-// 🖼 명화 한 점 — 시카고 미술관(Art Institute of Chicago) 공개 API 의 퍼블릭 도메인 그림을 한 점씩 화면 가득 + 千问 한국어 3줄 해설
+// 🖼 명화 한 점 — 시카고 미술관(AIC)·클리블랜드 미술관(CMA, CC0) 공개 API 의 퍼블릭 도메인 그림을 한 점씩 화면 가득 + 千问 한국어 3줄 해설
 //  GET /art              화면(초대 코드 없음 — 저장 없음, 좋아요·본 그림은 기기 localStorage)
 //  GET /art/next         {id, title, artist, date, medium, place, img, w, h} 무작위 그림 한 점(그림만, 이미지 있는 것)
 //  GET /art/note?id      {ko:{title, artist, lines[3], look}} 해설 — KV art:n:<id> 에 영구 캐시(같은 그림은 한 번만 생성), 하루 생성 ART_DAY_MAX(기본 200)
@@ -23,22 +23,60 @@ function pick(a) {
     place: String(a.place_of_origin || "").slice(0, 60), img: a.image_id, w: (a.thumbnail && a.thumbnail.width) || 0, h: (a.thumbnail && a.thumbnail.height) || 0 };
 }
 
+// 클리블랜드 미술관 Open Access(CC0, 키 없음) — 시카고 미술관이 막히면(Worker 요청 거부 등) 여기서
+const CMA = "https://openaccess-api.clevelandart.org/api/artworks/";
+function pickCma(a) {
+  const web = a.images && a.images.web && a.images.web.url || "";
+  const m = web.match(/^https:\/\/openaccess-cdn\.clevelandart\.org\/([A-Za-z0-9._\-\/]+_web\.jpg)$/);
+  if (!m) return null;
+  const cr = (a.creators || [])[0] || {};
+  return { id: "c" + a.id, title: String(a.title || "").slice(0, 160), artist: String((cr.description || "").split("(")[0] || "").trim().slice(0, 120),
+    artistFull: String(cr.description || "").slice(0, 160), date: String(a.creation_date || "").slice(0, 60), medium: String(a.technique || "").slice(0, 120),
+    place: String((a.culture || [])[0] || "").slice(0, 60), img: "c:" + m[1], w: (a.images.web.width | 0), h: (a.images.web.height | 0) };
+}
+async function nextCma(env, errs) {
+  let total = Number(await env.KV.get("art:ctot")) || 0;
+  for (let t = 0; t < 3; t++) {
+    const skip = Math.floor(Math.random() * Math.max(1, total || 2000));
+    const r = await fetch(CMA + "?cc0&has_image=1&type=Painting&limit=1&skip=" + skip, { headers: { accept: "application/json", "user-agent": "zhnote-art/1.0 (personal viewer)" } }).catch((e) => { errs.push("cma " + (e.message || e)); return null; });
+    if (!r) continue;
+    if (!r.ok) { errs.push("cma " + r.status); if (r.status >= 400 && r.status < 500 && total) { total = 0; } continue; }
+    const j = await r.json().catch(() => ({}));
+    const tt = j.info && j.info.total;
+    if (tt && tt !== total) { total = tt; await env.KV.put("art:ctot", String(tt), { expirationTtl: 7 * 86400 }); }
+    const a = j.data && j.data[0] && pickCma(j.data[0]);
+    if (a) return a;
+    errs.push("cma empty");
+  }
+  return null;
+}
 async function next(env) {
+  const errs = [];
+  const aicBad = await env.KV.get("art:bad:aic");
+  if (Math.random() < 0.5 || aicBad) { const c = await nextCma(env, errs); if (c) return c; }
+  const a = aicBad ? null : await nextAic(env, errs);
+  if (a) return a;
+  if (!aicBad && errs.length) await env.KV.put("art:bad:aic", "1", { expirationTtl: 3600 }); // 한 시간은 클리블랜드만
+  const c = await nextCma(env, errs);
+  if (c) return c;
+  throw new Error("미술관 서버에서 그림을 못 받았어요 (" + errs.slice(-4).join(", ") + ")");
+}
+async function nextAic(env, errs) {
   // 퍼블릭 도메인 + 회화(Painting) + 이미지 있는 것 중 무작위 쪽. 검색 결과는 1000번째까지만 넘길 수 있음
   const q = { query: { bool: { must: [{ term: { is_public_domain: true } }, { term: { artwork_type_id: 1 } }, { exists: { field: "image_id" } }] } } };
   let total = Number(await env.KV.get("art:total")) || 0;
   for (let t = 0; t < 3; t++) {
     const page = 1 + Math.floor(Math.random() * Math.max(1, Math.min(total || 1000, 1000)));
     const u = AIC + "/artworks/search?limit=1&page=" + page + "&fields=" + FIELDS;
-    let r = await fetch(u, { method: "POST", headers: { ...UA, "content-type": "application/json" }, body: JSON.stringify(q) }).catch(() => null);
-    if (!r || !r.ok) r = await fetch(u + "&params=" + encodeURIComponent(JSON.stringify(q)), { headers: UA }).catch(() => null); // POST 를 안 받으면 같은 조건을 params 로
-    if (!r || !r.ok) continue;
+    let r = await fetch(u + "&params=" + encodeURIComponent(JSON.stringify(q)), { headers: UA }).catch((e) => { errs.push("aic " + (e.message || e)); return null; });
+    if (r && !r.ok) { errs.push("aic " + r.status); r = await fetch(u, { method: "POST", headers: { ...UA, "content-type": "application/json" }, body: JSON.stringify(q) }).catch(() => null); }
+    if (!r || !r.ok) { if (r) errs.push("aic post " + r.status); if (r && r.status === 403) return null; continue; }
     const j = await r.json().catch(() => ({}));
     if (j.pagination && j.pagination.total && j.pagination.total !== total) { total = j.pagination.total; await env.KV.put("art:total", String(total), { expirationTtl: 7 * 86400 }); }
     const a = j.data && j.data[0];
     if (a && a.image_id) return pick(a);
   }
-  throw new Error("미술관 서버에서 그림을 못 받았어요. 잠시 뒤 다시.");
+  return null;
 }
 
 async function note(env, id) {
@@ -47,11 +85,20 @@ async function note(env, id) {
   if (hit) return hit;
   const dk = "art:day:" + cnDay(), used = Number(await env.KV.get(dk)) || 0;
   if (used >= (Number(env.ART_DAY_MAX) || 200)) throw new Error("오늘 해설은 다 썼어요. 내일 다시.");
-  const r = await fetch(AIC + "/artworks/" + id + "?fields=" + FIELDS, { headers: UA });
-  if (!r.ok) throw new Error("그림 정보를 못 받았어요 " + r.status);
-  const a = ((await r.json()) || {}).data || {};
-  const info = { title: a.title, artist: strip(a.artist_display), date: a.date_display, medium: a.medium_display, place: a.place_of_origin, style: a.style_title, dept: a.department_title,
-    about: strip(a.description || a.short_description).slice(0, 1800) };
+  let info;
+  if (String(id)[0] === "c") {
+    const r = await fetch(CMA + String(id).slice(1), { headers: { accept: "application/json" } });
+    if (!r.ok) throw new Error("그림 정보를 못 받았어요 " + r.status);
+    const a = ((await r.json()) || {}).data || {};
+    info = { title: a.title, artist: ((a.creators || [])[0] || {}).description, date: a.creation_date, medium: a.technique, place: (a.culture || []).join(", "), dept: a.department,
+      about: strip([a.description, a.did_you_know, a.wall_description].filter(Boolean).join(" ")).slice(0, 1800), museum: "Cleveland Museum of Art" };
+  } else {
+    const r = await fetch(AIC + "/artworks/" + id + "?fields=" + FIELDS, { headers: UA });
+    if (!r.ok) throw new Error("그림 정보를 못 받았어요 " + r.status);
+    const a = ((await r.json()) || {}).data || {};
+    info = { title: a.title, artist: strip(a.artist_display), date: a.date_display, medium: a.medium_display, place: a.place_of_origin, style: a.style_title, dept: a.department_title,
+      about: strip(a.description || a.short_description).slice(0, 1800), museum: "Art Institute of Chicago" };
+  }
   await env.KV.put(dk, String(used + 1), { expirationTtl: 3 * 86400 });
   const sys = "너는 미술관 도슨트다. 지친 직장인이 1분 동안 그림 한 점을 보며 쉬도록 한국어로 짧게 안내한다. 미술사 강의 말고, 다정하고 담백한 구어체(~예요/~죠). " +
     "주어진 정보에 없는 사실(연도·사연·소장 경위)은 지어내지 마라. 작가가 유명하면 널리 알려진 사실 한 가지 정도는 괜찮다. " +
@@ -78,11 +125,18 @@ async function note(env, id) {
 async function img(req, url, ctx) {
   const i = String(url.searchParams.get("i") || "");
   const w = Math.min(2400, Math.max(200, Math.round(Number(url.searchParams.get("w")) || 1686)));
-  if (!/^[0-9a-f-]{36}$/.test(i)) return new Response("bad", { status: 400 });
-  const cache = caches.default, key = new Request("https://art-cache/" + i + "/" + w);
+  const cma = /^c:[A-Za-z0-9._\-\/]+_web\.jpg$/.test(i) && !i.includes("..");
+  if (!cma && !/^[0-9a-f-]{36}$/.test(i)) return new Response("bad", { status: 400 });
+  const big = cma && w > 900;
+  const cache = caches.default, key = new Request("https://art-cache/" + encodeURIComponent(i) + "/" + (cma ? (big ? "print" : "web") : w));
   const hit = await cache.match(key);
   if (hit) return hit;
-  const r = await fetch("https://www.artic.edu/iiif/2/" + i + "/full/" + w + ",/0/default.jpg", { headers: { "AIC-User-Agent": UA["AIC-User-Agent"] } });
+  let r;
+  if (cma) {
+    const base = "https://openaccess-cdn.clevelandart.org/" + i.slice(2);
+    r = big ? await fetch(base.replace(/_web\.jpg$/, "_print.jpg")) : null;
+    if (!r || !r.ok) r = await fetch(base);
+  } else r = await fetch("https://www.artic.edu/iiif/2/" + i + "/full/" + w + ",/0/default.jpg", { headers: { "AIC-User-Agent": UA["AIC-User-Agent"] } });
   if (!r.ok) return new Response("image " + r.status, { status: 502 });
   const res = new Response(r.body, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=2592000" } });
   ctx.waitUntil(cache.put(key, res.clone()));
@@ -96,8 +150,8 @@ export async function artGet(req, env, ctx, url) {
   try {
     if (p === "/art/next") { ctx.waitUntil(logUse(env, "art", { next: 1 }, 0).catch(() => {})); return json(await next(env)); }
     if (p === "/art/note") {
-      const id = Math.round(Number(url.searchParams.get("id")));
-      if (!(id > 0)) return json({ error: "id" }, 400);
+      const id = String(url.searchParams.get("id") || "");
+      if (!/^c?\d{1,9}$/.test(id)) return json({ error: "id" }, 400);
       if (!env.DASHSCOPE_API_KEY) return json({ error: "AI 키 없음" }, 500);
       return json(await note(env, id), 200, "public, max-age=86400");
     }
@@ -159,7 +213,7 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){retur
 function toast(t){var d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(function(){d.remove();},2200);}
 function lg(k,v){try{if(v===undefined){var x=localStorage.getItem(k);return x?JSON.parse(x):null;}localStorage.setItem(k,JSON.stringify(v));}catch(e){return null;}}
 function imgW(){return Math.min(2400,Math.round(Math.max(window.innerWidth,window.innerHeight)*(window.devicePixelRatio||1)/200)*200)||1686;}
-function src(a){return '/art/img?i='+a.img+'&w='+imgW();}
+function src(a){return '/art/img?i='+encodeURIComponent(a.img)+'&w='+imgW();}
 function fetchNext(){return fetch('/art/next').then(function(r){return r.json();}).then(function(a){if(a.error)throw new Error(a.error);var im=new Image();im.src=src(a);return {a:a,im:im};});}
 function show(p){
   CUR=p.a;var pic=$('pic');pic.classList.remove('on');$('wait').style.display='none';
@@ -178,16 +232,17 @@ function sheet(){
   h+='<div class="who">'+esc(k&&k.artist||CUR.artistFull||CUR.artist)+'</div>';
   if(k){h+='<ol>'+k.lines.map(function(l){return '<li>'+esc(l)+'</li>';}).join('')+'</ol>';if(k.look)h+='<div class="look">👀 '+esc(k.look)+'</div>';}
   else h+='<p class="wait">'+(n&&n.err?esc(n.err):'해설 쓰는 중…')+'</p>';
-  h+='<div class="meta">'+esc([CUR.date,CUR.medium,CUR.place].filter(Boolean).join(' · '))+'<br>시카고 미술관 소장 · 퍼블릭 도메인 · 해설은 AI가 써서 틀릴 수 있어요</div>';
-  h+='<div class="row"><button id="sClose">닫기</button><button id="sFavs">♥ 좋아한 그림 '+(lg('art-fav')||[]).length+'</button><a href="https://www.artic.edu/artworks/'+CUR.id+'" target="_blank" rel="noopener" style="color:var(--ink2);font-size:13px;align-self:center">미술관 페이지 ↗</a></div>';
+  var cm=String(CUR.id).charAt(0)==='c';
+  h+='<div class="meta">'+esc([CUR.date,CUR.medium,CUR.place].filter(Boolean).join(' · '))+'<br>'+(cm?'클리블랜드 미술관 소장 · CC0':'시카고 미술관 소장 · 퍼블릭 도메인')+' · 해설은 AI가 써서 틀릴 수 있어요</div>';
+  h+='<div class="row"><button id="sClose">닫기</button><button id="sFavs">♥ 좋아한 그림 '+(lg('art-fav')||[]).length+'</button><a href="'+(cm?'https://www.clevelandart.org/art/'+esc(String(CUR.id).slice(1)):'https://www.artic.edu/artworks/'+CUR.id)+'" target="_blank" rel="noopener" style="color:var(--ink2);font-size:13px;align-self:center">미술관 페이지 ↗</a></div>';
   $('sheet').innerHTML=h;$('sheet').classList.add('on');CNT.info=(CNT.info||0)+1;
   $('sClose').onclick=function(){$('sheet').classList.remove('on');};
   $('sFavs').onclick=favList;
 }
 function favList(){var f=lg('art-fav')||[];if(!f.length){toast('아직 없어요. ♡ 를 눌러 모아 보세요');return;}
-  $('sheet').innerHTML='<h2>♥ 좋아한 그림</h2><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px">'+f.map(function(x,i){return '<div data-f="'+i+'" style="cursor:pointer"><img src="/art/img?i='+x.i+'&w=400" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px"><div style="font-size:11.5px;color:var(--ink2);margin-top:3px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">'+esc(x.t)+'</div></div>';}).join('')+'</div><div class="row"><button id="sClose">닫기</button></div>';
+  $('sheet').innerHTML='<h2>♥ 좋아한 그림</h2><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px">'+f.map(function(x,i){return '<div data-f="'+i+'" style="cursor:pointer"><img src="/art/img?i='+encodeURIComponent(x.i)+'&w=400" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px"><div style="font-size:11.5px;color:var(--ink2);margin-top:3px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">'+esc(x.t)+'</div></div>';}).join('')+'</div><div class="row"><button id="sClose">닫기</button></div>';
   $('sClose').onclick=function(){$('sheet').classList.remove('on');};
-  document.querySelectorAll('[data-f]').forEach(function(d){d.onclick=function(){var x=f[+d.getAttribute('data-f')];var im=new Image();im.src='/art/img?i='+x.i+'&w='+imgW();show({a:{id:x.id,title:x.t,artist:x.a,img:x.i,date:'',medium:'',place:'',artistFull:x.a},im:im});};});}
+  document.querySelectorAll('[data-f]').forEach(function(d){d.onclick=function(){var x=f[+d.getAttribute('data-f')];var im=new Image();im.src='/art/img?i='+encodeURIComponent(x.i)+'&w='+imgW();show({a:{id:x.id,title:x.t,artist:x.a,img:x.i,date:'',medium:'',place:'',artistFull:x.a},im:im});};});}
 function isFav(){return (lg('art-fav')||[]).some(function(x){return CUR&&x.id===CUR.id;});}
 function favBtn(){$('bFav').textContent=isFav()?'♥':'♡';$('bFav').classList.toggle('on',isFav());}
 $('bFav').onclick=function(){if(!CUR)return;var f=lg('art-fav')||[];if(isFav())f=f.filter(function(x){return x.id!==CUR.id;});else{f.unshift({id:CUR.id,t:CUR.title,a:CUR.artist,i:CUR.img});CNT.fav=(CNT.fav||0)+1;toast('♥ 모아 뒀어요');}lg('art-fav',f.slice(0,200));favBtn();};
