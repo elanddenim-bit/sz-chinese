@@ -15,6 +15,16 @@ import { build as briefBuild, barkPush } from "./brief.js";
 
 const cnDay = (t = Date.now()) => new Date(t + 8 * 3600e3).toISOString().slice(0, 10);
 const host = (env) => (env.DASHSCOPE_WS_HOST || "dashscope.aliyuncs.com").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+// qwen-tts: 업무공간 주소가 TTS 를 'url error'(400)로 거절하는 경우(2026-10-20) → 공용 주소로 한 번 더(같은 키)
+async function ttsPost(env, body) {
+  let r, j = {};
+  for (const hh of [...new Set([host(env), "dashscope.aliyuncs.com"])]) {
+    r = await fetch("https://" + hh + "/api/v1/services/aigc/multimodal-generation/generation", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" }, body: JSON.stringify(body) });
+    j = await r.json().catch(() => ({}));
+    if (j.output && j.output.audio && j.output.audio.url) break;
+  }
+  return { r, j };
+}
 const merr = (message, status = 400) => Object.assign(new Error(message), { code: "mag", status });
 async function hmac16(env, s) {
   const k = await crypto.subtle.importKey("raw", new TextEncoder().encode("mg|" + (env.ALLOWED_CODES || "") + (env.DASHSCOPE_API_KEY || "")), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
@@ -158,9 +168,7 @@ async function radioLine(env, b, h, synth) {
   if (l.who === "nar" && kr) { try { bytes = await synth(env, kr, l.t, null, { language_hints: ["ko"], rate: 1.0, volume: 100 }); ext = "mp3"; ct = "audio/mpeg"; } catch { bytes = null; } }
   if (!bytes) {
     const voice = l.who === "h" ? "Ethan" : l.who === "w" ? "Cherry" : l.who === "x" ? "Serena" : "Chelsie";
-    const r = await fetch("https://" + host(env) + "/api/v1/services/aigc/multimodal-generation/generation", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
-      body: JSON.stringify({ model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text: l.t, voice, language_type: "Korean" } }) });
-    const j = await r.json().catch(() => ({}));
+    const { r, j } = await ttsPost(env, { model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text: l.t, voice, language_type: "Korean" } });
     const u = j.output && j.output.audio && j.output.audio.url;
     if (!u) throw merr("음성 합성 실패(" + (j.message || r.status) + ")", 502);
     const a = await fetch(u); if (!a.ok) throw merr("오디오 받기 실패", 502);
@@ -193,9 +201,7 @@ async function sayFile(env, id, synth) {
     const kr = h && (await env.KV.get("voice:kr:" + h));
     if (kr) { try { mp3 = await synth(env, kr, it.t, null, { language_hints: ["ko"], rate: 1.0, volume: 100 }); } catch { mp3 = null; } }
     if (!mp3) {
-      const r = await fetch("https://" + host(env) + "/api/v1/services/aigc/multimodal-generation/generation", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
-        body: JSON.stringify({ model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text: it.t, voice: "Cherry", language_type: "Korean" } }) });
-      const j = await r.json().catch(() => ({}));
+      const { r, j } = await ttsPost(env, { model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text: it.t, voice: "Cherry", language_type: "Korean" } });
       const u = j.output && j.output.audio && j.output.audio.url;
       if (!u) throw new Error("qwen-tts 결과 없음 " + (j.message || r.status));
       const a = await fetch(u); if (!a.ok) throw new Error("오디오 받기 실패"); mp3 = new Uint8Array(await a.arrayBuffer()); ct = "audio/wav";

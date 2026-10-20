@@ -51,8 +51,8 @@ async function dsPost(env, path, body, async_, hst) {
   const t = await r.text();
   let j = {};
   try { j = JSON.parse(t); } catch {}
-  // 업무공간 주소가 모델을 모르면 설명 없는 400 '{}' 를 돌려줌(2026-10-17 qwen3-tts-flash) → 공용 주소로 한 번 더(같은 키)
-  if (!r.ok && r.status === 400 && t.replace(/\s/g, "").length <= 2 && !hst && host(env) !== "dashscope.aliyuncs.com") return dsPost(env, path, body, async_, "dashscope.aliyuncs.com");
+  // 업무공간 주소가 모델을 모르면 설명 없는 400 '{}'(2026-10-17) 또는 TTS 에 'url error'(2026-10-20)를 돌려줌 → 공용 주소로 한 번 더(같은 키)
+  if (!r.ok && r.status === 400 && (t.replace(/\s/g, "").length <= 2 || (/multimodal-generation/.test(path) && /url error/i.test(t))) && !hst && host(env) !== "dashscope.aliyuncs.com") return dsPost(env, path, body, async_, "dashscope.aliyuncs.com");
   if (!r.ok) throw serr("百炼 " + r.status + ": " + (j.message || j.code || t.slice(0, 160)) + (hst ? " (공용 주소)" : ""), 502);
   return j;
 }
@@ -735,7 +735,7 @@ async function dsRaw(env, path, body, extra, hst) {
   const t = await r.text();
   let j = {};
   try { j = JSON.parse(t); } catch {}
-  if (!r.ok && r.status === 400 && t.replace(/\s/g, "").length <= 2 && !hst && host(env) !== "dashscope.aliyuncs.com") return dsRaw(env, path, body, extra, "dashscope.aliyuncs.com");
+  if (!r.ok && r.status === 400 && (t.replace(/\s/g, "").length <= 2 || (/multimodal-generation/.test(path) && /url error/i.test(t))) && !hst && host(env) !== "dashscope.aliyuncs.com") return dsRaw(env, path, body, extra, "dashscope.aliyuncs.com");
   if (!r.ok) throw serr("百炼 " + r.status + ": " + (j.message || j.code || t.slice(0, 160)) + (r.headers.get("x-request-id") || r.headers.get("request-id") ? " [req " + (r.headers.get("x-request-id") || r.headers.get("request-id")) + "]" : "") + (t.length < 3 ? " (빈 응답 — 요청 형식·모델 권한 문제 가능)" : ""), 502);
   return j;
 }

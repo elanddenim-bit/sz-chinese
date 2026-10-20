@@ -18,6 +18,16 @@ import { barkPush } from "./brief.js";
 
 const cnDay = (t = Date.now()) => new Date(t + 8 * 3600e3).toISOString().slice(0, 10);
 const host = (env) => (env.DASHSCOPE_WS_HOST || "dashscope.aliyuncs.com").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+// qwen-tts: 업무공간 주소가 TTS 를 'url error'(400)로 거절하는 경우(2026-10-20) → 공용 주소로 한 번 더(같은 키)
+async function ttsPost(env, body) {
+  let r, j = {};
+  for (const hh of [...new Set([host(env), "dashscope.aliyuncs.com"])]) {
+    r = await fetch("https://" + hh + "/api/v1/services/aigc/multimodal-generation/generation", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" }, body: JSON.stringify(body) });
+    j = await r.json().catch(() => ({}));
+    if (j.output && j.output.audio && j.output.audio.url) break;
+  }
+  return { r, j };
+}
 const merr = (message, status = 400) => Object.assign(new Error(message), { code: "memoir", status });
 const ERAS = [["child", "어린 시절"], ["school", "학창 시절"], ["young", "청년·군대·첫 직장"], ["love", "연애·결혼"], ["work", "일과 회사"], ["china", "중국 부임과 생활"], ["family", "가족"], ["people", "사람들"], ["values", "생각과 가치관"], ["now", "요즘, 그리고 앞으로"]];
 const ERA = Object.fromEntries(ERAS);
@@ -91,9 +101,8 @@ async function sayPiece(env, h, id, n, text, synth) {
   let mp3 = null, ext = ".mp3";
   if (kr) { try { mp3 = await synth(env, kr, text, null, { language_hints: ["ko"], rate: 1.0, volume: 100 }); } catch { mp3 = null; } }
   if (!mp3) {
-    const r = await fetch("https://" + host(env) + "/api/v1/services/aigc/multimodal-generation/generation", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
-      body: JSON.stringify({ model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text, voice: "Ethan", language_type: "Korean" } }) });
-    const j = await r.json().catch(() => ({})); const u = j.output && j.output.audio && j.output.audio.url;
+    const { r, j } = await ttsPost(env, { model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text, voice: "Ethan", language_type: "Korean" } });
+    const u = j.output && j.output.audio && j.output.audio.url;
     if (!u) throw merr("음성 합성 실패: " + (j.message || r.status), 502);
     const a = await fetch(u); if (!a.ok) throw merr("오디오 받기 실패", 502); mp3 = new Uint8Array(await a.arrayBuffer()); ext = ".wav";
   }
