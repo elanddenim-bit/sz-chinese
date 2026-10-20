@@ -50,6 +50,11 @@ async function koFix(env, d) {
   } catch { return false; }
 }
 
+// 🌏 오늘의 중국(공개, daily.js) — 만들어 둔 판만 읽음(없으면 null), 듣기 주소 포함
+export async function trendRead(env, day) {
+  const d = await env.KV.get("trend:" + day, "json");
+  return d ? withSay(env, JSON.parse(JSON.stringify(d))) : null;
+}
 export async function trendApi(env, ctx, path, b, h) {
   if (path !== "/trend/today") throw terr("not_found", 404);
   const day = cnDay(), key = "trend:" + day;

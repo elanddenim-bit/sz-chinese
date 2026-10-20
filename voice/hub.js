@@ -27,6 +27,7 @@ main{max-width:640px;margin:0 auto;padding:14px 16px 48px}h2{font-size:13px;colo
 <a href="/live"><i>🎧</i><b>동시통역</b><small>한↔중 실시간, 내 목소리로 번역 음성</small></a>
 </div>
 <h2>읽기</h2><div class="g">
+<a href="/daily"><i>🌏</i><b>오늘의 중국 (공개)</b><small>하루 3문제·화제·환율 — 남에게 보내는 링크</small></a>
 <a href="/trend"><i>🔥</i><b>오늘의 중국 인터넷</b><small>지금 뜨는 이슈·유행어</small></a>
 </div>
 <h2>놀기</h2><div class="g">
