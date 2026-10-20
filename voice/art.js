@@ -236,6 +236,26 @@ async function qwenTts(env, text, voice) {
 }
 
 // 1분 도슨트 음성: qwen3-tts-flash Cherry(공개용 — 소유자 복제 목소리 아님) → R2 tts/art/day/<날짜>.wav, 날짜마다 한 번
+// ▶ 해설 듣기(2026-10-20 소유자 '다음 그림엔 목소리가 없네'): 오늘의 그림이 아닌 그림도 3줄 해설을 AI 목소리(Cherry)로
+//   R2 tts/art/ai/<id>.wav 그림마다 한 번, 새로 만드는 건 하루 ART_VOICE_DAY(기본 150)개까지(KV art:vday:<날짜>)
+async function noteVoice(env, id) {
+  const key = "tts/art/ai/" + id + ".wav";
+  if (await env.R2.head(key)) return key;
+  const n = await env.KV.get("art:n:" + id, "json");
+  if (!n || !n.ko) throw new Error("해설을 먼저 열어 주세요");
+  const dk = "art:vday:" + cnDay(), used = Number(await env.KV.get(dk)) || 0;
+  if (used >= (Number(env.ART_VOICE_DAY) || 150)) throw new Error("오늘 만들 수 있는 해설 음성을 다 썼어요. 내일 다시.");
+  const lk = "art:vlock:" + id;
+  if (await env.KV.get(lk)) throw new Error("목소리 만드는 중이에요. 몇 초 뒤 다시 눌러 주세요.");
+  await env.KV.put(lk, "1", { expirationTtl: 90 });
+  try {
+    const k = n.ko, text = [k.title + ".", k.artist ? k.artist.replace(/·/g, ",") + "." : "", ...(k.lines || []), k.look ? "지금 볼 곳. " + k.look : ""].filter(Boolean).join(" ").slice(0, 600);
+    const audio = await qwenTts(env, text, env.ART_VOICE || "Cherry");
+    await env.R2.put(key, audio, { httpMetadata: { contentType: "audio/wav" } });
+    await env.KV.put(dk, String(used + 1), { expirationTtl: 3 * 86400 });
+    return key;
+  } finally { await env.KV.delete(lk).catch(() => {}); }
+}
 async function docent(env, d) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error("날짜");
   const key = "tts/art/day/" + d + ".wav";
@@ -309,6 +329,15 @@ export async function artGet(req, env, ctx, url) {
     const o = await env.R2.get("tts/art/" + h + "/" + id + "." + x);
     if (!o) return new Response("not found", { status: 404 });
     return new Response(o.body, { headers: { "content-type": x === "mp3" ? "audio/mpeg" : "audio/wav", "cache-control": "private, max-age=86400" } });
+  }
+  if (p === "/art/v") { // 아무 그림이나 3줄 해설을 AI 목소리로(공개, 그림마다 한 번 만들어 R2 캐시)
+    const id = String(url.searchParams.get("id") || "");
+    if (!/^c?\d{1,9}$/.test(id)) return json({ error: "id" }, 400);
+    let key;
+    try { key = await noteVoice(env, id); } catch (e) { return json({ error: String(e.message || e).slice(0, 200) }, 503); }
+    const o = await env.R2.get(key);
+    if (!o) return new Response("not found", { status: 404 });
+    return new Response(o.body, { headers: { "content-type": "audio/wav", "cache-control": "public, max-age=86400", "content-length": String(o.size) } });
   }
   if (p === "/art/d") {
     const d = String(url.searchParams.get("d") || "");
@@ -426,6 +455,7 @@ function sheet(){
   var dd=DAY&&DAY.art.id===CUR.id?DAY:null;
   if(dd)h=(dd.d===(TD&&TD.today)?'<div class="en" style="color:var(--red);font-weight:700">🗓 오늘의 그림 · '+fmtD(dd.d)+'</div>':'<div class="en">🗓 '+fmtD(dd.d)+'의 그림</div>')+h;
   if(dd)h+='<div class="row"><button id="sDoc" class="pri">▶ 1분 도슨트 듣기</button><button id="sScr">대본 보기</button></div><div class="prog" id="dProg"><i></i></div><div class="script" id="dScr">'+esc(dd.script)+'</div>';
+  else if(k)h+='<div class="row"><button id="sDoc" class="pri">▶ 해설 듣기</button></div><div class="prog" id="dProg"><i></i></div>';
   if(k){h+='<ol>'+k.lines.map(function(l){return '<li>'+esc(l)+'</li>';}).join('')+'</ol>';if(k.look)h+='<div class="look">👀 '+esc(k.look)+'</div>';}
   else h+='<p class="wait">'+(n&&n.err?esc(n.err):'해설 쓰는 중…')+'</p>';
   var cm=String(CUR.id).charAt(0)==='c';
@@ -437,7 +467,8 @@ function sheet(){
   $('sFavs').onclick=favList;
   if($('sSay'))$('sSay').onclick=sayNote;
   if($('sCard'))$('sCard').onclick=makeCard;
-  if($('sDoc')){$('sDoc').onclick=function(){playDoc(dd);};$('sScr').onclick=function(){$('dScr').classList.toggle('on');};docUi(dd);}
+  var pd=dd?{d:dd.d,u:'/art/d?d='+dd.d,l:'▶ 1분 도슨트 듣기'}:{d:'id:'+CUR.id,u:'/art/v?id='+CUR.id,l:'▶ 해설 듣기'};
+  if($('sDoc')){$('sDoc').onclick=function(){playDoc(pd);};if($('sScr'))$('sScr').onclick=function(){$('dScr').classList.toggle('on');};docUi(pd);}
 }
 function fmtD(d){var p=String(d).split('-');return (+p[1])+'월 '+(+p[2])+'일';}
 // 🗓 오늘의 그림 칩: 오늘 보는 중이면 날짜·연속 일수, 다른 그림 보는 중이면 '오늘의 그림으로'
@@ -448,18 +479,18 @@ $('chip').onclick=function(){if(!TD)return;var on=DAY&&CUR&&DAY.art.id===CUR.id&
 function showDay(doc){MODE='today';DAY=doc;NOTE[doc.art.id]={ko:doc.ko};var im=new Image();im.src=src(doc.art);show({a:doc.art,im:im});}
 function streak(d){var st=lg('art-st')||{};if(st.d===d)return;var y=new Date(Date.parse(d+'T00:00:00Z')-864e5).toISOString().slice(0,10);st.n=st.d===y?(st.n||1)+1:1;st.d=d;lg('art-st',st);}
 // ▶ 1분 도슨트: 날짜마다 서버가 한 번 만든 AI 목소리(Cherry). 탭 순간 무음으로 Audio 를 깨워 둠(iOS)
-function docUi(dd){var b=$('sDoc');if(!b)return;var on=DA&&DA._d===dd.d&&!DA.paused;b.textContent=on?'⏸ 멈추기':(DA&&DA._d===dd.d&&DA.currentTime>1&&!DA.ended?'▶ 이어 듣기':'▶ 1분 도슨트 듣기');$('dProg').classList.toggle('on',!!(DA&&DA._d===dd.d));}
+function docUi(dd){var b=$('sDoc');if(!b)return;var on=DA&&DA._d===dd.d&&!DA.paused;b.textContent=on?'⏸ 멈추기':(DA&&DA._d===dd.d&&DA.currentTime>1&&!DA.ended?'▶ 이어 듣기':dd.l);$('dProg').classList.toggle('on',!!(DA&&DA._d===dd.d));}
 function playDoc(dd){
   if(AU)AU.pause();
   if(DA&&DA._d===dd.d){if(!DA._ok)return;if(DA.paused)DA.play();else DA.pause();return;}
   if(DA)DA.pause();DA=new Audio();DA._d=dd.d;CNT.docent=(CNT.docent||0)+1;wakeAu(DA);
   var b=$('sDoc'),t0=Date.now(),tm=setInterval(function(){if($('sDoc')&&DA&&DA._d===dd.d&&!DA._ok)$('sDoc').textContent='🎧 목소리 준비 중… '+Math.round((Date.now()-t0)/1000)+'초';},1000);
   b.textContent='🎧 목소리 준비 중…';var tries=0,me=DA;
-  var fail=function(m){clearInterval(tm);if(DA===me)DA=null;if($('sDoc'))$('sDoc').textContent='▶ 1분 도슨트 듣기';toast(m);};
+  var fail=function(m){clearInterval(tm);if(DA===me)DA=null;if($('sDoc'))$('sDoc').textContent=dd.l;toast(m);};
   // 파일을 통째로 받은 뒤 재생(iOS 가 긴 wav 를 조각 요청하다 멈추는 경우 방지)
-  var go=function(){fetch('/art/d?d='+dd.d).then(function(r){
-    if(r.status===503)return r.json().then(function(j){var m=j.error||'';if(/만드는 중/.test(m)&&tries++<10){setTimeout(go,4000);return;}fail('도슨트 음성 실패: '+(m||503));});
-    if(!r.ok)return fail('도슨트 음성 실패: '+r.status);
+  var go=function(){fetch(dd.u).then(function(r){
+    if(r.status===503)return r.json().then(function(j){var m=j.error||'';if(/만드는 중/.test(m)&&tries++<10){setTimeout(go,4000);return;}fail('음성 실패: '+(m||503));});
+    if(!r.ok)return r.json().then(function(j){fail('음성 실패: '+(j.error||r.status));},function(){fail('음성 실패: '+r.status);});
     return r.blob().then(function(bl){if(DA!==me)return;clearInterval(tm);me._ok=1;
       me.src=URL.createObjectURL(bl);me.ontimeupdate=function(){var p=$('dProg');if(p&&me.duration)p.firstChild.style.width=(me.currentTime/me.duration*100)+'%';};
       me.onplay=me.onpause=me.onended=function(){if($('sDoc'))docUi(dd);};
