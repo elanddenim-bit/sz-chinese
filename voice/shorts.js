@@ -518,13 +518,31 @@ async function assemble(env, b, h) {
   await env.KV.put(listKey(h), JSON.stringify(l.slice(0, 40)));
   return { ok: true, draft: d, files: {}, blanks: scenes.filter((x) => x.clip === blankIdx).length };
 }
+// 🎞 컷 리듬 — 편집실이 레퍼런스 숏츠에서 잰 컷 길이(shots, 초) → 계획 프롬프트 규칙. 박자(평균·첫 컷)는 유지하고 길이만 목표 초에 맞춤
+function rhythmRule(r, sec) {
+  if (!r || !Array.isArray(r.shots)) return null;
+  const sh = r.shots.map(Number).filter((x) => x >= 0.2 && x <= 30).slice(0, 60);
+  if (sh.length < 3) return null;
+  const n = sh.length, avg = sh.reduce((a, x) => a + x, 0) / n, med = [...sh].sort((a, b) => a - b)[Math.floor(n / 2)];
+  const hf = Math.floor(n / 2), early = sh.slice(0, hf).reduce((a, x) => a + x, 0) / Math.max(1, hf), late = sh.slice(hf).reduce((a, x) => a + x, 0) / Math.max(1, n - hf);
+  const trend = late < early * 0.8 ? "뒤로 갈수록 컷이 빨라진다" : late > early * 1.25 ? "뒤로 갈수록 컷이 길어진다" : "처음부터 끝까지 비슷한 박자";
+  const seq = []; let t = 0, i = 0;
+  while (t < sec - 0.5 && seq.length < 30) { const x = Math.max(0.8, Math.min(6, i < n ? sh[i] : sh[1 + ((i - n) % (n - 1))])); seq.push(+x.toFixed(1)); t += x; i++; }
+  const f1 = (x) => x.toFixed(1), name = String(r.name || "레퍼런스").slice(0, 16);
+  const text = "컷 리듬 — 내가 고른 레퍼런스 숏츠 '" + name + "'에서 잰 실제 컷 길이: 첫 컷 " + f1(sh[0]) + "초, 평균 " + f1(avg) + "초, 중앙값 " + f1(med) + "초, 10초당 컷 " + f1(10 / avg) + "개, " + trend + ". 구간 길이를 이 박자에 맞춰라 — 목표 순서(초): " + seq.join(", ") + " (구간 약 " + seq.length + "개). 순서를 똑같이 할 필요는 없지만 첫 구간 길이와 평균 구간 길이는 ±30% 안. 구간이 짧아 내레이션이 다 안 들어가면 한 문장을 여러 구간에 걸쳐 말한다 — 그 문장을 시작 구간 say 에 쓰고 이어지는 구간 say 는 빈칸(앞 내레이션이 다음 컷 위로 이어진다). 내레이션 총량은 전체 길이 1초당 4글자 이내. 컷이 짧아도 같은 순간을 반복하지 말고 같은 클립의 다른 순간을 잘라 쓴다. 구간 길이·내레이션 배분은 이 컷 리듬 규칙이 위 규칙보다 우선.";
+  return { text, n: seq.length, avg, first: sh[0], name };
+}
 // 📝 대본 줄만 빨리(초안 저장 없음) — 대본 모드 '✍️ AI 대본' 버튼
 async function lines(env, b, h) {
   const topic = String(b.topic || "").trim().slice(0, 400);
   if (!topic) throw serr("주제를 적어 주세요.");
   const sec = [15, 20, 30, 45, 60].includes(Number(b.sec)) ? Number(b.sec) : 45, n = Math.max(4, Math.min(12, Math.round(sec / 5)));
   const ang = ANGLES[b.angle] || ANGLES.mix, rate = (await krw(env)) || 190;
-  const out = await qwen(env, [{ role: "user", content: "한국어 유튜브 숏츠 내레이션 대본을 써라. 채널: 광저우에 사는 한국인 직장인. 주제: " + topic + ". 약 " + sec + "초, 정확히 " + n + "줄(한 줄 = 한 장면, 한 줄 10~28자, 소리 내어 읽는 말이라 기호 없이). 1줄은 훅(숫자·비교·질문), 마지막 줄은 댓글 유도 질문. " + KR_RULES + " 이번 영상은 " + ang.d + ". 가격은 원화(1위안≈" + rate + "원) 병기. " + TONE_RULES + " 모르는 사실은 지어내지 말고 느낌·질문으로. JSON만: {\"lines\":[\"\"]}" }]);
+  // 컷 리듬이 있으면 한 줄(=한 장면) 길이를 레퍼런스 박자에 맞춤: 줄 수↑·줄 길이↓
+  const R = rhythmRule(b.rhythm, sec);
+  let nn = n, lo = 10, hi = 28, hook = "1줄은 훅(숫자·비교·질문)";
+  if (R) { const ln = Math.max(2.5, R.avg * 1.3); nn = Math.max(4, Math.min(15, Math.round(sec / ln))); hi = Math.max(12, Math.min(28, Math.round(ln * 5))); lo = Math.max(6, hi - 12); if (R.first < 1.6) hook = "1줄은 8자 이내의 아주 짧은 훅(숫자·비교·질문)"; }
+  const out = await qwen(env, [{ role: "user", content: "한국어 유튜브 숏츠 내레이션 대본을 써라. 채널: 광저우에 사는 한국인 직장인. 주제: " + topic + ". 약 " + sec + "초, 정확히 " + nn + "줄(한 줄 = 한 장면, 한 줄 " + lo + "~" + hi + "자, 소리 내어 읽는 말이라 기호 없이). " + hook + ", 마지막 줄은 댓글 유도 질문. " + KR_RULES + " 이번 영상은 " + ang.d + ". 가격은 원화(1위안≈" + rate + "원) 병기. " + TONE_RULES + " 모르는 사실은 지어내지 말고 느낌·질문으로. JSON만: {\"lines\":[\"\"]}" }]);
   const ls = (Array.isArray(out.lines) ? out.lines : []).map((x) => String(x || "").trim()).filter(Boolean).slice(0, 15);
   if (!ls.length) throw serr("대본을 만들지 못했어요.");
   return { ok: true, lines: ls };
@@ -540,21 +558,22 @@ async function plan(env, b, h) {
   const ang = ANGLES[b.angle] || ANGLES.mix;
   const topic = String(b.topic || "").slice(0, 200);
   const rate = (await krw(env)) || 190;
+  const R = b.series === "app" ? null : rhythmRule(b.rhythm, sec);
   const content = [];
   for (const f of frames) { content.push({ type: "text", text: "[클립 " + (f.c + 1) + " · " + Number(f.t).toFixed(1) + "초]" }); content.push({ type: "image_url", image_url: { url: f.img } }); }
   if (b.series === "app") content.push({ type: "text", text: APP_PLAN(clips, topic, sec, rate) });
   else content.push({ type: "text", text: "위는 내가 광저우에서 직접 찍은 영상 클립들의 장면 캡처다(클립 번호·시각 표시). 클립 길이: " + clips.map((c, i) => "클립 " + (i + 1) + "=" + c.dur.toFixed(1) + "초").join(", ") + ". " +
     (topic ? "내가 적은 설명: " + topic + ". " : "") +
     "이걸로 약 " + sec + "초짜리 한국어 유튜브 숏츠 편집 계획을 짜라. " + (ser ? ser.rule + " " : "") + KR_RULES + " 이번 영상은 " + ang.d + ". 가격이 보이거나 언급되면 위안과 원화(1위안≈" + rate + "원)를 같이. " +
-    "규칙: 첫 구간은 전체 캡처 중 가장 눈길 끄는 장면(훅) — 시청자 절반이 3초 안에 떠나므로 음식·가격·사람·움직임이 가장 크게 보이는 순간을 고르고, 걸어가는 길·입구·간판 같은 준비 장면은 첫 구간에 절대 쓰지 않는다. 첫 구간의 cap 은 숫자·비교·질문 중 하나로 궁금증을 만든다. 구간은 2.5~6초로 너무 잘게 자르지 말고(첫 구간만 1.5초도 됨), 움직임이 이어지는 장면은 한 구간으로 길게, start/end 는 그 클립 길이 안에서 캡처를 근거로 고르고, 흔들리거나 의미 없는 부분은 피한다. 같은 순간을 두 번 쓰지 않는다. 구간 합계가 약 " + sec + "초 — 단 클립이 모자라면 반복하지 말고 더 짧게 끝낸다. " +
-    TONE_RULES + " 구간 고르기·순서는 " + CAM_RULES + " (캡처에서 각 클립의 샷 크기·각도를 읽고, 같은 크기의 컷을 연달아 두지 말고 와이드→미디엄→클로즈업처럼 좁혀 가며, 인서트(손·가격표·음식 클로즈업)는 정보 바뀌는 자리에 끼운다; 강한 앵글·움직임 컷은 전환점 1~2곳에만.) cap 은 화면 큰 글씨(한국어 12자 이내, 필요 없으면 빈칸). say 는 그 구간에 깔 한국어 내레이션 — 구간 길이 1초당 4글자 이내로 짧게, 화면만으로 충분하면 빈칸. say 는 소리 내어 읽는 말이므로 →, :, =, / 같은 기호를 쓰지 말고 문장으로(예: '66위안, 우리 돈 약 만 2천 원'). 같은 클립을 바로 이어 두 번 쓰지 말고, 이야기(가격·음식)와 상관없는 풍경은 중간에 끼우지 말고 쓰려면 맨 앞 분위기 컷으로. 사진에 없는 사실을 지어내지 말 것(모르면 느낌·질문으로). 특히 제목·cap·say 에 '마지막·최초·역대·유일' 같은 사실 주장, 선수·연예인 이름, 날짜·경기 결과는 내가 적은 설명에 있을 때만 쓴다. 마지막 구간은 댓글 유도 질문. " +
+    "규칙: 첫 구간은 전체 캡처 중 가장 눈길 끄는 장면(훅) — 시청자 절반이 3초 안에 떠나므로 음식·가격·사람·움직임이 가장 크게 보이는 순간을 고르고, 걸어가는 길·입구·간판 같은 준비 장면은 첫 구간에 절대 쓰지 않는다. 첫 구간의 cap 은 숫자·비교·질문 중 하나로 궁금증을 만든다. " + (R ? "구간 길이는 맨 아래 컷 리듬을 따르고, " : "구간은 2.5~6초로 너무 잘게 자르지 말고(첫 구간만 1.5초도 됨), ") + "움직임이 이어지는 장면은 한 구간으로 길게, start/end 는 그 클립 길이 안에서 캡처를 근거로 고르고, 흔들리거나 의미 없는 부분은 피한다. 같은 순간을 두 번 쓰지 않는다. 구간 합계가 약 " + sec + "초 — 단 클립이 모자라면 반복하지 말고 더 짧게 끝낸다. " +
+    TONE_RULES + " 구간 고르기·순서는 " + CAM_RULES + " (캡처에서 각 클립의 샷 크기·각도를 읽고, 같은 크기의 컷을 연달아 두지 말고 와이드→미디엄→클로즈업처럼 좁혀 가며, 인서트(손·가격표·음식 클로즈업)는 정보 바뀌는 자리에 끼운다; 강한 앵글·움직임 컷은 전환점 1~2곳에만.) cap 은 화면 큰 글씨(한국어 12자 이내, 필요 없으면 빈칸). say 는 그 구간에 깔 한국어 내레이션 — 구간 길이 1초당 4글자 이내로 짧게, 화면만으로 충분하면 빈칸. say 는 소리 내어 읽는 말이므로 →, :, =, / 같은 기호를 쓰지 말고 문장으로(예: '66위안, 우리 돈 약 만 2천 원'). 같은 클립을 바로 이어 두 번 쓰지 말고, 이야기(가격·음식)와 상관없는 풍경은 중간에 끼우지 말고 쓰려면 맨 앞 분위기 컷으로. 사진에 없는 사실을 지어내지 말 것(모르면 느낌·질문으로). 특히 제목·cap·say 에 '마지막·최초·역대·유일' 같은 사실 주장, 선수·연예인 이름, 날짜·경기 결과는 내가 적은 설명에 있을 때만 쓴다. 마지막 구간은 댓글 유도 질문. " + (R ? R.text + " " : "") +
     'title(한국어 40자 이내), description(2~3줄), tags(8개 이내, # 없이). JSON만 출력: {"title":"","description":"","tags":[],"segments":[{"clip":1,"start":0,"end":3,"cap":"","say":""}]}' });
   const out = await qwen(env, [{ role: "user", content }], { model: env.SHORTS_VL_MODEL || "qwen3-vl-plus" });
   let segs = (Array.isArray(out.segments) ? out.segments : []).map((x) => {
     const c = Math.round(Number(x.clip)) - 1;
     if (!clips[c]) return null;
     let st = Math.max(0, Number(x.start) || 0), en = Number(x.end) || st + 3;
-    st = Math.min(st, Math.max(0, clips[c].dur - 0.5)); en = Math.min(Math.max(en, st + 1), clips[c].dur);
+    st = Math.min(st, Math.max(0, clips[c].dur - 0.5)); en = Math.min(Math.max(en, st + (R ? 0.6 : 1)), clips[c].dur);
     if (en - st < 0.5) return null;
     if (en - st > 6.5) en = st + 6; // 한 구간이 너무 길면 지루함
     const say = String(x.say || "").replace(/\s*(→|->|=>)\s*/g, ", ").replace(/\s*[:：=]\s*/g, ", ").replace(/,\s*,/g, ",").slice(0, 160);
@@ -564,13 +583,14 @@ async function plan(env, b, h) {
   }).filter(Boolean)
     // 바로 앞 구간과 같은 클립이 겹치는 부분이면 버림(같은 장면 반복처럼 보임)
     .filter((x, i, a) => !(i > 0 && a[i - 1].clip === x.clip && x.s < a[i - 1].e + 0.5))
-    .slice(0, 15);
+    .slice(0, R ? 30 : 15);
   if (!segs.length) segs = clips.slice(0, 8).map((c, i) => ({ clip: i, s: 0, e: Math.min(c.dur, 4), cap: "", say: "", img: "", move: "" }));
   const id = "s" + Date.now().toString(36);
   let title = String(out.title || topic || "광저우 둘이서");
   if (ser) { const ck = "shorts:series:" + h + ":" + b.series, n = (Number(await env.KV.get(ck)) || 0) + 1; await env.KV.put(ck, String(n)); title = "[" + ser.name + " #" + n + "] " + title.replace(/^\[[^\]]*\]\s*/, ""); }
   const d = { id, kind: "mine", series: ser ? b.series : "", topic: topic || "내 영상", sec, angle: b.angle || "mix", made: Date.now(), title: title.slice(0, 90), description: String(out.description || "").slice(0, 900),
     tags: (Array.isArray(out.tags) ? out.tags : []).map((t) => String(t).replace(/^#/, "").slice(0, 30)).slice(0, 10), clips, scenes: segs, opts: b.series === "app" ? { fit: "full", orig: 0, narr: true, subs: true, tag: "📱 " + (String(out.app || topic || "중국 앱").slice(0, 16)) } : { fit: "crop", orig: 0.3, narr: true, subs: true } };
+  if (R) d.rhythm = { name: R.name, n: R.n, avg: +R.avg.toFixed(2) };
   if (b.series === "app" && Array.isArray(out.privacy)) d.privacy = out.privacy.map((x) => String(x).slice(0, 80)).slice(0, 8);
   await env.KV.put(draftKey(h, id), JSON.stringify(d), { expirationTtl: 120 * 86400 });
   const l = (await env.KV.get(listKey(h), "json")) || [];

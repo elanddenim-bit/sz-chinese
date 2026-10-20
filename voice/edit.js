@@ -39,7 +39,7 @@ textarea{min-height:56px;resize:vertical}
 .seg.blank{border-color:var(--red)}.seg .bl{width:72px;height:128px;border-radius:8px;background:#1A2330;color:#fff;display:flex;align-items:center;justify-content:center;text-align:center;font-size:12px;font-weight:700;line-height:1.3;flex:none}
 .tl{display:flex;gap:2px;height:30px}.tl i{font-style:normal;font-size:11px;font-weight:800;color:#fff;border-radius:5px;display:flex;align-items:center;justify-content:center;min-width:14px;overflow:hidden}.tl i.v{background:#1664B0}.tl i.p{background:#1E7D46}.tl i.b{background:#D21624}
 .rw{display:flex;gap:6px;margin:0 0 10px}.rw input{flex:1;min-width:0;margin:0}.rw button{white-space:nowrap;padding:8px 10px;border-radius:10px;border:1px solid var(--line,#ccc);background:#fff;font-weight:700}.mini{display:flex;gap:6px;flex-wrap:wrap}.mini button{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:8px;padding:5px 9px;font:inherit;font-size:12.5px}
-.note{font-size:12.5px;color:var(--ink2);margin:6px 0 0}.err{color:var(--red);font-size:13.5px;margin-top:8px;white-space:pre-wrap}
+.note{font-size:12.5px;color:var(--ink2);margin:6px 0 0}.rbar{display:flex;gap:2px;height:14px;margin:8px 0 2px}.rbar i{background:var(--sky);border-radius:3px;min-width:2px}.rbar i:nth-child(even){background:var(--red)}.err{color:var(--red);font-size:13.5px;margin-top:8px;white-space:pre-wrap}
 .prog{font-size:14px;margin:8px 0}.bar{height:6px;background:var(--soft);border-radius:3px;overflow:hidden}.bar i{display:block;height:100%;background:var(--sky);width:0}
 canvas.pv{width:60%;max-width:300px;display:block;margin:10px auto;border-radius:10px;background:#000}
 video.out,video.prev{width:70%;max-width:320px;display:block;margin:10px auto;border-radius:10px;background:#000}
@@ -82,13 +82,13 @@ function start(){
   if(MODE==='script'&&!QID){
     h+='<div class="card"><h2>설정</h2><input type="text" id="topic" placeholder="영상 한 줄 설명 (선택)"><p class="lbl">시리즈</p><div class="chips"><button class="chip'+(SER===''||SER==='app'?' on':'')+'" data-ser="">없음</button><button class="chip'+(SER==='price'?' on':'')+'" data-ser="price">💰 광저우 물가 1분</button></div>'
       +'<p class="lbl">길이(AI 대본용)</p><div class="chips">'+[15,20,30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div></div>'
-      +'<div class="dock"><button class="big" id="asmBtn">🧩 자동 배치</button><div class="prog" id="pp"></div><div class="err" id="pe"></div></div>';
+      +rhyCard()+'<div class="dock"><button class="big" id="asmBtn">🧩 자동 배치</button><div class="prog" id="pp"></div><div class="err" id="pe"></div></div>';
   }
   else if(!QID){
     h+='<div class="card"><h2>어떤 영상인가요?</h2><input type="text" id="topic" placeholder="예: 永庆坊 산책, 早茶 집 첫 방문 (짧게)"><p class="lbl">한국 시청자 각도</p><div class="chips">'+ANGS.map(function(a){return '<button class="chip'+(a[0]===ANG?' on':'')+'" data-ang="'+a[0]+'">'+a[1]+'</button>';}).join('')+'</div>'
       +'<p class="lbl">시리즈</p><div class="chips"><button class="chip'+(SER===''?' on':'')+'" data-ser="">없음</button><button class="chip'+(SER==='price'?' on':'')+'" data-ser="price">💰 광저우 물가 1분</button><button class="chip'+(SER==='app'?' on':'')+'" data-ser="app">📱 중국 앱 투어</button></div><p class="note" id="serNote">'+(SER==='app'?SER_APP_NOTE:'시리즈로 고르면 제목 앞에 [광저우 물가 1분 #번호]가 자동으로 붙고, 가격표·원화 비교·댓글 질문 형식으로 짜요.')+'</p>'
       +'<p class="lbl">길이</p><div class="chips">'+[15,20,30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div><p class="note" id="secNote"></p>'
-      +'</div><div class="dock"><button class="big" id="planBtn" disabled>🤖 AI 편집 계획 받기</button><div class="prog" id="pp"></div><div class="err" id="pe"></div></div>';
+      +'</div>'+rhyCard()+'<div class="dock"><button class="big" id="planBtn" disabled>🤖 AI 편집 계획 받기</button><div class="prog" id="pp"></div><div class="err" id="pe"></div></div>';
   }else h+='<div class="dock"><button class="big" id="resumeBtn" disabled>이 클립으로 편집 이어가기</button><div class="err" id="pe"></div></div>';
   $('main').innerHTML=h;if(QTOPIC&&$('topic'))$('topic').value=QTOPIC;if(QTOPIC&&$('ltopic'))$('ltopic').value=QTOPIC;
   $('files').onchange=function(){addFiles(this.files);this.value='';};
@@ -104,6 +104,7 @@ function start(){
     if(SER==='price'){ANG='price';document.querySelectorAll('[data-ang]').forEach(function(x){x.classList.toggle('on',x.getAttribute('data-ang')==='price');});}
     if($('serNote'))$('serNote').textContent=SER==='app'?SER_APP_NOTE:'시리즈로 고르면 제목 앞에 [광저우 물가 1분 #번호]가 자동으로 붙고, 가격표·원화 비교·댓글 질문 형식으로 짜요.';};});
   if($('planBtn'))$('planBtn').onclick=makePlan;
+  rhyBind();
   if(SER==='app'&&MODE==='script')SER='';
   if($('resumeBtn'))$('resumeBtn').onclick=resume;
 }
@@ -151,6 +152,52 @@ function ensureBlank(){var i=CLIPS.findIndex(function(x){return x.kind==='blank'
   CLIPS.push({kind:'blank',file:null,url:'',v:im,name:'빈칸',dur:30,thumb:'',src:null,gain:null});return CLIPS.length-1;}
 function photoJpeg(im,max,q){var w=im.videoWidth||im.naturalWidth,h=im.videoHeight||im.naturalHeight;var sc=Math.min(1,max/Math.max(w,h));var c=document.createElement('canvas');c.width=Math.round(w*sc);c.height=Math.round(h*sc);c.getContext('2d').drawImage(im,0,0,c.width,c.height);try{return c.toDataURL('image/jpeg',q||0.5);}catch(e){return '';}}
 
+// ---------- 🎞 컷 리듬: 레퍼런스 숏츠의 컷 길이만 폰에서 재서 AI 계획에 박자로 넘김(영상은 서버로 안 감) ----------
+var RHY={sel:'',list:[]};try{var _rh=JSON.parse(localStorage.getItem('ed-rhy')||'null');if(_rh&&Array.isArray(_rh.list))RHY=_rh;}catch(e){}
+function rhySave(){try{localStorage.setItem('ed-rhy',JSON.stringify(RHY));}catch(e){}}
+function rhyCur(){for(var i=0;i<RHY.list.length;i++)if(RHY.list[i].id===RHY.sel)return RHY.list[i];return null;}
+function rhyPayload(){var c=rhyCur();return c?{name:c.name,shots:c.shots,dur:c.dur}:null;}
+function rhyStat(sh){var n=sh.length,sum=0,i;for(i=0;i<n;i++)sum+=sh[i];var avg=sum/n,h=Math.floor(n/2),e=0,l=0;for(i=0;i<n;i++){if(i<h)e+=sh[i];else l+=sh[i];}e/=Math.max(1,h);l/=Math.max(1,n-h);
+  return {n:n,avg:avg,first:sh[0],trend:l<e*0.8?'뒤로 갈수록 빨라짐':l>e*1.25?'뒤로 갈수록 느려짐':'고른 박자'};}
+function rhyCard(){var c=rhyCur(),h='<div class="card" id="rhyCard"><h2>🎞 컷 리듬 따라 하기</h2><p class="note" style="margin:0 0 8px">잘된 숏츠를 폰에 저장해 고르면 컷 길이만 재서 그 박자대로 편집 계획을 짜요. 영상은 서버로 안 가요.</p><div class="chips"><button class="chip'+(!c?' on':'')+'" data-rhy="">기본</button>'
+  +RHY.list.map(function(x){return '<button class="chip'+(c&&c.id===x.id?' on':'')+'" data-rhy="'+esc(x.id)+'">'+esc(x.name)+'</button>';}).join('')+'</div>';
+  if(c){var s=rhyStat(c.shots);h+='<div class="rbar">'+c.shots.map(function(x){return '<i style="flex:'+x+'"></i>';}).join('')+'</div><p class="note">컷 '+s.n+'개 · 평균 '+fmt(s.avg)+'초 · 첫 컷 '+fmt(s.first)+'초 · '+s.trend+(MODE==='script'?' — 대본 모드에선 ✍️ AI 대본의 줄 수·줄 길이에 반영돼요':'')+'</p><div class="mini" style="margin-top:6px"><button id="rhyRen">이름 바꾸기</button><button id="rhyDel">삭제</button></div>';}
+  return h+'<label class="pick" style="margin-top:10px;padding:14px"><input type="file" id="rhyFile" accept="video/*"><b>＋ 레퍼런스 영상에서 리듬 뽑기</b>숏츠 한 편(3분까지) · 영상 길이의 절반쯤 걸려요</label><p class="note" id="rhyNote"></p></div>';}
+function rhyRedraw(){var el=$('rhyCard');if(!el)return;el.outerHTML=rhyCard();rhyBind();}
+function rhyBind(){if(!$('rhyCard'))return;
+  document.querySelectorAll('[data-rhy]').forEach(function(b){b.onclick=function(){RHY.sel=b.getAttribute('data-rhy');rhySave();rhyRedraw();};});
+  $('rhyFile').onchange=function(){var f=this.files&&this.files[0];this.value='';if(f)rhyAnalyze(f);};
+  if($('rhyDel'))$('rhyDel').onclick=function(){RHY.list=RHY.list.filter(function(x){return x.id!==RHY.sel;});RHY.sel='';rhySave();rhyRedraw();};
+  if($('rhyRen'))$('rhyRen').onclick=function(){var c=rhyCur();if(!c)return;var n=prompt('리듬 이름',c.name);if(n&&n.trim()){c.name=n.trim().slice(0,16);rhySave();rhyRedraw();}};}
+async function rhyAnalyze(f){
+  var nt=$('rhyNote'),url=URL.createObjectURL(f),v=mkVideo(url);nt.textContent='영상 여는 중…';
+  try{
+    await waitEv(v,'loadedmetadata',8000);var dur=v.duration;if(!dur||!isFinite(dur))throw new Error('영상 길이를 못 읽었어요.');var lim=Math.min(dur,180);
+    var sm=document.createElement('canvas');sm.width=36;sm.height=64;var sg=sm.getContext('2d',{willReadFrequently:true}),prev=null,smp=[];
+    function sample(t){sg.drawImage(v,0,0,36,64);var d=sg.getImageData(0,0,36,64).data,g=new Float32Array(2304);for(var k=0;k<2304;k++)g[k]=d[k*4]*0.3+d[k*4+1]*0.59+d[k*4+2]*0.11;
+      if(prev){var df=0;for(var q=0;q<2304;q++)df+=Math.abs(g[q]-prev[q]);smp.push([t,df/2304]);}prev=g;}
+    // 1) 2배속으로 재생하며 매 화면 비교(컷 지점이 촘촘히 잡힘) 2) 재생이 막히면 0.25초 간격 탐색
+    var played=false;try{v.playbackRate=2;await v.play();played=true;}catch(e){}
+    if(played)await new Promise(function(done){var last=-1,fin=false,dl=Date.now()+lim/2*1000+20000;
+      function end(){if(fin)return;fin=true;try{v.pause();}catch(e){}done();}
+      function step(){if(fin)return;var t=v.currentTime;if(t!==last){last=t;sample(t);nt.textContent='컷 재는 중… '+Math.round(t)+'/'+Math.round(lim)+'초';}
+        if(t>=lim-0.05||v.ended||Date.now()>dl)return end();if(v.paused){try{v.play();}catch(e){}}requestAnimationFrame(step);}
+      v.addEventListener('ended',end);step();});
+    if(!played||smp.length<lim*2){prev=null;smp=[];for(var t=0.1;t<lim;t+=0.25){await seekTo(v,t);sample(t);nt.textContent='컷 재는 중… '+Math.round(t)+'/'+Math.round(lim)+'초';}}
+    // 컷 = 화면 차이가 '혼자' 튀는 지점: 전체 중앙값의 4배·최소 8, 이웃보다 큰 봉우리, 주변(±4칸, 바로 옆 제외) 평균의 2.5배 이상(빠른 움직임은 계속 높아서 걸러짐), 0.35초 간격
+    var ds=smp.map(function(x){return x[1];}).sort(function(a,b){return a-b;}),thr=Math.max(8,(ds[Math.floor(ds.length/2)]||0)*4),cuts=[0];
+    for(var i=0;i<smp.length;i++){var s=smp[i];if(s[1]<thr)continue;if((i>0&&smp[i-1][1]>s[1])||(i+1<smp.length&&smp[i+1][1]>s[1]))continue;
+      var nb=0,nc=0;for(var o=-4;o<=4;o++){if(o>=-1&&o<=1)continue;var x=smp[i+o];if(x){nb+=x[1];nc++;}}if(nc&&s[1]<(nb/nc)*2.5+2)continue;
+      if(s[0]-cuts[cuts.length-1]<0.35)continue;cuts.push(s[0]);}
+    if(lim-cuts[cuts.length-1]<0.35)cuts.pop();cuts.push(lim);
+    var sh=[];for(i=1;i<cuts.length;i++)sh.push(+(cuts[i]-cuts[i-1]).toFixed(2));
+    if(sh.length<3)throw new Error('컷이 '+sh.length+'개만 잡혔어요. 한 번에 길게 찍은 영상이거나 화면 변화가 적어요.');
+    var it={id:'r'+Date.now().toString(36),name:(f.name||'').replace(/\.[^.]+$/,'').slice(0,16)||'레퍼런스',shots:sh.slice(0,60),dur:+lim.toFixed(1),at:Date.now()};
+    RHY.list.unshift(it);RHY.list=RHY.list.slice(0,8);RHY.sel=it.id;rhySave();rhyRedraw();toast('컷 '+sh.length+'개를 쟀어요 — 이름 바꾸기로 알아보기 쉽게');
+  }catch(e){if($('rhyNote'))$('rhyNote').textContent=(e&&e.message)||'리듬을 못 쟀어요.';}
+  finally{try{v.pause();v.removeAttribute('src');v.load();v.remove();}catch(e){}try{URL.revokeObjectURL(url);}catch(e){}}
+}
+
 // ---------- 2) AI 계획 ----------
 async function makePlan(){
   var b=$('planBtn'),pp=$('pp'),pe=$('pe');b.disabled=true;pe.textContent='';
@@ -162,7 +209,7 @@ async function makePlan(){
   }
   frames=frames.slice(0,40);
   pp.innerHTML='<span class="spin">🤖</span> AI가 장면을 보고 편집 계획을 짜는 중… (20~40초)';
-  var r=await api('/shorts/plan',{topic:$('topic').value.trim(),sec:SEC,angle:ANG,series:SER,clips:CLIPS.map(function(c){return {dur:c.dur,name:c.name};}),frames:frames});
+  var r=await api('/shorts/plan',{topic:$('topic').value.trim(),sec:SEC,angle:ANG,series:SER,clips:CLIPS.map(function(c){return {dur:c.dur,name:c.name};}),frames:frames,rhythm:SER==='app'?null:rhyPayload()});
   if(!r.ok){pp.textContent='';pe.textContent=r.detail||r.error||'실패';b.disabled=false;return;}
   D=r.draft;NARR={};editor();
 }
@@ -213,7 +260,7 @@ async function assemble(){
   D=r.draft;NARR={};editor();if(r.blanks)toast('⬚ 빈칸 '+r.blanks+'개 — 구간의 클립 선택에서 사진이나 컷을 골라 채우세요');
 }
 async function aiLines(){var b=$('aiLines'),t=($('ltopic').value||'').trim();if(!t){$('lnote').textContent='주제를 적어 주세요.';return;}b.disabled=true;$('lnote').textContent='쓰는 중…';
-  var r=await api('/shorts/lines',{topic:t,sec:SEC,angle:ANG});b.disabled=false;if(!r.ok){$('lnote').textContent=r.detail||r.error||'실패';return;}
+  var r=await api('/shorts/lines',{topic:t,sec:SEC,angle:ANG,rhythm:rhyPayload()});b.disabled=false;if(!r.ok){$('lnote').textContent=r.detail||r.error||'실패';return;}
   $('lines').value=r.lines.join('\n');try{localStorage.setItem('ed-lines',$('lines').value);}catch(e){}$('lnote').textContent=r.lines.length+'줄 — 고치고 나서 🧩 자동 배치';}
 async function resume(){
   var r=await api('/shorts/load',{id:QID});if(!r.ok){$('pe').textContent=r.detail||r.error;return;}
@@ -315,7 +362,7 @@ function bind(){
     editor();saveSoon();};});
   document.querySelectorAll('[data-go]').forEach(function(x){x.onclick=function(){var el=document.querySelector('.seg[data-i="'+x.getAttribute('data-go')+'"]');if(el)el.scrollIntoView({block:'center',behavior:'smooth'});};});
   $('rwBtn').onclick=rewriteAll;if($('rwUndo'))$('rwUndo').onclick=function(){if(!RW_UNDO)return;D.scenes.forEach(function(x,k){var u=RW_UNDO[k];if(u){x.cap=u.cap;x.say=u.say;}});RW_UNDO=null;editor();saveSoon();toast('되돌렸어요');};
-  $('addSeg').onclick=function(){readForm();if(D.scenes.length>=15)return;var c=CLIPS.length-1;D.scenes.push({clip:c,s:0,e:Math.min(3,CLIPS[c].dur),sp:1,cap:'',say:''});editor();saveSoon();};
+  $('addSeg').onclick=function(){readForm();if(D.scenes.length>=30)return;var c=CLIPS.length-1;D.scenes.push({clip:c,s:0,e:Math.min(3,CLIPS[c].dur),sp:1,cap:'',say:''});editor();saveSoon();};
   document.querySelectorAll('[data-o]').forEach(function(b){b.onclick=function(){var k=b.getAttribute('data-o'),v=b.getAttribute('data-v');
     if(k==='fit'||k==='voice'||k==='font')D.opts[k]=v;else if(k==='orig'||k==='bgv'||k==='nv')D.opts[k]=+v;else D.opts[k]=!D.opts[k];readForm();editor();saveSoon();};});
   $('bgmIn').onchange=function(){var f=this.files&&this.files[0];this.value='';if(!f)return;readForm();BGM={file:f,name:f.name.replace(/\.[^.]+$/,'').slice(0,30),buf:null};if(!D.opts.bgv)D.opts.bgv=0.12;editor();saveSoon();};
