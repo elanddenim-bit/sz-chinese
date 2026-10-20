@@ -185,6 +185,53 @@ async function week(env) {
   const docs = await Promise.all(keys.map((k) => env.KV.get("art:today:" + k, "json").catch(() => null)));
   return { items: docs.filter(Boolean).map((x) => ({ d: x.d, art: x.art, ko: x.ko, script: x.script })) };
 }
+// qwen-tts 한국어: 짧게 나눠(≤170자) 모델 두 가지·언어 지정 있이/없이 순서로(2026-10-16 qwen3-tts-flash 400 빈 응답 사례) → wav 이어 붙임
+function splitText(t, n = 170) {
+  const out = []; let cur = "";
+  for (const s of String(t).match(/[^.!?。！？]+[.!?。！？]*\s*/g) || [String(t)]) {
+    if ((cur + s).length > n && cur) { out.push(cur.trim()); cur = ""; }
+    if (s.length > n) { for (let i = 0; i < s.length; i += n) out.push(s.slice(i, i + n).trim()); } else cur += s;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out.filter(Boolean);
+}
+function wavParts(u8) {
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength); let fmt = null, data = null;
+  for (let o = 12; o + 8 <= u8.length;) { const id = String.fromCharCode(...u8.subarray(o, o + 4)); let sz = dv.getUint32(o + 4, true);
+    if (id === "fmt ") fmt = u8.slice(o + 8, o + 8 + sz);
+    if (id === "data") { if (!sz || o + 8 + sz > u8.length) sz = u8.length - o - 8; data = u8.subarray(o + 8, o + 8 + sz); break; }
+    o += 8 + sz + (sz & 1); }
+  if (!fmt || !data) throw new Error("wav 형식");
+  return { fmt, data };
+}
+function wavJoin(list) {
+  const ps = list.map(wavParts), fmt = ps[0].fmt, len = ps.reduce((a, p) => a + p.data.length, 0);
+  const out = new Uint8Array(12 + 8 + fmt.length + 8 + len), dv = new DataView(out.buffer), w = (o, t) => { for (let i = 0; i < 4; i++) out[o + i] = t.charCodeAt(i); };
+  w(0, "RIFF"); dv.setUint32(4, out.length - 8, true); w(8, "WAVE"); w(12, "fmt "); dv.setUint32(16, fmt.length, true); out.set(fmt, 20);
+  let o = 20 + fmt.length; w(o, "data"); dv.setUint32(o + 4, len, true); o += 8;
+  for (const p of ps) { out.set(p.data, o); o += p.data.length; }
+  return out;
+}
+async function ttsOne(env, text, voice) {
+  const why = [];
+  for (const model of [env.SHORTS_TTS_MODEL || "qwen3-tts-flash", "qwen-audio-3.0-tts-flash"]) for (const lt of [true, false]) {
+    try {
+      const r = await fetch("https://" + host(env) + "/api/v1/services/aigc/multimodal-generation/generation", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
+        body: JSON.stringify({ model, input: { text, voice, ...(lt ? { language_type: "Korean" } : {}) } }) });
+      const j = await r.json().catch(() => ({})), u = j.output && j.output.audio && j.output.audio.url;
+      if (!u) { why.push(model + " " + r.status + " " + String(j.message || j.code || "").slice(0, 60)); continue; }
+      const a = await fetch(u); if (!a.ok) { why.push(model + " 받기 " + a.status); continue; }
+      return new Uint8Array(await a.arrayBuffer());
+    } catch (e) { why.push(model + ": " + String(e.message || e).slice(0, 60)); }
+  }
+  throw new Error("음성 합성 실패 — " + why.slice(-3).join(" / "));
+}
+async function qwenTts(env, text, voice) {
+  const parts = [];
+  for (const t of splitText(text)) parts.push(await ttsOne(env, t, voice));
+  return parts.length === 1 ? parts[0] : wavJoin(parts);
+}
+
 // 1분 도슨트 음성: qwen3-tts-flash Cherry(공개용 — 소유자 복제 목소리 아님) → R2 tts/art/day/<날짜>.wav, 날짜마다 한 번
 async function docent(env, d) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error("날짜");
@@ -196,12 +243,8 @@ async function docent(env, d) {
   if (await env.KV.get(lk)) throw new Error("목소리 만드는 중이에요. 몇 초 뒤 다시 눌러 주세요.");
   await env.KV.put(lk, "1", { expirationTtl: 90 });
   try {
-    const r = await fetch("https://" + host(env) + "/api/v1/services/aigc/multimodal-generation/generation", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
-      body: JSON.stringify({ model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text: doc.script.slice(0, 500), voice: env.ART_VOICE || "Cherry", language_type: "Korean" } }) });
-    const j = await r.json().catch(() => ({})), u = j.output && j.output.audio && j.output.audio.url;
-    if (!u) throw new Error("음성 합성 실패: " + (j.message || r.status));
-    const a = await fetch(u); if (!a.ok) throw new Error("오디오 받기 실패");
-    await env.R2.put(key, await a.arrayBuffer(), { httpMetadata: { contentType: "audio/wav" } });
+    const audio = await qwenTts(env, doc.script.slice(0, 500), env.ART_VOICE || "Cherry");
+    await env.R2.put(key, audio, { httpMetadata: { contentType: "audio/wav" } });
     return key;
   } finally { await env.KV.delete(lk).catch(() => {}); }
 }
@@ -247,12 +290,7 @@ export async function artSay(env, b, h, synth) {
     let audio = null; ext = ".mp3";
     if (kr) { try { audio = await synth(env, kr, text, null, { language_hints: ["ko"], rate: 1.0, volume: 100 }); mine = true; } catch { audio = null; } }
     if (!audio) {
-      const r = await fetch("https://" + host(env) + "/api/v1/services/aigc/multimodal-generation/generation", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
-        body: JSON.stringify({ model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text, voice: "Ethan", language_type: "Korean" } }) });
-      const j = await r.json().catch(() => ({})), u = j.output && j.output.audio && j.output.audio.url;
-      if (!u) throw new Error("음성 합성 실패: " + (j.message || r.status));
-      const a = await fetch(u); if (!a.ok) throw new Error("오디오 받기 실패");
-      audio = new Uint8Array(await a.arrayBuffer()); ext = ".wav";
+      audio = await qwenTts(env, text, "Ethan"); ext = ".wav";
     }
     await env.R2.put(key + ext, audio, { httpMetadata: { contentType: ext === ".mp3" ? "audio/mpeg" : "audio/wav" } });
   } else mine = ext === ".mp3";
@@ -353,6 +391,9 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15.5px
 <script>
 var PB='';try{PB=localStorage.getItem('pb-code')||'';}catch(e){}
 var AU=null,SAY={};
+// iOS 소리 깨우기: 실제 샘플이 든 0.05초 무음 wav(빈 wav 는 재생이 실패해 깨워지지 않음)
+var SIL=(function(){var n=400,b=new Uint8Array(44+n),d=new DataView(b.buffer),w=function(o,t){for(var i=0;i<4;i++)b[o+i]=t.charCodeAt(i);};w(0,'RIFF');d.setUint32(4,36+n,true);w(8,'WAVE');w(12,'fmt ');d.setUint32(16,16,true);d.setUint16(20,1,true);d.setUint16(22,1,true);d.setUint32(24,8000,true);d.setUint32(28,8000,true);d.setUint16(32,1,true);d.setUint16(34,8,true);w(36,'data');d.setUint32(40,n,true);for(var i=0;i<n;i++)b[44+i]=128;return URL.createObjectURL(new Blob([b],{type:'audio/wav'}));})();
+function wakeAu(a){a.src=SIL;try{var p=a.play();if(p&&p.catch)p.catch(function(){});}catch(e){}}
 var CUR=null,NOTE={},PRE=null,FRAME=0,FT=null,WL=null,CNT={open:1},T0=Date.now();
 var TD=null,MODE='today',DAY=null,DA=null; // TD = 오늘의 그림 문서, DAY = 지금 보는 날짜 문서(모아 보기에서 고른 것 포함)
 function $(i){return document.getElementById(i);}
@@ -407,18 +448,21 @@ function streak(d){var st=lg('art-st')||{};if(st.d===d)return;var y=new Date(Dat
 function docUi(dd){var b=$('sDoc');if(!b)return;var on=DA&&DA._d===dd.d&&!DA.paused;b.textContent=on?'⏸ 멈추기':(DA&&DA._d===dd.d&&DA.currentTime>1&&!DA.ended?'▶ 이어 듣기':'▶ 1분 도슨트 듣기');$('dProg').classList.toggle('on',!!(DA&&DA._d===dd.d));}
 function playDoc(dd){
   if(AU)AU.pause();
-  if(DA&&DA._d===dd.d){if(DA.paused)DA.play();else DA.pause();return;}
-  if(DA)DA.pause();DA=new Audio();DA._d=dd.d;CNT.docent=(CNT.docent||0)+1;
-  DA.src='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';try{DA.play().catch(function(){});}catch(e){}
-  var b=$('sDoc');b.textContent='🎧 목소리 준비 중…';
-  var u='/art/d?d='+dd.d,tries=0;
-  var go=function(){fetch(u,{headers:{range:'bytes=0-1'}}).then(function(r){
-    if(r.status===503&&tries++<6){setTimeout(go,4000);return;}
-    if(!r.ok){toast('도슨트 음성을 못 만들었어요');DA=null;if($('sDoc'))$('sDoc').textContent='▶ 1분 도슨트 듣기';return;}
-    DA.src=u;DA.ontimeupdate=function(){var p=$('dProg');if(p&&DA.duration)p.firstChild.style.width=(DA.currentTime/DA.duration*100)+'%';};
-    DA.onplay=DA.onpause=DA.onended=function(){if($('sDoc'))docUi(dd);};
-    var p=DA.play();if(p&&p.catch)p.catch(function(){if($('sDoc'))$('sDoc').textContent='▶ 한 번 더 누르세요';});
-  },function(){toast('네트워크를 확인해 주세요');DA=null;});};
+  if(DA&&DA._d===dd.d){if(!DA._ok)return;if(DA.paused)DA.play();else DA.pause();return;}
+  if(DA)DA.pause();DA=new Audio();DA._d=dd.d;CNT.docent=(CNT.docent||0)+1;wakeAu(DA);
+  var b=$('sDoc'),t0=Date.now(),tm=setInterval(function(){if($('sDoc')&&DA&&DA._d===dd.d&&!DA._ok)$('sDoc').textContent='🎧 목소리 준비 중… '+Math.round((Date.now()-t0)/1000)+'초';},1000);
+  b.textContent='🎧 목소리 준비 중…';var tries=0,me=DA;
+  var fail=function(m){clearInterval(tm);if(DA===me)DA=null;if($('sDoc'))$('sDoc').textContent='▶ 1분 도슨트 듣기';toast(m);};
+  // 파일을 통째로 받은 뒤 재생(iOS 가 긴 wav 를 조각 요청하다 멈추는 경우 방지)
+  var go=function(){fetch('/art/d?d='+dd.d).then(function(r){
+    if(r.status===503)return r.json().then(function(j){var m=j.error||'';if(/만드는 중/.test(m)&&tries++<10){setTimeout(go,4000);return;}fail('도슨트 음성 실패: '+(m||503));});
+    if(!r.ok)return fail('도슨트 음성 실패: '+r.status);
+    return r.blob().then(function(bl){if(DA!==me)return;clearInterval(tm);me._ok=1;
+      me.src=URL.createObjectURL(bl);me.ontimeupdate=function(){var p=$('dProg');if(p&&me.duration)p.firstChild.style.width=(me.currentTime/me.duration*100)+'%';};
+      me.onplay=me.onpause=me.onended=function(){if($('sDoc'))docUi(dd);};
+      me.onerror=function(){fail('이 기기에서 음성을 재생하지 못했어요');};
+      var p=me.play();if(p&&p.catch)p.catch(function(){if($('sDoc'))$('sDoc').textContent='▶ 한 번 더 누르세요';});});
+  }).catch(function(){fail('네트워크를 확인해 주세요');});};
   go();
 }
 // 🗓 지난 그림 모아 보기(최근 14일, 모두에게 같은 목록)
@@ -460,7 +504,7 @@ function sayNote(){
   var b=$('sSay');if(!CUR)return;
   if(AU&&!AU.paused&&AU._id===CUR.id){AU.pause();b.textContent='🔊 내 목소리로 듣기';return;}
   if(!PB){var c=prompt('박비서 초대 코드를 넣어 주세요 (내 목소리를 쓰려면 한 번만)');if(!c)return;PB=c.trim();try{localStorage.setItem('pb-code',PB);}catch(e){}}
-  if(!AU)AU=new Audio();AU.src='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';try{AU.play().catch(function(){});}catch(e){}
+  if(!AU)AU=new Audio();wakeAu(AU);
   var id=CUR.id;AU._id=id;b.textContent='🔊 목소리 만드는 중…';CNT.say=(CNT.say||0)+1;
   var go=function(u,mine){if(!CUR||CUR.id!==id)return;AU.src=u;AU.onended=function(){b.textContent='🔊 다시 듣기';};var p=AU.play();if(p&&p.catch)p.catch(function(){b.textContent='▶ 한 번 더 누르세요';SAY[id]={u:u,m:mine};});b.textContent=(mine?'⏸ 내 목소리':'⏸ AI 목소리(내 목소리 미등록)');};
   if(SAY[id])return go(SAY[id].u,SAY[id].m);
