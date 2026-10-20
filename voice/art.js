@@ -171,14 +171,25 @@ async function today(env, ctx) {
   let old = null;
   for (let i = 1; i <= 3 && !old; i++) old = await env.KV.get("art:today:" + prevDay(d, i), "json");
   if (!old) { const x = await buildToday(env, d); if (x) return { ...x, today: d, ready: true }; throw new Error("오늘의 그림을 준비 중이에요. 잠시 뒤 다시."); }
-  ctx.waitUntil(buildToday(env, d).catch((e) => console.log("art today", e && e.message)));
+  ctx.waitUntil(buildToday(env, d).then((x) => x && docent(env, d)).catch((e) => console.log("art today", e && e.message)));
   return { ...old, today: d, ready: false };
+}
+// 음성이 아직 없으면 바로 202 {pending} 를 돌려주고 뒤에서 만듦(화면은 3초마다 다시 물음). 실패 이유는 KV art:verr:<k> 10분
+async function voiceLater(env, ctx, k, make) {
+  const ek = "art:verr:" + k, err = await env.KV.get(ek);
+  if (err) return json({ error: err }, 503);
+  const rk = "art:vrun:" + k;
+  if (!(await env.KV.get(rk))) {
+    await env.KV.put(rk, "1", { expirationTtl: 75 });
+    ctx.waitUntil(make().catch((e) => { const m = String(e.message || e).slice(0, 200); return /만드는 중/.test(m) ? null : env.KV.put(ek, m, { expirationTtl: 600 }); }).finally(() => env.KV.delete(rk).catch(() => {})));
+  }
+  return json({ pending: true }, 202);
 }
 export async function artCron(env, ctx, uh, um) {
   if (uh !== 22 || um >= 15 || !env.DASHSCOPE_API_KEY) return; // 중국 06시
   const d = cnDay(Date.now() + 3600e3); // 06시 틱이면 이미 그날
-  if (await env.KV.get("art:today:" + d)) return;
-  await buildToday(env, d);
+  if (!(await env.KV.get("art:today:" + d))) await buildToday(env, d);
+  if (!(await env.R2.head("tts/art/day/" + d + ".wav"))) await docent(env, d).catch((e) => console.log("art docent", e && e.message)); // 아침에 미리 — 누르면 바로 재생
 }
 async function week(env) {
   const d = cnDay(), keys = Array.from({ length: 14 }, (_, i) => prevDay(d, i));
@@ -215,14 +226,14 @@ function wavJoin(list) {
 async function ttsOne(env, text, voice) {
   const why = [];
   // 업무공간 주소가 'url error'(400)로 TTS 를 거절하는 경우(2026-10-20 실사용) → 공용 주소로도 시도
-  const hosts = [...new Set([host(env), "dashscope.aliyuncs.com"])];
+  const hosts = [...new Set(["dashscope.aliyuncs.com", host(env)])]; // 공용 주소 먼저(업무공간 주소는 TTS 를 거절 — 2026-10-20 확인)
   for (const hh of hosts) for (const model of [env.SHORTS_TTS_MODEL || "qwen3-tts-flash", "qwen-audio-3.0-tts-flash"]) for (const lt of [true, false]) {
     if (hh !== hosts[0] && !lt) continue;
     try {
       const r = await fetch("https://" + hh + "/api/v1/services/aigc/multimodal-generation/generation", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
         body: JSON.stringify({ model, input: { text, voice, ...(lt ? { language_type: "Korean" } : {}) } }) });
       const j = await r.json().catch(() => ({})), u = j.output && j.output.audio && j.output.audio.url;
-      if (!u) { why.push((hh === hosts[0] ? "" : "공용 ") + model + " " + r.status + " " + String(j.message || j.code || "").slice(0, 40)); continue; }
+      if (!u) { why.push((hh === "dashscope.aliyuncs.com" ? "" : "업무공간 ") + model + " " + r.status + " " + String(j.message || j.code || "").slice(0, 40)); continue; }
       const a = await fetch(u); if (!a.ok) { why.push(model + " 받기 " + a.status); continue; }
       return new Uint8Array(await a.arrayBuffer());
     } catch (e) { why.push(model + ": " + String(e.message || e).slice(0, 60)); }
@@ -230,8 +241,7 @@ async function ttsOne(env, text, voice) {
   throw new Error("음성 합성 실패 — " + why.slice(-4).join(" / "));
 }
 async function qwenTts(env, text, voice) {
-  const parts = [];
-  for (const t of splitText(text)) parts.push(await ttsOne(env, t, voice));
+  const parts = await Promise.all(splitText(text).map((t) => ttsOne(env, t, voice))); // 조각을 한꺼번에(차례로 하면 1분 넘음)
   return parts.length === 1 ? parts[0] : wavJoin(parts);
 }
 
@@ -333,15 +343,16 @@ export async function artGet(req, env, ctx, url) {
   if (p === "/art/v") { // 아무 그림이나 3줄 해설을 AI 목소리로(공개, 그림마다 한 번 만들어 R2 캐시)
     const id = String(url.searchParams.get("id") || "");
     if (!/^c?\d{1,9}$/.test(id)) return json({ error: "id" }, 400);
-    let key;
-    try { key = await noteVoice(env, id); } catch (e) { return json({ error: String(e.message || e).slice(0, 200) }, 503); }
+    const key = "tts/art/ai/" + id + ".wav";
+    if (!(await env.R2.head(key))) return voiceLater(env, ctx, "v:" + id, () => noteVoice(env, id));
     const o = await env.R2.get(key);
     if (!o) return new Response("not found", { status: 404 });
     return new Response(o.body, { headers: { "content-type": "audio/wav", "cache-control": "public, max-age=86400", "content-length": String(o.size) } });
   }
   if (p === "/art/d") {
     const d = String(url.searchParams.get("d") || "");
-    try { await docent(env, d); } catch (e) { return json({ error: String(e.message || e).slice(0, 200) }, 503); }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return json({ error: "날짜" }, 400);
+    if (!(await env.R2.head("tts/art/day/" + d + ".wav"))) return voiceLater(env, ctx, "d:" + d, () => docent(env, d));
     const o = await env.R2.get("tts/art/day/" + d + ".wav", { range: req.headers.has("range") ? req.headers : undefined });
     if (!o) return new Response("not found", { status: 404 });
     const hd = { "content-type": "audio/wav", "cache-control": "public, max-age=86400", "accept-ranges": "bytes" };
@@ -489,7 +500,8 @@ function playDoc(dd){
   var fail=function(m){clearInterval(tm);if(DA===me)DA=null;if($('sDoc'))$('sDoc').textContent=dd.l;toast(m);};
   // 파일을 통째로 받은 뒤 재생(iOS 가 긴 wav 를 조각 요청하다 멈추는 경우 방지)
   var go=function(){fetch(dd.u).then(function(r){
-    if(r.status===503)return r.json().then(function(j){var m=j.error||'';if(/만드는 중/.test(m)&&tries++<10){setTimeout(go,4000);return;}fail('음성 실패: '+(m||503));});
+    if(r.status===202){if(tries++<40){setTimeout(go,3000);return;}return fail('음성이 너무 오래 걸려요. 잠시 뒤 다시 눌러 주세요');}
+    if(r.status===503)return r.json().then(function(j){fail('음성 실패: '+(j.error||503));});
     if(!r.ok)return r.json().then(function(j){fail('음성 실패: '+(j.error||r.status));},function(){fail('음성 실패: '+r.status);});
     return r.blob().then(function(bl){if(DA!==me)return;clearInterval(tm);me._ok=1;
       me.src=URL.createObjectURL(bl);me.ontimeupdate=function(){var p=$('dProg');if(p&&me.duration)p.firstChild.style.width=(me.currentTime/me.duration*100)+'%';};
