@@ -173,7 +173,7 @@ export const ART_HTML = String.raw`<!doctype html>
 :root{--bg:#0E0E10;--ink:#EDE6DA;--ink2:#A7A29A;--sky:#1664B0;--red:#D21624;--sheet:rgba(20,20,24,.86)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15.5px/1.6 Pre,-apple-system,"Apple SD Gothic Neo",system-ui,sans-serif;overflow:hidden}
-#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:calc(env(safe-area-inset-top) + 18px) 18px calc(env(safe-area-inset-bottom) + 86px)}
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:calc(env(safe-area-inset-top) + 58px) 18px calc(env(safe-area-inset-bottom) + 86px)}
 #pic{max-width:100%;max-height:100%;object-fit:contain;box-shadow:0 18px 60px rgba(0,0,0,.6);opacity:0;transform:scale(.985);transition:opacity 1.4s ease,transform 6s ease}
 #pic.on{opacity:1;transform:scale(1)}
 #cap{position:fixed;left:0;right:0;bottom:calc(env(safe-area-inset-bottom) + 18px);text-align:center;padding:0 80px;pointer-events:none}
