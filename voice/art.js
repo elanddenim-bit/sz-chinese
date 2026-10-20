@@ -214,17 +214,20 @@ function wavJoin(list) {
 }
 async function ttsOne(env, text, voice) {
   const why = [];
-  for (const model of [env.SHORTS_TTS_MODEL || "qwen3-tts-flash", "qwen-audio-3.0-tts-flash"]) for (const lt of [true, false]) {
+  // 업무공간 주소가 'url error'(400)로 TTS 를 거절하는 경우(2026-10-20 실사용) → 공용 주소로도 시도
+  const hosts = [...new Set([host(env), "dashscope.aliyuncs.com"])];
+  for (const hh of hosts) for (const model of [env.SHORTS_TTS_MODEL || "qwen3-tts-flash", "qwen-audio-3.0-tts-flash"]) for (const lt of [true, false]) {
+    if (hh !== hosts[0] && !lt) continue;
     try {
-      const r = await fetch("https://" + host(env) + "/api/v1/services/aigc/multimodal-generation/generation", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
+      const r = await fetch("https://" + hh + "/api/v1/services/aigc/multimodal-generation/generation", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
         body: JSON.stringify({ model, input: { text, voice, ...(lt ? { language_type: "Korean" } : {}) } }) });
       const j = await r.json().catch(() => ({})), u = j.output && j.output.audio && j.output.audio.url;
-      if (!u) { why.push(model + " " + r.status + " " + String(j.message || j.code || "").slice(0, 60)); continue; }
+      if (!u) { why.push((hh === hosts[0] ? "" : "공용 ") + model + " " + r.status + " " + String(j.message || j.code || "").slice(0, 40)); continue; }
       const a = await fetch(u); if (!a.ok) { why.push(model + " 받기 " + a.status); continue; }
       return new Uint8Array(await a.arrayBuffer());
     } catch (e) { why.push(model + ": " + String(e.message || e).slice(0, 60)); }
   }
-  throw new Error("음성 합성 실패 — " + why.slice(-3).join(" / "));
+  throw new Error("음성 합성 실패 — " + why.slice(-4).join(" / "));
 }
 async function qwenTts(env, text, voice) {
   const parts = [];
