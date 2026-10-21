@@ -12,6 +12,8 @@ import { logUse } from "./usage.js";
 
 const host = (env) => (env.DASHSCOPE_WS_HOST || "dashscope.aliyuncs.com").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
 const cnDay = (t = Date.now()) => new Date(t + 8 * 3600e3).toISOString().slice(0, 10);
+// 오늘의 그림 날짜 = 한국 자정 기준(2026-10-21 소유자). ART_TZ_H 로 바꿀 수 있음(시간 단위, 기본 9)
+const artDay = (env, t = Date.now()) => new Date(t + (Number(env && env.ART_TZ_H) || 9) * 3600e3).toISOString().slice(0, 10);
 const AIC = "https://api.artic.edu/api/v1";
 const UA = { "AIC-User-Agent": "zhnote-art (personal viewer)", accept: "application/json" };
 const FIELDS = "id,title,artist_display,artist_title,date_display,medium_display,place_of_origin,image_id,thumbnail,short_description,description,style_title,department_title";
@@ -81,6 +83,12 @@ async function nextAic(env, errs) {
 }
 
 async function getInfo(id) {
+  if (String(id)[0] === "m") {
+    const a = await metObj(String(id).slice(1));
+    if (!a) throw new Error("그림 정보를 못 받았어요");
+    return { title: a.title, artist: [a.artistDisplayName, a.artistDisplayBio].filter(Boolean).join(", "), date: a.objectDate, medium: a.medium, place: [a.culture, a.country].filter(Boolean).join(", "), dept: a.department,
+      about: "", museum: "The Metropolitan Museum of Art" };
+  }
   if (String(id)[0] === "c") {
     const r = await fetch(CMA + String(id).slice(1), { headers: { accept: "application/json" } });
     if (!r.ok) throw new Error("그림 정보를 못 받았어요 " + r.status);
@@ -129,51 +137,214 @@ async function note(env, id, info) {
   return out;
 }
 
-// ── 🗓 오늘의 그림(2026-10-20 공개용): 날짜마다 모두 같은 그림 한 점 + 1분 오디오 도슨트(AI 기본 목소리 Cherry)
-//   KV art:today:<날짜> {d, art, ko, script, at} (영구 — 지난 그림 모아 보기에 씀), 잠금 art:tlock:<날짜> 120초
-//   중국 06시 크론(artCron)이 미리 만들고, 없으면 첫 방문이 만듦(그동안은 어제 그림)
-const SCRIPT_SYS = "너는 미술관 오디오 도슨트다. 한 사람이 휴대폰으로 그림을 보며 이어폰으로 1분 동안 듣는 대본을 쓴다. 한국어 구어체(~예요/~죠), 270~330자. " +
-  "순서: 가볍게 인사하고 그림 이름 → 먼저 전체를 보게 하고 → 눈을 옮길 곳 두 군데를 위치(왼쪽 위, 가운데 아래 등)로 짚어 주고 → 그린 배경 한두 문장 → 숨 한 번 쉬고 끝맺는 한 문장. " +
-  "주어진 정보·해설에 없는 사실은 지어내지 마라. 연도 숫자는 그대로, 영어·한자 이름은 한글 표기로. 이모지·괄호 금지. " +
-  'JSON 만: {"script":"대본"}';
+// ── 🗓 오늘의 명작 큐레이션(V2 Phase 2, 2026-10-21): 무작위 대신 고른 30점을 날짜마다 차례로. 모두에게 같은 그림, 한국 자정에 바뀜
+//   작품마다 {m 미술관 aic|met|cma, id 번호 힌트, q 검색어, a 작가 열쇠말, t 제목 열쇠말[], g famous|hidden|asia}
+//   서버가 미술관 API 로 찾아 '제목·작가 일치 + 퍼블릭 도메인/CC0 + 이미지 있음'일 때만 씀(KV art:cur:r:<번호> 30일 — 실패는 6시간 뒤 다시)
+//   시카고 미술관은 Worker 요청을 거부한 적이 있어(2026-10-20) 한 번 더 시도하고, 작품 정보·IIIF 그림 둘 다 받아져야 씀. 안 되면 6시간 동안 건너뛰고 다른 미술관 작품으로
+//   날짜를 직접 정하려면 KV art:pin:<YYYY-MM-DD> = 큐레이션 번호(숫자)
+const CUR = [
+  { m: "aic", id: 28560, q: "The Bedroom van Gogh", a: "gogh", t: ["bedroom"], g: "famous" },
+  { m: "met", id: 436535, q: "Wheat Field with Cypresses", a: "gogh", t: ["cypress"], g: "famous" },
+  { m: "met", id: 45434, q: "Under the Wave off Kanagawa Hokusai", a: "hokusai", t: ["wave", "kanagawa"], g: "asia" },
+  { m: "aic", id: 27992, q: "A Sunday on La Grande Jatte", a: "seurat", t: ["jatte"], g: "famous" },
+  { m: "met", id: 437881, q: "Young Woman with a Water Pitcher", a: "vermeer", t: ["pitcher"], g: "famous" },
+  { m: "cma", q: "Burning of the Houses of Lords and Commons", a: "turner", t: ["burning"], g: "famous" },
+  { m: "aic", id: 20684, q: "Paris Street Rainy Day", a: "caillebotte", t: ["rainy"], g: "famous" },
+  { m: "met", id: 435809, q: "The Harvesters Bruegel", a: "bruegel", t: ["harvesters"], g: "famous" },
+  { m: "met", q: "The Gulf Stream Winslow Homer", a: "homer", t: ["gulf stream"], g: "hidden" },
+  { m: "aic", id: 16568, q: "Water Lilies Monet", a: "monet", t: ["water lilies"], g: "famous" },
+  { m: "met", id: 437394, q: "Aristotle with a Bust of Homer", a: "rembrandt", t: ["aristotle"], g: "famous" },
+  { m: "cma", q: "Twilight in the Wilderness", a: "church", t: ["twilight"], g: "hidden" },
+  { m: "aic", id: 14655, q: "Two Sisters On the Terrace Renoir", a: "renoir", t: ["two sisters"], g: "famous" },
+  { m: "met", id: 11417, q: "Washington Crossing the Delaware", a: "leutze", t: ["washington crossing"], g: "famous" },
+  { m: "met", q: "Sudden Shower over Shin-Ohashi Bridge Hiroshige", a: "hiroshige", t: ["shower", "ohashi", "ōhashi"], g: "asia" },
+  { m: "aic", id: 111442, q: "The Child's Bath Cassatt", a: "cassatt", t: ["bath"], g: "famous" },
+  { m: "met", id: 437127, q: "Bridge over a Pond of Water Lilies", a: "monet", t: ["bridge"], g: "famous" },
+  { m: "aic", q: "Nocturne Blue and Gold Southampton Water", a: "whistler", t: ["nocturne"], g: "hidden" },
+  { m: "aic", id: 61128, q: "At the Moulin Rouge Toulouse-Lautrec", a: "toulouse", t: ["moulin rouge"], g: "famous" },
+  { m: "met", id: 438817, q: "The Dance Class Degas", a: "degas", t: ["dance class"], g: "famous" },
+  { m: "cma", q: "Crucifixion of Saint Andrew Caravaggio", a: "caravaggio", t: ["andrew"], g: "famous" },
+  { m: "met", id: 12127, q: "Madame X Madame Pierre Gautreau", a: "sargent", t: ["madame x", "gautreau"], g: "famous" },
+  { m: "met", q: "View of Toledo El Greco", a: "greco", t: ["toledo"], g: "hidden" },
+  { m: "met", id: 435868, q: "The Card Players Cezanne", a: "cezanne", t: ["card players"], g: "famous" },
+  { m: "met", q: "Night-Shining White Han Gan", a: "han gan", t: ["night-shining", "night shining"], g: "asia" },
+  { m: "met", id: 436532, q: "Self-Portrait with a Straw Hat van Gogh", a: "gogh", t: ["straw hat"], g: "famous" },
+  { m: "met", q: "Max Schmitt in a Single Scull", a: "eakins", t: ["schmitt"], g: "hidden" },
+  { m: "met", id: 436105, q: "The Death of Socrates David", a: "david", t: ["socrates"], g: "famous" },
+  { m: "aic", q: "The Herring Net Winslow Homer", a: "homer", t: ["herring net"], g: "hidden" },
+  { m: "aic", id: 64818, q: "Stacks of Wheat End of Summer Monet", a: "monet", t: ["stacks of wheat", "wheat"], g: "famous" },
+];
+const CUR_START = "2026-10-21";
+const nrm = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const okArt = (c, title, artist) => nrm(artist).includes(nrm(c.a)) && c.t.some((t) => nrm(title).includes(nrm(t)));
+const UAH = { accept: "application/json", "user-agent": "zhnote-art/1.0 (personal viewer)" };
+const MET = "https://collectionapi.metmuseum.org/public/collection/v1";
+async function metObj(n) { const r = await fetch(MET + "/objects/" + n, { headers: UAH }).catch(() => null); if (!r || !r.ok) return null; return r.json().catch(() => null); }
+function pickMet(a) {
+  const u = String(a.primaryImageSmall || a.primaryImage || ""), m = u.match(/^https:\/\/images\.metmuseum\.org\/CRDImages\/([A-Za-z0-9._\-\/]+\.jpe?g)$/i);
+  if (!m || !a.isPublicDomain) return null;
+  return { id: "m" + a.objectID, title: String(a.title || "").slice(0, 160), artist: String(a.artistDisplayName || "").slice(0, 120), artistFull: [a.artistDisplayName, a.artistDisplayBio].filter(Boolean).join(", ").slice(0, 160),
+    date: String(a.objectDate || "").slice(0, 60), medium: String(a.medium || "").slice(0, 120), place: String(a.culture || a.country || "").slice(0, 60), img: "m:" + m[1], w: 0, h: 0 };
+}
+// 미술관별 찾기: 번호 힌트 먼저 확인, 아니면 검색 상위에서 제목·작가가 맞는 것
+async function findMet(c, why) {
+  const tryIds = async (ids) => {
+    for (const n of ids) {
+      const a = await metObj(n); if (!a) { why.push("met " + n + " 못 받음"); continue; }
+      if (!okArt(c, a.title, a.artistDisplayName)) { why.push("met " + n + " 제목·작가 다름"); continue; }
+      const p = pickMet(a); if (p) return p; why.push("met " + n + " 이미지·퍼블릭 도메인 아님");
+    }
+    return null;
+  };
+  if (c.id) { const p = await tryIds([c.id]); if (p) return p; }
+  const r = await fetch(MET + "/search?hasImages=true&q=" + encodeURIComponent(c.q), { headers: UAH }).catch(() => null);
+  const j = r && r.ok ? await r.json().catch(() => ({})) : {};
+  if (!r || !r.ok) why.push("met 검색 " + (r ? r.status : "연결 실패"));
+  return tryIds((j.objectIDs || []).filter((n) => n !== c.id).slice(0, 4)); // 요청 하나의 외부 호출 상한 때문에 4개까지
+}
+async function findAic(env, c, why) {
+  if (await env.KV.get("art:bad:aic2")) { why.push("시카고 미술관 잠시 건너뜀"); return null; }
+  const flds = FIELDS + ",is_public_domain";
+  let hits = [];
+  if (c.id) { const r = await fetch(AIC + "/artworks/" + c.id + "?fields=" + flds, { headers: UA }).catch(() => null); if (r && r.ok) { const j = await r.json().catch(() => ({})); if (j.data) hits.push(j.data); } else why.push("aic " + c.id + " " + (r ? r.status : "연결 실패")); }
+  if (!hits.some((a) => okArt(c, a.title, a.artist_title || a.artist_display))) {
+    const r = await fetch(AIC + "/artworks/search?q=" + encodeURIComponent(c.q) + "&limit=8&fields=" + flds, { headers: UA }).catch(() => null);
+    if (r && r.ok) hits = hits.concat(((await r.json().catch(() => ({}))).data) || []); else why.push("aic 검색 " + (r ? r.status : "연결 실패"));
+  }
+  if (!hits.length) { await env.KV.put("art:bad:aic2", "1", { expirationTtl: 6 * 3600 }); return null; } // 시카고 미술관이 막혀 있음 → 6시간 다른 미술관
+  for (const a of hits) {
+    if (!a.image_id || !a.is_public_domain || !okArt(c, a.title, a.artist_title || a.artist_display)) continue;
+    const t = await fetch("https://www.artic.edu/iiif/2/" + a.image_id + "/full/200,/0/default.jpg", { headers: { "AIC-User-Agent": UA["AIC-User-Agent"] } }).catch(() => null);
+    if (!t || !t.ok) { why.push("aic 그림 서버 " + (t ? t.status : "연결 실패")); await env.KV.put("art:bad:aic2", "1", { expirationTtl: 6 * 3600 }); return null; }
+    return pick(a);
+  }
+  why.push("aic 제목·작가·퍼블릭 도메인 맞는 작품 없음");
+  return null;
+}
+async function findCma(c, why) {
+  const r = await fetch(CMA + "?cc0&has_image=1&limit=8&q=" + encodeURIComponent(c.q), { headers: UAH }).catch(() => null);
+  if (!r || !r.ok) { why.push("cma 검색 " + (r ? r.status : "연결 실패")); return null; }
+  for (const a of ((await r.json().catch(() => ({}))).data || [])) {
+    if (!okArt(c, a.title, ((a.creators || [])[0] || {}).description)) continue;
+    const p = pickCma(a); if (p) return p;
+  }
+  why.push("cma 제목·작가 맞는 CC0 작품 없음");
+  return null;
+}
+async function resolveCur(env, n) {
+  const k = "art:cur:r:" + n, hit = await env.KV.get(k, "json");
+  if (hit) return hit.art ? hit : null;
+  const c = CUR[n], why = [];
+  let art = null;
+  try { art = c.m === "met" ? await findMet(c, why) : c.m === "aic" ? await findAic(env, c, why) : await findCma(c, why); } catch (e) { why.push(String(e.message || e).slice(0, 80)); }
+  const doc = { n, m: c.m, g: c.g, art, why: why.slice(-4), at: Date.now() };
+  // 시카고 미술관이 막혀서 못 찾은 건 6시간 뒤 다시, 정말 없는 작품은 30일
+  await env.KV.put(k, JSON.stringify(doc), { expirationTtl: art ? 30 * 86400 : (why.some((w) => /건너뜀|연결 실패|그림 서버|못 받음| 5\d\d| 4(03|29)/.test(w)) ? 6 * 3600 : 30 * 86400) });
+  return art ? doc : null;
+}
+const dIdx = (d) => Math.round((Date.parse(d + "T00:00:00Z") - Date.parse(CUR_START + "T00:00:00Z")) / 86400e3);
+// 그날 작품 고르기: 지정(art:pin) → 날짜 순번부터 차례로, 최근 20일에 나온 것은 건너뜀. 찾기는 요청 하나에 6곳까지(외부 호출 상한)
+async function pickCur(env, d) {
+  const seen = (await env.KV.get("art:thist", "json")) || [], recent = seen.slice(0, 20);
+  const pin = await env.KV.get("art:pin:" + d);
+  const order = [];
+  if (pin != null && CUR[Number(pin)]) order.push(Number(pin));
+  const base = ((dIdx(d) % CUR.length) + CUR.length) % CUR.length;
+  for (let i = 0; i < CUR.length; i++) order.push((base + i) % CUR.length);
+  let tries = 0;
+  for (const n of order) {
+    const k = await env.KV.get("art:cur:r:" + n, "json");
+    if (k && !k.art) continue; // 이미 못 찾은 것
+    if (!k && ++tries > 2) break; // 새로 찾는 건 요청 하나에 2점까지(외부 호출 상한) — 나머지는 크론이 미리 찾아 둠
+    const r = k || (await resolveCur(env, n));
+    if (r && r.art && (!recent.includes(r.art.id) || order[0] === n && pin != null)) return r;
+  }
+  return null;
+}
+// 도슨트: 작품 그림을 직접 보는 千问 VL 이 해설·감상 포인트·1분 대본을 한 번에(그림에 보이는 것만 위치로 말함). 실패하면 글자만으로 쓰되 위치·색 묘사는 금지
+const DOCENT_SYS = "너는 미술관의 오디오 도슨트다. 한 사람이 휴대폰으로 이 작품을 보며 이어폰으로 1분 동안 듣는다. 한국어 구어체(~예요/~죠), 차분하고 담백하게. " +
+  "지킬 것: 주어진 작품 정보와 널리 알려진 미술사 사실만 말한다. 출처 없는 일화·작가의 속마음을 사실처럼 단정하지 않는다(해석이 갈리면 '~로 보기도 해요'). 제작 시기와 나중의 소장·기록 시기를 섞지 않는다. 종교·문화 유물은 그 맥락을 존중한다. 모르면 생략한다. " +
+  "IMG " +
+  "연도 숫자는 그대로, 외국 이름은 한글 표기. 이모지·괄호·영문 금지. " +
+  'JSON 만: {"title":"한국어 제목","artist":"작가 한국어 표기 · 나라 · 생몰년(정보에 있으면)","lines":["무엇을 그렸는지 1문장","언제·어떤 배경에서 1문장","눈여겨볼 점 1문장"],"look":"지금 그림에서 다시 볼 곳 한 문장","script":"1분 대본 340~420자. 0~10초 호기심을 끄는 질문이나 관찰로 시작 → 작가와 시대 배경, 그림의 특별한 표현, 이해의 핵심 → 마지막 10여 초는 그림의 한 부분을 다시 바라보게 하며 끝맺기"}';
+const IMG_YES = "함께 보내는 그림을 직접 보고, 그림에 실제로 보이는 것만 위치(왼쪽 위, 가운데 아래 등)와 색으로 말한다. 그림에 없는 것을 말하지 않는다.";
+const IMG_NO = "그림을 볼 수 없으니 위치·색·구도를 지어내지 말고, 'look' 과 대본 끝은 '그림 전체를 천천히 다시 보세요'처럼 일반적으로 쓴다.";
+function b64(u8) { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
+async function smallImg(art) {
+  const i = art.img;
+  const u = /^c:/.test(i) ? "https://openaccess-cdn.clevelandart.org/" + i.slice(2) : /^m:/.test(i) ? "https://images.metmuseum.org/CRDImages/" + i.slice(2) : "https://www.artic.edu/iiif/2/" + i + "/full/843,/0/default.jpg";
+  const r = await fetch(u, /^c:|^m:/.test(i) ? {} : { headers: { "AIC-User-Agent": UA["AIC-User-Agent"] } }).catch(() => null);
+  if (!r || !r.ok) return null;
+  const b = new Uint8Array(await r.arrayBuffer());
+  return b.length > 4.5e6 ? null : "data:image/jpeg;base64," + b64(b);
+}
+async function docentText(env, art, info) {
+  const img = await smallImg(art).catch(() => null);
+  const msgUser = JSON.stringify({ ...info, title: info.title || art.title, artist: info.artist || art.artistFull });
+  const tries = [];
+  if (img) for (const model of [env.ART_VL_MODEL, env.QUEST_VL_MODEL || "qwen3-vl-plus"].filter(Boolean)) tries.push({ model, img });
+  for (const model of [env.ART_MODEL, env.QUEST_MODEL || "qwen3.8-flash", "qwen-plus"].filter(Boolean)) tries.push({ model });
+  let last = "";
+  for (const t of tries) {
+    try {
+      const sys = DOCENT_SYS.replace("IMG ", (t.img ? IMG_YES : IMG_NO) + " ");
+      const content = t.img ? [{ type: "image_url", image_url: { url: t.img } }, { type: "text", text: msgUser }] : msgUser;
+      const q = await fetch("https://" + host(env) + "/compatible-mode/v1/chat/completions", { method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
+        body: JSON.stringify({ model: t.model, temperature: 0.5, enable_thinking: false, ...(t.img ? {} : { response_format: { type: "json_object" } }), messages: [{ role: "system", content: sys }, { role: "user", content }] }) });
+      if (!q.ok) { last = t.model + " " + q.status; continue; }
+      const c = String(((await q.json()).choices || [{}])[0].message.content || "");
+      const o = JSON.parse(c.slice(c.indexOf("{"), c.lastIndexOf("}") + 1));
+      const ko = { title: String(o.title || "").slice(0, 80), artist: String(o.artist || "").slice(0, 80), lines: (Array.isArray(o.lines) ? o.lines : []).map((x) => String(x).slice(0, 180)).slice(0, 3), look: String(o.look || "").slice(0, 180) };
+      const script = String(o.script || "").replace(/\s+/g, " ").trim().slice(0, 520);
+      if (!ko.lines.length || script.length < 120) { last = t.model + ": 짧은 답"; continue; }
+      return { ko, script, vis: !!t.img, model: t.model };
+    } catch (e) { last = t.model + ": " + String(e.message || e).slice(0, 80); }
+  }
+  throw new Error("도슨트 원고를 못 만들었어요(" + last + ")");
+}
 async function buildToday(env, d) {
   const lk = "art:tlock:" + d;
   if (await env.KV.get(lk)) return null;
-  await env.KV.put(lk, "1", { expirationTtl: 120 });
+  await env.KV.put(lk, "1", { expirationTtl: 150 });
   try {
     const seen = (await env.KV.get("art:thist", "json")) || [];
-    let art = null, info = null;
-    for (let t = 0; t < 4 && !art; t++) {
-      const a = await next(env);
-      if (seen.includes(a.id)) continue;
-      const i = await getInfo(a.id).catch(() => null);
-      if (!i) continue;
-      if (!art || (i.about || "").length > 120) { art = a; info = i; }
-      if ((i.about || "").length > 120) break; // 설명이 있는 그림을 우선(대본이 덜 비어 보이게)
+    const r = await pickCur(env, d);
+    let art = r && r.art, info = null, cur = r ? { n: r.n, m: r.m, g: r.g } : null;
+    if (art) info = await getInfo(art.id).catch(() => null);
+    if (!art || !info) { // 큐레이션을 하나도 못 쓰면 예전처럼 무작위(설명 있는 것 우선)
+      cur = null; art = null;
+      for (let t = 0; t < 4 && !art; t++) { const a = await next(env); if (seen.includes(a.id)) continue; const i = await getInfo(a.id).catch(() => null); if (i) { art = a; info = i; } }
     }
     if (!art) throw new Error("그림을 못 골랐어요");
-    const n = await note(env, art.id, info);
-    let script = "";
-    try { script = String((await qwenJson(env, SCRIPT_SYS, JSON.stringify({ info, note: n.ko }), 0.6)).script || "").replace(/\s+/g, " ").trim().slice(0, 420); } catch { script = ""; }
-    if (!script) script = [n.ko.title + ".", ...n.ko.lines, n.ko.look].join(" ");
-    const doc = { d, art, ko: n.ko, script, at: Date.now() };
+    const dt = await docentText(env, art, info);
+    const out = { ko: dt.ko };
+    await env.KV.put("art:n:" + art.id, JSON.stringify(out)); // 해설 화면도 같은 글
+    const doc = { d, art, ko: dt.ko, script: dt.script, cur, v2: 1, vis: dt.vis, at: Date.now() };
     await env.KV.put("art:today:" + d, JSON.stringify(doc));
-    await env.KV.put("art:thist", JSON.stringify([art.id, ...seen].slice(0, 120)));
+    await env.KV.put("art:thist", JSON.stringify([art.id, ...seen.filter((x) => x !== art.id)].slice(0, 120)));
     return doc;
   } finally { await env.KV.delete(lk).catch(() => {}); }
 }
 const prevDay = (d, n = 1) => new Date(Date.parse(d + "T00:00:00Z") - n * 86400e3).toISOString().slice(0, 10);
 async function today(env, ctx) {
-  const d = cnDay();
+  const d = artDay(env);
   const doc = await env.KV.get("art:today:" + d, "json");
+  // 큐레이션 전(무작위)으로 만든 오늘 그림은 한 번만 큐레이션 작품으로 다시 만듦(2026-10-21 도입일)
+  if (doc && !doc.cur && !doc.v2 && d >= CUR_START && !(await env.KV.get("art:recur:" + d))) {
+    await env.KV.put("art:recur:" + d, "1", { expirationTtl: 2 * 86400 });
+    ctx.waitUntil(buildToday(env, d).catch((e) => console.log("art recur", e && e.message))); // 덮어쓰기(지우지 않음 — 실패하면 기존 그림 유지), 음성은 누를 때 새 그림 것으로
+    return { ...doc, today: d, ready: false };
+  }
   if (doc) return { ...doc, today: d, ready: true };
   // 지난 그림이 하나도 없으면(처음) 기다려서 만들고, 있으면 어제 것을 보여 주고 뒤에서 만듦
   let old = null;
   for (let i = 1; i <= 3 && !old; i++) old = await env.KV.get("art:today:" + prevDay(d, i), "json");
   if (!old) { const x = await buildToday(env, d); if (x) return { ...x, today: d, ready: true }; throw new Error("오늘의 그림을 준비 중이에요. 잠시 뒤 다시."); }
-  ctx.waitUntil(buildToday(env, d).then((x) => x && docent(env, d)).catch((e) => console.log("art today", e && e.message)));
+  ctx.waitUntil(buildToday(env, d).catch((e) => console.log("art today", e && e.message)));
   return { ...old, today: d, ready: false };
 }
+// 같은 날짜를 다시 만들었으면 예전 음성 대신 새 대본으로(덮어쓰기)
+const docentFresh = (env, d) => docent(env, d, true).catch((e) => console.log("art docent", e && e.message));
 // 음성이 아직 없으면 바로 202 {pending} 를 돌려주고 뒤에서 만듦(화면은 3초마다 다시 물음). 실패 이유는 KV art:verr:<k> 10분
 async function voiceLater(env, ctx, k, make) {
   const ek = "art:verr:" + k, err = await env.KV.get(ek);
@@ -186,15 +357,30 @@ async function voiceLater(env, ctx, k, make) {
   return json({ pending: true }, 202);
 }
 export async function artCron(env, ctx, uh, um) {
-  if (uh !== 22 || um >= 15 || !env.DASHSCOPE_API_KEY) return; // 중국 06시
-  const d = cnDay(Date.now() + 3600e3); // 06시 틱이면 이미 그날
-  if (!(await env.KV.get("art:today:" + d))) await buildToday(env, d);
-  if (!(await env.R2.head("tts/art/day/" + d + ".wav"))) await docent(env, d).catch((e) => console.log("art docent", e && e.message)); // 아침에 미리 — 누르면 바로 재생
+  if (!env.DASHSCOPE_API_KEY) return;
+  const tz = Number(env.ART_TZ_H) || 9, h0 = (24 - tz) % 24; // 한국 자정 = UTC 15시
+  if (uh === h0 && um < 15) {
+    const d = artDay(env, Date.now() + 3600e3); // 자정 틱이면 이미 그날
+    if (!(await env.KV.get("art:today:" + d))) await buildToday(env, d);
+    const doc = await env.KV.get("art:today:" + d, "json");
+    if (doc && !(await goodWav(env, dayWav(doc)))) await docentFresh(env, d); // 미리 — 누르면 바로 재생
+    return;
+  }
+  // 다른 틱: 아직 찾지 않은 큐레이션 작품을 2점씩 미리 찾아 둠(첫 방문이 느려지지 않게)
+  let n = 0;
+  for (let i = 0; i < CUR.length && n < 2; i++) if (!(await env.KV.get("art:cur:r:" + i))) { await resolveCur(env, i).catch(() => null); n++; }
 }
 async function week(env) {
-  const d = cnDay(), keys = Array.from({ length: 14 }, (_, i) => prevDay(d, i));
+  const d = artDay(env), keys = Array.from({ length: 14 }, (_, i) => prevDay(d, i));
   const docs = await Promise.all(keys.map((k) => env.KV.get("art:today:" + k, "json").catch(() => null)));
   return { items: docs.filter(Boolean).map((x) => ({ d: x.d, art: x.art, ko: x.ko, script: x.script })) };
+}
+// 큐레이션 점검표(공개, 읽기만): 작품마다 찾았는지·어느 미술관 작품인지·못 찾은 이유. ?try=1 이면 아직 안 찾은 것 3점을 지금 찾아 봄
+async function curCheck(env, url) {
+  if (url.searchParams.get("try")) { let n = 0; for (let i = 0; i < CUR.length && n < 3; i++) if (!(await env.KV.get("art:cur:r:" + i))) { await resolveCur(env, i).catch(() => null); n++; } }
+  const rows = await Promise.all(CUR.map(async (c, i) => { const r = await env.KV.get("art:cur:r:" + i, "json"); return { n: i, m: c.m, g: c.g, q: c.q, ok: !!(r && r.art), id: r && r.art && r.art.id, title: r && r.art && r.art.title, artist: r && r.art && r.art.artist, why: r && !r.art ? r.why : undefined, pending: !r }; }));
+  const aic = await env.KV.get("art:bad:aic2");
+  return { today: artDay(env), aic: aic ? "막힘(6시간 건너뜀)" : "시도 가능", found: rows.filter((r) => r.ok).length, total: CUR.length, rows };
 }
 // qwen-tts 한국어: 짧게 나눠(≤170자) 모델 두 가지·언어 지정 있이/없이 순서로(2026-10-16 qwen3-tts-flash 400 빈 응답 사례) → wav 이어 붙임
 function splitText(t, n = 170) {
@@ -276,12 +462,14 @@ async function noteVoice(env, id, force) {
     return key;
   } finally { await env.KV.delete(lk).catch(() => {}); }
 }
+// 음성 파일 이름에 그림 번호를 넣어(큐레이션 이후) 같은 날 그림이 바뀌어도 예전 음성이 나오지 않게. 그 전 날짜는 예전 이름 그대로
+const dayWav = (doc) => "tts/art/day/" + doc.d + (doc.cur || doc.v2 ? "-" + doc.art.id : "") + ".wav";
 async function docent(env, d, force) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error("날짜");
-  const key = "tts/art/day/" + d + ".wav";
-  if (!force && (await env.R2.head(key))) return key;
   const doc = await env.KV.get("art:today:" + d, "json");
   if (!doc) throw new Error("그날 그림이 없어요");
+  const key = dayWav(doc);
+  if (!force && (await env.R2.head(key))) return key;
   const lk = "art:alock:" + d;
   if (await env.KV.get(lk)) throw new Error("목소리 만드는 중이에요. 몇 초 뒤 다시 눌러 주세요.");
   await env.KV.put(lk, "1", { expirationTtl: 90 });
@@ -296,9 +484,10 @@ async function img(req, url, ctx) {
   const i = String(url.searchParams.get("i") || "");
   const w = Math.min(2400, Math.max(200, Math.round(Number(url.searchParams.get("w")) || 1686)));
   const cma = /^c:[A-Za-z0-9._\-\/]+_web\.jpg$/.test(i) && !i.includes("..");
-  if (!cma && !/^[0-9a-f-]{36}$/.test(i)) return new Response("bad", { status: 400 });
+  const met = /^m:[A-Za-z0-9._\-\/]+\.jpe?g$/i.test(i) && !i.includes("..");
+  if (!cma && !met && !/^[0-9a-f-]{36}$/.test(i)) return new Response("bad", { status: 400 });
   const big = cma && w > 900;
-  const cache = caches.default, key = new Request("https://art-cache/" + encodeURIComponent(i) + "/" + (cma ? (big ? "print" : "web") : w));
+  const cache = caches.default, key = new Request("https://art-cache/" + encodeURIComponent(i) + "/" + (cma ? (big ? "print" : "web") : met ? "met" : w));
   const hit = await cache.match(key);
   if (hit) return hit;
   let r;
@@ -306,7 +495,8 @@ async function img(req, url, ctx) {
     const base = "https://openaccess-cdn.clevelandart.org/" + i.slice(2);
     r = big ? await fetch(base.replace(/_web\.jpg$/, "_print.jpg")) : null;
     if (!r || !r.ok) r = await fetch(base);
-  } else r = await fetch("https://www.artic.edu/iiif/2/" + i + "/full/" + w + ",/0/default.jpg", { headers: { "AIC-User-Agent": UA["AIC-User-Agent"] } });
+  } else if (met) r = await fetch("https://images.metmuseum.org/CRDImages/" + i.slice(2));
+  else r = await fetch("https://www.artic.edu/iiif/2/" + i + "/full/" + w + ",/0/default.jpg", { headers: { "AIC-User-Agent": UA["AIC-User-Agent"] } });
   if (!r.ok) return new Response("image " + r.status, { status: 502 });
   const res = new Response(r.body, { headers: { "content-type": "image/jpeg", "cache-control": "public, max-age=2592000" } });
   ctx.waitUntil(cache.put(key, res.clone()));
@@ -320,7 +510,7 @@ async function hmac16(env, s) {
 }
 export async function artSay(env, b, h, synth) {
   const id = String(b.id || "");
-  if (!/^c?\d{1,9}$/.test(id)) throw new Error("id");
+  if (!/^[cm]?\d{1,9}$/.test(id)) throw new Error("id");
   const n = await env.KV.get("art:n:" + id, "json");
   if (!n || !n.ko) throw new Error("해설을 먼저 열어 주세요");
   const k = n.ko, text = [k.title + ".", k.artist ? k.artist.replace(/·/g, ",") + "." : "", ...(k.lines || []), k.look ? "지금 볼 곳. " + k.look : ""].filter(Boolean).join(" ").slice(0, 600);
@@ -345,14 +535,14 @@ export async function artGet(req, env, ctx, url) {
   if (p === "/art/img") return img(req, url, ctx);
   if (p === "/art/a") {
     const h = String(url.searchParams.get("h") || ""), id = String(url.searchParams.get("id") || ""), x = url.searchParams.get("x") === "wav" ? "wav" : "mp3";
-    if (!/^[0-9a-f]{12}$/.test(h) || !/^c?\d{1,9}$/.test(id) || url.searchParams.get("s") !== (await hmac16(env, h + "|" + id))) return new Response("forbidden", { status: 403 });
+    if (!/^[0-9a-f]{12}$/.test(h) || !/^[cm]?\d{1,9}$/.test(id) || url.searchParams.get("s") !== (await hmac16(env, h + "|" + id))) return new Response("forbidden", { status: 403 });
     const o = await env.R2.get("tts/art/" + h + "/" + id + "." + x);
     if (!o) return new Response("not found", { status: 404 });
     return new Response(o.body, { headers: { "content-type": x === "mp3" ? "audio/mpeg" : "audio/wav", "cache-control": "private, max-age=86400" } });
   }
   if (p === "/art/v") { // 아무 그림이나 3줄 해설을 AI 목소리로(공개, 그림마다 한 번 만들어 R2 캐시)
     const id = String(url.searchParams.get("id") || "");
-    if (!/^c?\d{1,9}$/.test(id)) return json({ error: "id" }, 400);
+    if (!/^[cm]?\d{1,9}$/.test(id)) return json({ error: "id" }, 400);
     const key = "tts/art/ai/" + id + ".wav";
     if (!(await goodWav(env, key))) return voiceLater(env, ctx, "v:" + id, () => noteVoice(env, id, true));
     const o = await env.R2.get(key);
@@ -362,8 +552,11 @@ export async function artGet(req, env, ctx, url) {
   if (p === "/art/d") {
     const d = String(url.searchParams.get("d") || "");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return json({ error: "날짜" }, 400);
-    if (!(await goodWav(env, "tts/art/day/" + d + ".wav"))) return voiceLater(env, ctx, "d:" + d, () => docent(env, d, true));
-    const o = await env.R2.get("tts/art/day/" + d + ".wav", { range: req.headers.has("range") ? req.headers : undefined });
+    const doc = await env.KV.get("art:today:" + d, "json");
+    if (!doc) return json({ error: "그날 그림이 없어요" }, 404);
+    const wk = dayWav(doc);
+    if (!(await goodWav(env, wk))) return voiceLater(env, ctx, "d:" + wk, () => docent(env, d, true));
+    const o = await env.R2.get(wk, { range: req.headers.has("range") ? req.headers : undefined });
     if (!o) return new Response("not found", { status: 404 });
     const hd = { "content-type": "audio/wav", "cache-control": "public, max-age=86400", "accept-ranges": "bytes" };
     if (o.range && req.headers.has("range")) { const st = o.range.offset || 0, ln = o.range.length != null ? o.range.length : o.size - st; hd["content-range"] = "bytes " + st + "-" + (st + ln - 1) + "/" + o.size; hd["content-length"] = String(ln); return new Response(o.body, { status: 206, headers: hd }); }
@@ -373,10 +566,11 @@ export async function artGet(req, env, ctx, url) {
   try {
     if (p === "/art/today") { if (!env.DASHSCOPE_API_KEY) return json({ error: "AI 키 없음" }, 500); const t = await today(env, ctx); return json(t, 200, t.ready ? "public, max-age=300" : "no-store"); }
     if (p === "/art/week") return json(await week(env), 200, "public, max-age=300");
+    if (p === "/art/check") return json(await curCheck(env, url));
     if (p === "/art/next") { ctx.waitUntil(logUse(env, "art", { next: 1 }, 0).catch(() => {})); return json(await next(env)); }
     if (p === "/art/note") {
       const id = String(url.searchParams.get("id") || "");
-      if (!/^c?\d{1,9}$/.test(id)) return json({ error: "id" }, 400);
+      if (!/^[cm]?\d{1,9}$/.test(id)) return json({ error: "id" }, 400);
       if (!env.DASHSCOPE_API_KEY) return json({ error: "AI 키 없음" }, 500);
       return json(await note(env, id), 200, "public, max-age=86400");
     }
@@ -507,7 +701,11 @@ function imgW(){return Math.min(2400,Math.round(Math.max(window.innerWidth,windo
 function srcW(a,w){return '/art/img?i='+encodeURIComponent(a.img)+'&w='+w;}
 function src(a){return srcW(a,imgW());}
 function isCm(a){return String(a&&a.id).charAt(0)==='c';}
-function museum(a){return isCm(a)?'클리블랜드 미술관':'시카고 미술관';}
+function mk(a){var c=String(a&&a.id).charAt(0);return c==='c'?'cma':c==='m'?'met':'aic';}
+var MUS={cma:{n:'클리블랜드 미술관',en:'Cleveland Museum of Art',lic:'이미지 CC0(Open Access)',u:function(i){return 'https://www.clevelandart.org/art/'+i.slice(1);}},
+  met:{n:'메트로폴리탄 미술관',en:'The Metropolitan Museum of Art',lic:'퍼블릭 도메인(Open Access)',u:function(i){return 'https://www.metmuseum.org/art/collection/search/'+i.slice(1);}},
+  aic:{n:'시카고 미술관',en:'Art Institute of Chicago',lic:'퍼블릭 도메인',u:function(i){return 'https://www.artic.edu/artworks/'+i;}}};
+function museum(a){return MUS[mk(a)].n;}
 function dayOf(){return DAY&&CUR&&DAY.art.id===CUR.id?DAY:null;}
 function fetchNext(){return fetch('/art/next').then(function(r){return r.json();}).then(function(a){if(a.error)throw new Error(a.error);var im=new Image();im.src=src(a);return {a:a,im:im};});}
 
@@ -605,10 +803,10 @@ function sheet(){
     if(k.look)h+='<h3>오늘의 감상 포인트</h3><div class="look">'+esc(k.look)+'</div>';
     h+='<div class="ai">AI가 미술관 자료로 쓴 해설이에요 · 아직 검수 전이라 틀릴 수 있어요</div>';}
   else h+='<p class="wait" style="position:static;display:block;padding:16px 0">'+(n&&n.err?esc(n.err):'해설 쓰는 중…')+'</p>';
-  var dl=[['원제',CUR.title],['작가(원문)',CUR.artistFull||CUR.artist],['제작',CUR.date],['재료·기법',CUR.medium],['지역·문화권',CUR.place],['작품 번호',String(CUR.id).replace(/^c/,'')]].filter(function(x){return x[1];});
+  var dl=[['원제',CUR.title],['작가(원문)',CUR.artistFull||CUR.artist],['제작',CUR.date],['재료·기법',CUR.medium],['지역·문화권',CUR.place],['작품 번호',String(CUR.id).replace(/^[cm]/,'')]].filter(function(x){return x[1];});
   h+='<h3>작품 세부 정보</h3><details><summary>미술관 원문 정보 펼치기</summary><dl>'+dl.map(function(x){return '<dt>'+esc(x[0])+'</dt><dd>'+esc(x[1])+'</dd>';}).join('')+'</dl></details>';
-  var url=cm?'https://www.clevelandart.org/art/'+esc(String(CUR.id).slice(1)):'https://www.artic.edu/artworks/'+esc(CUR.id);
-  h+='<h3>출처 · 라이선스</h3><div class="src">'+(cm?'클리블랜드 미술관(Cleveland Museum of Art) 소장 · 이미지 CC0(Open Access)':'시카고 미술관(Art Institute of Chicago) 소장 · 퍼블릭 도메인')+'<br>이미지는 미술관 공개 서버에서 받아 그대로 보여 드려요 · <a href="'+url+'" target="_blank" rel="noopener">미술관 원본 페이지 ↗</a></div>';
+  var M=MUS[mk(CUR)],url=esc(M.u(String(CUR.id)));
+  h+='<h3>출처 · 라이선스</h3><div class="src">'+M.n+'('+M.en+') 소장 · '+M.lic+(dd&&dd.cur?' · 오늘의 명작 큐레이션':'')+'<br>이미지는 미술관 공개 서버에서 받아 그대로 보여 드려요 · <a href="'+url+'" target="_blank" rel="noopener">미술관 원본 페이지 ↗</a></div>';
   h+='<div class="row"><button id="sFav">'+(isFav()?'♥ 저장됨':'♡ 저장')+'</button>'+(k?'<button id="sCard">📮 공유 카드</button>':'')+(PB&&k?'<button id="sSay" style="border-color:var(--sky);background:var(--sky)">🔊 내 목소리로 듣기</button>':'')+'</div>';
   h+='<div class="row"><button id="sClose">닫기</button><button id="sFavs">♥ 나의 컬렉션 '+(lg('art-fav')||[]).length+'</button></div></div>';
   var S=$('sheet');S.innerHTML=h;S._k='info';S.classList.add('on');S.scrollTop=0;CNT.info=(CNT.info||0)+1;
