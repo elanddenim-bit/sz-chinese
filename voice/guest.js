@@ -427,6 +427,7 @@ function vSet(){
      '<input id="s_team" type="text" autocomplete="off" placeholder="새 팀 코드"><button class="btn sm" id="s_teams" style="margin-top:8px">설정</button></div>';
     h+='<h2>가져오기 · 백업</h2><div class="card"><p class="s">Claude가 정리해 준 JSON을 붙여넣으면 같은 id는 덮어쓰고 새 것은 추가합니다.</p>'+
      '<textarea id="s_imp" placeholder="{&quot;guests&quot;:[…], &quot;trips&quot;:[…], &quot;places&quot;:[…]}"></textarea><button class="btn sm" id="s_imps" style="margin-top:8px">가져오기</button> '+
+     '<label class="btn sm ghost" style="margin-top:8px">📂 파일에서 가져오기<input id="s_file" type="file" accept=".json,application/json" style="display:none"></label> '+
      '<button class="btn sm ghost" id="s_exp" style="margin-top:8px">⬇ 백업 내려받기</button></div>';
   }
   h+='<h2>사용법 <span class="zh">使用说明</span></h2><div class="card s">'+
@@ -442,6 +443,7 @@ function vSet(){
   $('#s_teams').onclick=function(){api('team',{team:v('s_team')}).then(function(){$('#s_team').value='';toast('팀 코드 설정됨')}).catch(function(e){toast(e.message)})};
   $('#s_imps').onclick=function(){var d;try{d=JSON.parse(v('s_imp'))}catch(e){return toast('JSON 형식이 아니에요')}
     api('import',{db:d}).then(function(j){toast(j.n+'건 가져옴');$('#s_imp').value='';return reload()}).catch(function(e){toast(e.message)})};
+  $('#s_file').onchange=function(){var f=this.files[0];if(!f)return;f.text().then(function(t){$('#s_imp').value=t;$('#s_imps').click()})};
   $('#s_exp').onclick=function(){var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(DB,null,1)],{type:'application/json'}));a.download='guest-backup-'+today()+'.json';a.click()};
 }
 
