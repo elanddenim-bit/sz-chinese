@@ -22,6 +22,7 @@ main{max-width:640px;margin:0 auto;padding:14px 16px 48px}h2{font-size:13px;colo
 <header><a class="back" href="/" aria-label="박비서">‹</a><h1>🧰 도구함</h1></header>
 <main>
 <h2>업무</h2><div class="g">
+<a href="/guest"><i>🤝</i><b>출장자 지원</b><small>호텔·차량·식사·손님 취향, 지사원과 공유</small></a>
 <a href="/brief"><i>🧳</i><b>출장 브리핑</b><small>전날 밤 날씨·출발·챙길 것 알림</small></a>
 <a href="/mag/"><i>📰</i><b>기내 잡지</b><small>탑승 전 한 번 열면 오프라인으로</small></a>
 <a href="/live"><i>🎧</i><b>동시통역</b><small>한↔중 실시간, 내 목소리로 번역 음성</small></a>

@@ -45,6 +45,7 @@ import { magApi, magCron, magGet } from "./mag.js";
 import { airApi, airGet, } from "./air.js";
 import { liveRelay, LIVE_HTML } from "./live.js";
 import { memoirApi, memoirGet, memoirPrompt, memoirCron, MEMOIR_HTML } from "./memoir.js";
+import { guestApi, GUEST_HTML } from "./guest.js";
 import ICON180 from "./icon-180.png";
 import ICON192 from "./icon-192.png";
 import ICON512 from "./icon-512.png";
@@ -176,6 +177,7 @@ export default {
       if (url.pathname.startsWith("/tv/") && req.method === "GET") return await tvGet(req, env, url);
       if (url.pathname === "/todo/ics" && req.method === "GET") return todoIcs(url);
       if (url.pathname === "/tv" && req.method === "GET") return new Response(TV_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
+      if (url.pathname === "/guest" && req.method === "GET") return new Response(GUEST_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } }); // 🤝 출장자 지원(지사원 팀 코드)
       if (url.pathname === "/hub" && req.method === "GET") return new Response(HUB_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/special" && req.method === "GET") return new Response(SPECIAL_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/xiangqi" && req.method === "GET") return new Response(XIANGQI_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
@@ -187,6 +189,7 @@ export default {
       let b;
       try { b = await req.json(); } catch { return json(req, { error: "bad_json" }, 400); }
       if (url.pathname.startsWith("/todo/")) return json(req, await todoApi(env, url.pathname, b)); // 📅 업무 일정 → 네이버 캘린더(초대 코드 대신 공간 코드)
+      if (url.pathname.startsWith("/guest/")) return json(req, await guestApi(req, env, url.pathname, b, allowed, hash)); // 🤝 출장자 지원 — 초대 코드(주인) 또는 팀 코드
       if (!allowed(env, b.code)) return json(req, { error: "not_allowed" }, 403);
       if (url.pathname === "/usage/data") return json(req, await usageData(env, b));
       if (!env.DASHSCOPE_API_KEY) return json(req, { error: "config", detail: "DASHSCOPE_API_KEY 시크릿 없음" }, 500);
