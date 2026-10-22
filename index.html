@@ -811,7 +811,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#EFE8DE" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:#CFE0F3;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.13.0</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.13.1</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -9007,13 +9007,7 @@ async function callReview(id,force){
     +'<div class="cl-wait">내 발화 '+e.turns.filter(function(t){return t.r==='me';}).length+'개를 교정하는 중입니다… (10~20초)</div>'
     +callTranscriptHtml(e,true);
   document.getElementById('clX').addEventListener('click',callClose);
-  var body={sc:callScPayload(sc,{targets:e.targets,mission:e.mission}),turns:e.turns.map(function(t){return {r:t.r,z:t.z};})};
-  var r=await callPost('/call/review',body,90000);
-  // 연결이 끊기면 한 번 더 자동으로(긴 통화 리뷰는 서버가 오래 걸려 중간에 끊길 수 있음)
-  if(r.error==='network'||r.error==='timeout'||/^http_5/.test(r.error||'')){
-    var w=ov.querySelector('.cl-wait');if(w)w.textContent='연결이 끊겨 한 번 더 요청하는 중입니다…';
-    r=await callPost('/call/review',body,90000);
-  }
+  var r=await callReviewSplit(e,sc,ov);
   if(!document.getElementById('callOv'))return;
   if((r.error||!Array.isArray(r.lines))&&e.review&&e.review.slim){callRenderReview(e);return;} // 다시 받기 실패 → 요약만
   if(r.error||!Array.isArray(r.lines)){
@@ -9038,6 +9032,50 @@ async function callReview(id,force){
   callPrune();
   saveState();
   callRenderReview(e);
+}
+// 긴 통화는 나눠서 동시에 리뷰(2026-10-22 발화 19·27개 리뷰가 1분 넘게 멈춤) — 서버 배포와 무관하게 앱에서 쪼갬.
+// 내 발화 8개마다 끊고(다음 상대 대사까지 포함), 조각마다 /call/review → 번호를 이어 붙여 합침. 조각당 하루 리뷰 수 1개씩 씀.
+async function callReviewSplit(e,sc,ov){
+  var T=e.turns.map(function(t){return {r:t.r,z:t.z};});
+  var mine=T.filter(function(t){return t.r==='me';}).length, PER=8;
+  var tg=function(){return callScPayload(sc,{targets:e.targets,mission:e.mission});};
+  async function one(turns){
+    var body={sc:tg(),turns:turns};
+    var r=await callPost('/call/review',body,90000);
+    if(r.error==='network'||r.error==='timeout'||/^http_5/.test(r.error||''))r=await callPost('/call/review',body,90000);
+    return r;
+  }
+  if(mine<=PER+2)return await one(T);
+  var parts=[],cur=[],n=0,off=[],cnt=0;
+  T.forEach(function(t,i){
+    cur.push(t);if(t.r==='me')n++;
+    var nx=T[i+1];
+    if(n>=PER&&(!nx||nx.r==='me')&&T.length-i>3){parts.push(cur);off.push(cnt);cnt+=n;cur=[];n=0;}
+  });
+  if(cur.length){if(n===0&&parts.length)parts[parts.length-1]=parts[parts.length-1].concat(cur);else{parts.push(cur);off.push(cnt);}}
+  var w=ov.querySelector('.cl-wait'), done=0;
+  if(w)w.textContent='내 발화 '+mine+'개를 '+parts.length+'묶음으로 나눠 교정하는 중… (0/'+parts.length+')';
+  var res=await Promise.all(parts.map(function(pt){return one(pt).then(function(r){done++;if(w)w.textContent='내 발화 '+mine+'개를 '+parts.length+'묶음으로 나눠 교정하는 중… ('+done+'/'+parts.length+')';return r;});}));
+  var ok=res.filter(function(r){return r&&!r.error&&Array.isArray(r.lines);});
+  if(!ok.length)return res[0]||{error:'network'};
+  var lines=[],strat=[],phr=[],seen={},sc0=0,wsum=0,tgt={},mis=null;
+  res.forEach(function(r,k){
+    if(!r||r.error||!Array.isArray(r.lines))return;
+    var m=parts[k].filter(function(t){return t.r==='me';}).length;
+    sc0+=(parseInt(r.score)||0)*m;wsum+=m;
+    r.lines.forEach(function(l){if(!l)return;l.i=(parseInt(l.i)||0)+off[k];lines.push(l);});
+    (r.strategy||[]).forEach(function(x){if(x&&!seen['s'+x.point]){seen['s'+x.point]=1;strat.push(x);}});
+    (r.phrases||[]).forEach(function(x){if(x&&x.z&&!seen['p'+x.z]){seen['p'+x.z]=1;phr.push(x);}});
+    (r.targets||[]).forEach(function(x){var i=+x.i,o=tgt[i]||{i:i,used:false,ok:false,note:''};o.used=o.used||!!x.used;o.ok=o.ok||!!(x.used&&x.ok);if(x.used&&x.note)o.note=x.note;tgt[i]=o;});
+    if(Array.isArray(r.mission)&&r.mission[0]){var x=r.mission[0];if(!mis||(x.used&&!mis.used)||(x.ok&&!mis.ok))mis=x;}
+  });
+  lines.sort(function(a,b){return a.i-b.i;});
+  var first=ok[0],last=ok[ok.length-1];
+  var out={score:Math.round(sc0/Math.max(1,wsum)),verdict:first.verdict||'',outcome:(last.outcome||'')+(ok.length<parts.length?' (일부 묶음은 교정 실패 — 다시 요청하면 전체를 다시 받습니다)':''),
+    strategy:strat.slice(0,4),lines:lines,phrases:phr.slice(0,5)};
+  if(Object.keys(tgt).length)out.targets=Object.keys(tgt).map(function(k){return tgt[k];});
+  if(mis)out.mission=[mis];
+  return out;
 }
 function callTranscriptHtml(e,open){
   var i=0;
