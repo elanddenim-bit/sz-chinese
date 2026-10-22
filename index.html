@@ -811,7 +811,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#EFE8DE" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:#CFE0F3;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.11.3</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.11.4</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -9140,15 +9140,17 @@ function ntSteps(){
   var wd=new Date().getDay(), wn=wrongIds().length;
   var say=[['rp','🎭','롤플레잉 한 판','틀린 문장은 다시 써 보기'],['pron','🎙','발음 5문장','80점 넘을 때까지'],['pattern','📐','패턴 드릴','반복 실수 문법 위주']][wd%3];
   return [
-    {k:'rev',ic:'🔁',t:wn?'오답 복습':'단어 10문',s:wn?'복습 대기 '+wn+'개 — 틀린 것부터':'오답이 없어 단어 퀴즈로',m:8},
-    {k:'fill',ic:'✏️',t:'빈칸 채우기',s:'문장 속 단어 — 틀리면 복습으로',m:8},
-    {k:'ear',ic:'📞',t:'통화 듣기',s:'AI 상대와 전화 — 점수 낮은 상황부터',m:8},
-    {k:say[0],ic:say[1],t:say[2],s:say[3],m:6}
+    // 2026-10-22: 말하기 우선 — 통화를 맨 앞·15분(막힌 단어는 뒤의 복습·빈칸으로 메움)
+    {k:'ear',ic:'📞',t:'통화 말하기',s:'AI 상대와 전화 2~3통 — 리뷰 보고 🔁 다시 걸기까지',m:15},
+    {k:'rev',ic:'🔁',t:wn?'오답 복습':'단어 10문',s:wn?'복습 대기 '+wn+'개 — 틀린 것부터':'오답이 없어 단어 퀴즈로',m:6},
+    {k:'fill',ic:'✏️',t:'빈칸 채우기',s:'문장 속 단어 — 틀리면 복습으로',m:5},
+    {k:say[0],ic:say[1],t:say[2],s:say[3],m:4}
   ];
 }
 function ntState(){
   var d=today(), n=state.night;
-  if(!n||n.d!==d)n=state.night={d:d,i:-1,sec:[0,0,0,0],fin:false};
+  if(!n||n.d!==d)n=state.night={d:d,i:-1,sec:[0,0,0,0],fin:false,v:2};
+  if(!n.v){n.v=2;if(n.sec&&n.sec.length>=3){var o=n.sec;n.sec=[o[2]||0,o[0]||0,o[1]||0,o[3]||0];if(n.i>=0&&n.i<3)n.i=[1,2,0][n.i];}} // 순서 바뀜(통화 맨 앞) — 오늘 진행분 옮김
   if(!n.sec||n.sec.length<4)n.sec=[0,0,0,0];
   return n;
 }
@@ -9228,7 +9230,7 @@ function ntHomeCard(){
   var done=(state.stats.days[today()]||{}).nd;
   var l2=n.fin?(done?'오늘 '+Math.round(tot/60)+'분 완료 ✓':'오늘 '+Math.round(tot/60)+'분 · 한 번 더 →'):(n.i>=0?(n.i+1)+'단계 진행 중 →':(tot?'이어 하기 '+ntFmt(tot)+' →':'30분 코스 시작 →'));
   return '<button class="nt-card" id="ctaNight"><div class="l1">🌙 오늘의 30분 · 이번 주 '+wk+'/7일</div><div class="l2">'+l2+'</div>'
-    +'<div class="l3">복습 8 → 빈칸 8 → 통화 듣기 8 → '+esc(st[3].t)+' 6분</div><div class="nt-steps">'+bars+'</div></button>';
+    +'<div class="l3">통화 15 → 복습 6 → 빈칸 5 → '+esc(st[3].t)+' 4분</div><div class="nt-steps">'+bars+'</div></button>';
 }
 // 활동 중인 동안 현재 단계 시간 누적 (통화·발음 화면은 손을 안 대도 셈)
 setInterval(function(){
