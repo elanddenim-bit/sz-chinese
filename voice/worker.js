@@ -56,6 +56,7 @@ import PRE400 from "./fonts/pretendard-400.woff2";
 import PRE700 from "./fonts/pretendard-700.woff2";
 import BLACKHAN from "./fonts/blackhan.woff";
 import LILITA from "./fonts/lilita.woff";
+import { wallApi, wallGet } from "./wall.js";
 const FONTS = { "/fonts/pretendard-400.woff2": PRE400, "/fonts/pretendard-700.woff2": PRE700, "/fonts/blackhan.woff": BLACKHAN, "/fonts/lilita.woff": LILITA }; // 같은 도메인에서 받음 — 중국에서 외부 글꼴 CDN 막힘 대비. blackhan·lilita = 숏츠 자막 '게임 글꼴'(Black Han Sans·Lilita One, OFL)
 
 // 박비서 홈 화면 아이콘(소유자 지정 일러스트) · PWA manifest
@@ -184,6 +185,7 @@ export default {
       if (url.pathname === "/xiangqi" && req.method === "GET") return new Response(XIANGQI_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/timecam" && req.method === "GET") return new Response(TIMECAM_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname.startsWith("/timecam/") && req.method === "GET") return await timecamGet(req, env, url);
+      if (url.pathname === "/wall/img" && req.method === "GET") return await wallGet(env, url); // 📱 잠금화면 그림(단축어가 받음)
       if (url.pathname === "/usage" && req.method === "GET") return new Response(USAGE_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/" && req.method === "GET") return new Response(AGENT_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (req.method !== "POST") return json(req, { error: "not_found" }, 404);
@@ -196,6 +198,7 @@ export default {
       if (!env.DASHSCOPE_API_KEY) return json(req, { error: "config", detail: "DASHSCOPE_API_KEY 시크릿 없음" }, 500);
       const h = await hash(String(b.code).trim());
       if (url.pathname === "/agent/ask") { const out = await agentAsk(env, b, h); ctx.waitUntil(logUse(env, "pb", { ask: 1, ...Object.fromEntries(Object.entries(out.tools || {})) }, 0, h).catch(() => {})); return json(req, out); }
+      if (url.pathname.startsWith("/wall/")) return json(req, await wallApi(env, url.pathname, b, h, url.origin));
       if (url.pathname.startsWith("/quest/")) return json(req, await questApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/mystery/")) return json(req, await mysteryApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/timecam/")) return json(req, await timecamApi(env, ctx, url.pathname, b, h));

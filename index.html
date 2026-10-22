@@ -811,7 +811,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#EFE8DE" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:#CFE0F3;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.13.1</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.14.0</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -888,6 +888,7 @@
   </div>
   <button class="bigbtn" id="btnFix" style="background:#1664B0;margin-bottom:8px" onclick="fixOpen()">🧠 통화 교정 문장 말하기</button>
   <button class="bigbtn" id="btnFrm" style="background:#1E7F4F;margin-bottom:8px" onclick="frmOpen()">🧩 문장 틀 말하기</button>
+  <button class="bigbtn" style="background:var(--navy);margin-bottom:8px" onclick="wallOpen()">📱 잠금화면에 띄우기</button>
   <button class="bigbtn" id="btnReview">오답 복습 퀴즈 시작</button>
   <div class="scenario-note">틀린 문장·단어는 자동으로 여기에 쌓입니다. 복습 퀴즈에서 <b>연속 2회 정답</b>이면 목록에서 빠지고 마스터로 기록됩니다.</div>
   <div id="rvList"></div>
@@ -9209,6 +9210,124 @@ function frmDue(max){
   return due.concat(fresh).slice(0,max||10).map(function(x){return frmItem(x[0],x[1]);});
 }
 function frmOpen(){var l=frmDue(10);if(!l.length){openSheet('<div style="padding:18px 4px;text-align:center">오늘 할 문장 틀을 다 했습니다. 🎉<br><span style="font-size:13px;color:var(--grey)">내일 다시 나옵니다.</span></div>');return;}uT('frm');fixOpen(l,'문장 틀 말하기');}
+
+// ---------- 📱 잠금화면 (2026-10-23 소유자 '어제 틀린 것·반복할 것·오늘 쓸 문장을 아이폰 대기화면에') ----------
+// 폰 캔버스로 그림(시스템 글꼴) → sz-voice /wall/put(R2 하나만) → 아이폰 단축어 자동화가 아침에 /wall/img 받아 '배경화면 설정'.
+// 앱을 닫을 때(화면 숨김) 내용이 바뀌었으면 자동으로 다시 올림(2시간에 한 번까지). localStorage szcn-wall {sig,t,url}
+function wallPick(){
+  var out={wrong:[],rep:[],work:[],weak:''};
+  try{
+    var fx=fixSt().items.slice();
+    var bad=fx.filter(function(x){return (x.n||0)>0&&(x.box||0)===0;}).sort(function(a,b){return String(b.due).localeCompare(String(a.due));});
+    var fresh=fx.filter(function(x){return !(x.n>0)&&(x.box||0)<2;}).sort(function(a,b){return String(b.d).localeCompare(String(a.d));});
+    out.wrong=bad.concat(fresh).slice(0,3);
+  }catch(e){}
+  try{
+    var P=frmSt().p, cand=[];
+    Object.keys(P).forEach(function(id){var r=P[id];if((r.box||0)<=1){var m=id.match(/^fr(\d+)-(\d+)$/);if(m&&FRAMES[+m[1]])cand.push([+m[1],+m[2],r.due||'']);}});
+    cand.sort(function(a,b){return a[2].localeCompare(b[2]);});
+    var seenF={};
+    cand.forEach(function(c){if(out.rep.length<2&&!seenF[c[0]]){seenF[c[0]]=1;out.rep.push(frmItem(c[0],c[1]));}});
+    if(out.rep.length<2){frmDue(4).forEach(function(it){var fi=+it.id.match(/^fr(\d+)/)[1];if(out.rep.length<2&&!seenF[fi]){seenF[fi]=1;out.rep.push(it);}});}
+  }catch(e){}
+  try{
+    var lg=callState().log.slice().reverse(), have={};
+    out.wrong.concat(out.rep).forEach(function(x){have[x.z]=1;});
+    for(var i=0;i<lg.length&&out.work.length<2;i++){
+      var e=lg[i], sc=callSc(e.key);if(!e.review||!e.review.phrases||sc.kind==='life')continue;
+      e.review.phrases.forEach(function(p){if(out.work.length<2&&p&&p.z&&!have[p.z]){have[p.z]=1;out.work.push(p);}});
+    }
+    if(out.work.length<2){ // 통화 기록이 없으면 업무 틀 예문을 날짜마다 돌려 가며
+      var d=new Date(), k=d.getDate()+d.getMonth()*31;
+      for(var j=0;out.work.length<2&&j<FRAMES.length;j++){var F=FRAMES[(k+j*7)%FRAMES.length], ex=F[2][(k+j)%3];
+        if(!have[ex[0]]&&!/麻烦你|我在/.test(F[0])){have[ex[0]]=1;out.work.push({z:ex[0],p:ex[1],k:ex[2]});}}
+    }
+  }catch(e){}
+  try{var g=gramTop(3).filter(function(x){return x.count>x.fixed;})[0];if(g)out.weak=g.label+' '+(g.count-g.fixed)+'회 — '+(g.right||'');}catch(e){}
+  return out;
+}
+function wallDraw(){
+  var dpr=Math.min(3,window.devicePixelRatio||3), W=Math.round((screen.width||393)*dpr), H=Math.round((screen.height||852)*dpr);
+  if(W>H){var t=W;W=H;H=t;}
+  if(W<900){W=1179;H=2556;}
+  var c=document.createElement('canvas');c.width=W;c.height=H;var x=c.getContext('2d'), u=W/393;
+  var g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'#1664B0');g.addColorStop(.55,'#0F4A86');g.addColorStop(1,'#1A2330');
+  x.fillStyle=g;x.fillRect(0,0,W,H);
+  var FZ='"PingFang SC","Apple SD Gothic Neo",-apple-system,sans-serif', FK='"Apple SD Gothic Neo","PingFang SC",-apple-system,sans-serif';
+  var d=wallPick(), M=24*u, maxW=W-2*M;
+  function wrap(t,font,w){x.font=font;var lines=[],cur='';String(t||'').split('').forEach(function(ch){if(x.measureText(cur+ch).width>w&&cur){lines.push(cur);cur=ch.trim()?ch:'';}else cur+=ch;});if(cur)lines.push(cur);return lines;}
+  function block(it,sc,dry){ // 한 항목: 중문 크게 → 병음 → 뜻
+    var fz=Math.round(21*u*sc), fp=Math.round(12*u*sc), fk=Math.round(13*u*sc), h=0, out=[];
+    wrap(it.z,'600 '+fz+'px '+FZ,maxW-14*u).forEach(function(l){out.push(['600 '+fz+'px '+FZ,'#FFFFFF',l,fz*1.3]);});
+    if(it.p)wrap(it.p,fp+'px '+FK,maxW-14*u).forEach(function(l){out.push([fp+'px '+FK,'#BFD7F2',l,fp*1.35]);});
+    if(it.k)wrap(it.k,fk+'px '+FK,maxW-14*u).forEach(function(l){out.push([fk+'px '+FK,'rgba(239,232,222,.85)',l,fk*1.4]);});
+    out.forEach(function(o){h+=o[3];});
+    return {h:h+10*u*sc,lines:out};
+  }
+  var secs=[['❌ 어제 틀린 말',d.wrong],['🔁 반복할 틀',d.rep],['💼 오늘 써 볼 말',d.work]].filter(function(s){return s[1].length;});
+  var top=H*0.33, bottom=H-110*u, sc=1;
+  function total(sc){var t=24*u*sc;secs.forEach(function(s){t+=26*u*sc;s[1].forEach(function(it){t+=block(it,sc).h;});t+=8*u*sc;});if(d.weak)t+=30*u*sc;return t;}
+  while(sc>0.62&&total(sc)>bottom-top)sc-=0.04;
+  var y=top;
+  // 날짜 줄
+  var now=new Date(), wd='일월화수목금토'[now.getDay()];
+  x.font='600 '+Math.round(13*u*sc)+'px '+FK;x.fillStyle='rgba(239,232,222,.9)';x.textBaseline='top';
+  x.fillText((now.getMonth()+1)+'/'+now.getDate()+' ('+wd+') · 실전 중국어',M,y);y+=24*u*sc;
+  secs.forEach(function(s){
+    x.font='700 '+Math.round(13*u*sc)+'px '+FK;x.fillStyle='#EFE8DE';x.fillText(s[0],M,y);y+=24*u*sc;
+    s[1].forEach(function(it){
+      var b=block(it,sc);
+      x.fillStyle='rgba(255,255,255,.07)';var rr=10*u;x.beginPath();
+      if(x.roundRect)x.roundRect(M,y-4*u*sc,maxW,b.h,rr);else x.rect(M,y-4*u*sc,maxW,b.h);x.fill();
+      var yy=y;b.lines.forEach(function(o){x.font=o[0];x.fillStyle=o[1];x.fillText(o[2],M+8*u,yy);yy+=o[3];});
+      y+=b.h+4*u*sc;
+    });
+    y+=6*u*sc;
+  });
+  if(d.weak){x.font=Math.round(12*u*sc)+'px '+FK;x.fillStyle='rgba(239,232,222,.75)';wrap('⚠ 약점: '+d.weak,x.font,maxW).slice(0,2).forEach(function(l){x.fillText(l,M,y);y+=17*u*sc;});}
+  return {canvas:c,sig:JSON.stringify([d.wrong.map(function(i){return i.z;}),d.rep.map(function(i){return i.z;}),d.work.map(function(i){return i.z;}),d.weak,today()])};
+}
+function wallLS(v){try{if(v)localStorage.setItem('szcn-wall',JSON.stringify(v));else return JSON.parse(localStorage.getItem('szcn-wall')||'{}');}catch(e){return {};}}
+async function wallUpload(force){
+  if(!cfg||!cfg.sid)return null;
+  var L=wallLS()||{}, r=wallDraw();
+  if(!force&&L.sig===r.sig&&Date.now()-(L.t||0)<20*3600e3)return L.url||null;
+  if(!force&&Date.now()-(L.t||0)<2*3600e3&&L.sig)return L.url||null;
+  var img=r.canvas.toDataURL('image/jpeg',0.9);
+  var j=await vPost('/wall/put',{img:img,d:today()},30000);
+  wallLS({sig:r.sig,t:Date.now(),url:j.url});
+  return j.url;
+}
+function wallOpen(){
+  uT('wall');
+  var r=wallDraw(), src=r.canvas.toDataURL('image/jpeg',0.9), L=wallLS()||{};
+  openSheet('<div style="padding:2px 2px 8px"><div style="font-size:17px;font-weight:800;margin-bottom:8px">📱 잠금화면 만들기</div>'
+    +'<img src="'+src+'" style="width:46%;float:right;margin:0 0 8px 10px;border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.2)">'
+    +'<div style="font-size:13px;line-height:1.65;color:var(--navy)">어제 틀린 말 · 반복할 틀 · 오늘 써 볼 말이 들어갑니다. 앱을 닫을 때마다 새 내용으로 서버에 올려 두고, 아이폰 단축어가 아침마다 받아 잠금화면으로 바꿉니다.</div>'
+    +'<button class="pr-b" id="wlSave" style="width:100%;margin-top:10px">📥 사진으로 저장(한 번만 쓸 때)</button>'
+    +'<button class="pr-b" id="wlUp" style="width:100%;margin-top:8px;background:#1664B0;color:#fff">🔗 자동용 주소 받기</button>'
+    +'<div id="wlMsg" style="clear:both;font-size:12.5px;line-height:1.7;margin-top:10px;color:var(--navy)"></div></div>');
+  document.getElementById('wlSave').addEventListener('click',function(){
+    r.canvas.toBlob(function(b){
+      var f=new File([b],'중국어-잠금화면.jpg',{type:'image/jpeg'});
+      if(navigator.canShare&&navigator.canShare({files:[f]}))navigator.share({files:[f]}).catch(function(){});
+      else{var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=f.name;a.click();}
+    },'image/jpeg',0.92);
+  });
+  document.getElementById('wlUp').addEventListener('click',async function(){
+    var m=document.getElementById('wlMsg');m.textContent='올리는 중…';
+    try{
+      var url=await wallUpload(true);
+      m.innerHTML='<b>자동용 주소</b> (복사됨)<div style="word-break:break-all;background:#EFE8DE;border-radius:8px;padding:8px;margin:6px 0;font-size:11.5px">'+esc(url)+'</div>'
+        +'<b>아이폰 단축어 설정 (한 번만)</b><br>① 단축어 앱 → 자동화 → <b>+</b> → <b>특정 시간</b>: 오전 6:30 · 매일 → <b>즉시 실행</b><br>'
+        +'② 동작 추가: <b>URL 콘텐츠 가져오기</b> → 위 주소 붙여넣기<br>'
+        +'③ 동작 추가: <b>배경화면 설정</b>(검색창에 \'배경화면\') → <b>잠금 화면</b>, \'미리보기 보기\' 끄기<br>'
+        +'④ 지금 한 번 ▶ 실행해서 바뀌는지 확인<br><span style="color:var(--grey)">앱을 닫을 때마다(2시간에 한 번까지) 내용이 바뀌었으면 새 그림을 올립니다. 밤 공부 끝나고 앱을 닫으면 다음 날 아침 그 내용이 잠금화면에 나옵니다.</span>';
+      try{navigator.clipboard.writeText(url);}catch(e){}
+    }catch(e){m.textContent='올리기 실패: '+e.message;}
+  });
+}
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden'){try{wallUpload(false).catch(function(){});}catch(e){}}});
 
 // ---------- 🧠 교정 문장 말하기 복습 (2026-10-22 소유자 '교정받으면 바로 까먹는다') ----------
 // 통화 리뷰에서 틀린 발화의 교정문·전략 한 마디를 state.fix 에 쌓고, 한국어 뜻을 보고 입으로 먼저 말한 뒤
