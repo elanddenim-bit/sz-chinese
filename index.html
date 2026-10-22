@@ -811,7 +811,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#EFE8DE" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:#CFE0F3;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.12.0</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.13.0</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -887,6 +887,7 @@
     <div class="statbox"><div class="v" style="color:#1E7F4F" id="stMaster">0</div><div class="k">마스터</div></div>
   </div>
   <button class="bigbtn" id="btnFix" style="background:#1664B0;margin-bottom:8px" onclick="fixOpen()">🧠 통화 교정 문장 말하기</button>
+  <button class="bigbtn" id="btnFrm" style="background:#1E7F4F;margin-bottom:8px" onclick="frmOpen()">🧩 문장 틀 말하기</button>
   <button class="bigbtn" id="btnReview">오답 복습 퀴즈 시작</button>
   <div class="scenario-note">틀린 문장·단어는 자동으로 여기에 쌓입니다. 복습 퀴즈에서 <b>연속 2회 정답</b>이면 목록에서 빠지고 마스터로 기록됩니다.</div>
   <div id="rvList"></div>
@@ -6487,6 +6488,7 @@ function drillFeedbackHtml(r,myText){
 
 // ================= 복습 탭 =================
 function renderReview(){
+  try{var frb=document.getElementById('btnFrm');if(frb){var fn=frmDue(10).length;frb.textContent='🧩 문장 틀 말하기'+(fn?' · 오늘 '+fn+'개':' · 오늘 끝');}}catch(x){}
   try{var fb=document.getElementById('btnFix'),fd=fixDue().length;if(fb)fb.textContent='🧠 통화 교정 문장 말하기'+(fd?' · 오늘 '+fd+'개':' · 오늘 없음');}catch(x){}
   const wrap=document.getElementById('rvList');wrap.innerHTML='';
   const ids=wrongIds();
@@ -9116,6 +9118,60 @@ function callRenderReview(e){
   ov.querySelectorAll('[data-say]').forEach(function(b){b.addEventListener('click',function(){speak(b.dataset.say);});});
   azPrefetch([].concat((r.lines||[]).map(function(l){return l.z;}),(r.phrases||[]).map(function(p){return p.z;})).filter(Boolean));
 }
+// ---------- 🧩 문장 틀 말하기 (2026-10-22 소유자 '시나리오는 그려지는데 말로 써 버릇을 안 했다 — 틀을 외워 현장에서 반복') ----------
+// 틀 20개 × 예문 3개. 하루 한 판 = 틀마다 예문 하나(틀린·안 한 것 먼저) 최대 10개, 교정 문장과 같은 fixOpen 화면·간격 반복.
+// 진도만 state.frm.p[id]={box,due,n,ok} 에 저장(문장 내용은 코드에) — 예문을 고쳐도 진도 유지. 항목 추가는 배열 끝에.
+const FRAMES=[
+ ['你先把___给我。','먼저 ___를 주세요',[['你先把明细给我。','Nǐ xiān bǎ míngxì gěi wǒ.','먼저 명세서를 주세요.'],['你先把样衣寄给我。','Nǐ xiān bǎ yàngyī jì gěi wǒ.','먼저 샘플을 보내 주세요.'],['你先把照片发给我。','Nǐ xiān bǎ zhàopiàn fā gěi wǒ.','먼저 사진을 보내 주세요.']]],
+ ['___是不是太___了？','___가 너무 ___한 거 아닌가요?',[['损耗是不是太高了？','Sǔnhào shì bu shì tài gāo le?','로스가 너무 높은 거 아닌가요?'],['交期是不是太晚了？','Jiāoqī shì bu shì tài wǎn le?','납기가 너무 늦은 거 아닌가요?'],['这个价格是不是太贵了？','Zhège jiàgé shì bu shì tài guì le?','이 가격 너무 비싼 거 아닌가요?']]],
+ ['如果___，我们可以___。','만약 ___하면, 저희는 ___할 수 있습니다',[['如果价格能降，我们可以加量。','Rúguǒ jiàgé néng jiàng, wǒmen kěyǐ jiā liàng.','가격을 내려 주시면 수량을 늘릴 수 있습니다.'],['如果这周能出货，我们可以先付定金。','Rúguǒ zhè zhōu néng chūhuò, wǒmen kěyǐ xiān fù dìngjīn.','이번 주에 출고되면 계약금을 먼저 드릴 수 있습니다.'],['如果你们来不及，我们可以分批出货。','Rúguǒ nǐmen láibují, wǒmen kěyǐ fēn pī chūhuò.','시간이 안 되시면 나눠서 출고해도 됩니다.']]],
+ ['我这边要跟___确认一下。','제 쪽에서 ___와 확인해야 합니다',[['我这边要跟韩国确认一下。','Wǒ zhèbiān yào gēn Hánguó quèrèn yíxià.','제 쪽에서 한국과 확인해야 합니다.'],['我这边要跟老板确认一下。','Wǒ zhèbiān yào gēn lǎobǎn quèrèn yíxià.','제 쪽에서 사장님과 확인해야 합니다.'],['我这边要跟设计师确认一下。','Wǒ zhèbiān yào gēn shèjìshī quèrèn yíxià.','제 쪽에서 디자이너와 확인해야 합니다.']]],
+ ['具体是哪___？','구체적으로 어느 ___인가요?',[['具体是哪道工序？','Jùtǐ shì nǎ dào gōngxù?','구체적으로 어느 공정인가요?'],['具体是哪一批？','Jùtǐ shì nǎ yì pī?','구체적으로 어느 차수인가요?'],['具体是哪一天？','Jùtǐ shì nǎ yì tiān?','구체적으로 며칠인가요?']]],
+ ['最晚___之前要___。','늦어도 ___ 전에는 ___해야 합니다',[['最晚周五之前要出货。','Zuì wǎn zhōuwǔ zhīqián yào chūhuò.','늦어도 금요일 전에는 출고해야 합니다.'],['最晚明天之前要给我回复。','Zuì wǎn míngtiān zhīqián yào gěi wǒ huífù.','늦어도 내일까지는 답을 주셔야 합니다.'],['最晚月底之前要到韩国。','Zuì wǎn yuèdǐ zhīqián yào dào Hánguó.','늦어도 월말 전에는 한국에 도착해야 합니다.']]],
+ ['能不能___？','___ 해 주실 수 있나요?',[['能不能帮我催一下？','Néng bu néng bāng wǒ cuī yíxià?','좀 독촉해 주실 수 있나요?'],['能不能今天给我答复？','Néng bu néng jīntiān gěi wǒ dáfù?','오늘 답을 주실 수 있나요?'],['能不能提前两天？','Néng bu néng tíqián liǎng tiān?','이틀 앞당길 수 있나요?']]],
+ ['这个问题是因为___。','이 문제는 ___ 때문입니다',[['这个问题是因为缝制不良。','Zhège wèntí shì yīnwèi féngzhì bùliáng.','이 문제는 봉제 불량 때문입니다.'],['这个问题是因为面料缩水。','Zhège wèntí shì yīnwèi miànliào suōshuǐ.','이 문제는 원단 수축 때문입니다.'],['这个问题是因为没按样衣做。','Zhège wèntí shì yīnwèi méi àn yàngyī zuò.','이 문제는 샘플대로 만들지 않아서입니다.']]],
+ ['你们打算怎么___？','어떻게 ___하실 건가요?',[['你们打算怎么处理？','Nǐmen dǎsuàn zěnme chǔlǐ?','어떻게 처리하실 건가요?'],['你们打算怎么赔？','Nǐmen dǎsuàn zěnme péi?','어떻게 보상하실 건가요?'],['你们打算怎么赶交期？','Nǐmen dǎsuàn zěnme gǎn jiāoqī?','납기를 어떻게 맞추실 건가요?']]],
+ ['不是___，是___。','___가 아니라 ___입니다',[['不是裤子，是针织套头衫。','Bú shì kùzi, shì zhēnzhī tàotóushān.','바지가 아니라 니트 풀오버입니다.'],['不是价格的问题，是质量的问题。','Bú shì jiàgé de wèntí, shì zhìliàng de wèntí.','가격 문제가 아니라 품질 문제입니다.'],['不是我不想等，是客户等不了。','Bú shì wǒ bù xiǎng děng, shì kèhù děng bu liǎo.','제가 기다리기 싫은 게 아니라 고객이 못 기다립니다.']]],
+ ['我理解___，但是___。','___는 이해하지만 ___',[['我理解你们的难处，但是价格还是太高。','Wǒ lǐjiě nǐmen de nánchù, dànshì jiàgé háishi tài gāo.','사정은 이해하지만 가격이 여전히 너무 높습니다.'],['我理解工艺难，但是别的工厂也能做。','Wǒ lǐjiě gōngyì nán, dànshì bié de gōngchǎng yě néng zuò.','공정이 어려운 건 이해하지만 다른 공장도 할 수 있습니다.'],['我理解面料涨价，但是不能全加在我们身上。','Wǒ lǐjiě miànliào zhǎngjià, dànshì bù néng quán jiā zài wǒmen shēnshang.','원단값이 오른 건 이해하지만 전부 저희에게 얹으시면 안 됩니다.']]],
+ ['你说的___是指___吗？','말씀하신 ___가 ___라는 뜻인가요?',[['你说的“尽量”是指周五能出吗？','Nǐ shuō de “jǐnliàng” shì zhǐ zhōuwǔ néng chū ma?','“최대한”이라는 게 금요일에 나온다는 뜻인가요?'],['你说的价格是指含税价吗？','Nǐ shuō de jiàgé shì zhǐ hánshuì jià ma?','말씀하신 가격이 세금 포함 가격인가요?'],['你说的“快了”是指这周吗？','Nǐ shuō de “kuài le” shì zhǐ zhè zhōu ma?','“곧”이 이번 주라는 뜻인가요?']]],
+ ['那就___，对吧？','그럼 ___로 하는 거죠? (마무리 확인)',[['那就周五出货，对吧？','Nà jiù zhōuwǔ chūhuò, duì ba?','그럼 금요일 출고, 맞죠?'],['那就按七十二块做，对吧？','Nà jiù àn qīshí\'èr kuài zuò, duì ba?','그럼 72원으로 진행하는 거죠?'],['那就明天下午三点见，对吧？','Nà jiù míngtiān xiàwǔ sān diǎn jiàn, duì ba?','그럼 내일 오후 3시에 뵙는 거죠?']]],
+ ['先___，再___。','먼저 ___하고, 그다음 ___',[['先改样衣，再开大货。','Xiān gǎi yàngyī, zài kāi dàhuò.','먼저 샘플을 고치고, 그다음 본생산 들어가세요.'],['先全检，再出货。','Xiān quánjiǎn, zài chūhuò.','먼저 전수 검사하고, 그다음 출고하세요.'],['先报价，再谈数量。','Xiān bàojià, zài tán shùliàng.','먼저 견적을 주시고, 그다음 수량 얘기합시다.']]],
+ ['我们最多只能___。','저희는 최대 ___까지만 가능합니다',[['我们最多只能给到七十块。','Wǒmen zuìduō zhǐ néng gěi dào qīshí kuài.','저희는 최대 70원까지만 드릴 수 있습니다.'],['我们最多只能等三天。','Wǒmen zuìduō zhǐ néng děng sān tiān.','저희는 최대 사흘까지만 기다릴 수 있습니다.'],['我们最多只能接受百分之三的损耗。','Wǒmen zuìduō zhǐ néng jiēshòu bǎi fēn zhī sān de sǔnhào.','로스는 최대 3%까지만 받아들일 수 있습니다.']]],
+ ['这次就算了，下次___。','이번엔 넘어가지만, 다음엔 ___',[['这次就算了，下次一定要提前说。','Zhè cì jiù suàn le, xià cì yídìng yào tíqián shuō.','이번엔 넘어가지만, 다음엔 꼭 미리 말해 주세요.'],['这次就算了，下次不能再这样了。','Zhè cì jiù suàn le, xià cì bù néng zài zhèyàng le.','이번엔 넘어가지만, 다음엔 이러시면 안 됩니다.'],['这次就算了，下次出货前先给我看照片。','Zhè cì jiù suàn le, xià cì chūhuò qián xiān gěi wǒ kàn zhàopiàn.','이번엔 넘어가지만, 다음엔 출고 전에 사진부터 보여 주세요.']]],
+ ['你们什么时候能___？','언제 ___할 수 있나요?',[['你们什么时候能出货？','Nǐmen shénme shíhou néng chūhuò?','언제 출고할 수 있나요?'],['你们什么时候能给我报价？','Nǐmen shénme shíhou néng gěi wǒ bàojià?','언제 견적을 주실 수 있나요?'],['你们什么时候能把问题解决？','Nǐmen shénme shíhou néng bǎ wèntí jiějué?','언제 문제를 해결하실 수 있나요?']]],
+ ['麻烦你___。','___ 해 주세요 (부탁, 생활)',[['麻烦你放在门口。','Máfan nǐ fàng zài ménkǒu.','문 앞에 놓아 주세요.'],['麻烦你开慢一点。','Máfan nǐ kāi màn yìdiǎn.','천천히 운전해 주세요.'],['麻烦你再说一遍。','Máfan nǐ zài shuō yí biàn.','한 번만 다시 말씀해 주세요.']]],
+ ['我在___，你到了给我打电话。','저 ___에 있어요, 도착하면 전화 주세요',[['我在小区门口，你到了给我打电话。','Wǒ zài xiǎoqū ménkǒu, nǐ dào le gěi wǒ dǎ diànhuà.','저 단지 정문에 있어요, 도착하면 전화 주세요.'],['我在地铁站B出口，你到了给我打电话。','Wǒ zài dìtiězhàn B chūkǒu, nǐ dào le gěi wǒ dǎ diànhuà.','저 지하철역 B출구에 있어요, 도착하면 전화 주세요.'],['我在公司楼下，你到了给我打电话。','Wǒ zài gōngsī lóuxià, nǐ dào le gěi wǒ dǎ diànhuà.','저 회사 건물 아래에 있어요, 도착하면 전화 주세요.']]],
+ ['那个……怎么说呢……就是___。','그게… 뭐라고 하지… 그러니까 ___ (단어가 막힐 때)',[['那个……怎么说呢……就是缝得不好。','Nàge…… zěnme shuō ne…… jiùshì féng de bù hǎo.','그게… 뭐라고 하지… 그러니까 바느질이 잘못됐어요.'],['那个……怎么说呢……就是洗了以后变小了。','Nàge…… zěnme shuō ne…… jiùshì xǐ le yǐhòu biàn xiǎo le.','그게… 뭐라고 하지… 그러니까 빨고 나서 줄었어요.'],['那个……怎么说呢……就是颜色跟样衣不一样。','Nàge…… zěnme shuō ne…… jiùshì yánsè gēn yàngyī bù yíyàng.','그게… 뭐라고 하지… 그러니까 색이 샘플이랑 달라요.']]]
+];
+function frmSt(){if(!state.frm||typeof state.frm.p!=='object')state.frm={p:{}};return state.frm;}
+function frmItem(fi,ei){
+  var F=FRAMES[fi], e=F[2][ei], id='fr'+fi+'-'+ei, pr=frmSt().p[id]||{box:0,due:'',n:0,ok:0};
+  var it={id:id,z:e[0],p:e[1],k:e[2],src:'🧩 '+F[1],hint:F[0],box:pr.box,due:pr.due,n:pr.n,ok:pr.ok};
+  it._sync=function(){frmSt().p[id]={box:it.box,due:it.due,n:it.n,ok:it.ok};};
+  return it;
+}
+// 오늘 할 것: 틀마다 예문 하나 — 복습 날이 된 것(상자 낮은 순) → 아직 안 한 것. 최대 10개.
+function frmDue(max){
+  var P=frmSt().p, td=today(), due=[], fresh=[];
+  FRAMES.forEach(function(F,fi){
+    var best=null,bk=null,nw=null;
+    F[2].forEach(function(e,ei){var r=P['fr'+fi+'-'+ei];
+      if(!r){if(nw===null)nw=ei;return;}
+      if(r.due<=td&&(bk===null||r.box<bk)){best=ei;bk=r.box;}
+    });
+    if(best!==null)due.push([fi,best,bk]);
+    else if(nw!==null){var any=F[2].some(function(e,ei){return P['fr'+fi+'-'+ei];});
+      if(!any)fresh.push([fi,nw,-1]);
+      else{ /* 이 틀은 복습 날 아님 — 새 예문은 틀이 상자 2 이상일 때만 섞음 */
+        var mx=0;F[2].forEach(function(e,ei){var r=P['fr'+fi+'-'+ei];if(r)mx=Math.max(mx,r.box);});
+        if(mx>=2)fresh.push([fi,nw,-1]);}
+    }
+  });
+  due.sort(function(a,b){return a[2]-b[2];});
+  return due.concat(fresh).slice(0,max||10).map(function(x){return frmItem(x[0],x[1]);});
+}
+function frmOpen(){var l=frmDue(10);if(!l.length){openSheet('<div style="padding:18px 4px;text-align:center">오늘 할 문장 틀을 다 했습니다. 🎉<br><span style="font-size:13px;color:var(--grey)">내일 다시 나옵니다.</span></div>');return;}uT('frm');fixOpen(l,'문장 틀 말하기');}
+
 // ---------- 🧠 교정 문장 말하기 복습 (2026-10-22 소유자 '교정받으면 바로 까먹는다') ----------
 // 통화 리뷰에서 틀린 발화의 교정문·전략 한 마디를 state.fix 에 쌓고, 한국어 뜻을 보고 입으로 먼저 말한 뒤
 // 정답 확인 → 말했다/못 했다. 간격 반복(1·2·4·7·15·30일), 못 하면 내일 다시 + 이번 판 끝에 한 번 더.
@@ -9159,6 +9215,7 @@ function fixShow(rev){
   var h='<div style="padding:4px 2px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--grey)"><span>🧠 '+esc(R.title)+'</span><span>'+(R.i+1)+' / '+R.q.length+'</span></div>'
     +'<div style="font-size:12px;color:var(--grey);margin-top:10px">'+esc(it.src||'')+' · 이걸 중국어로 소리 내어 말해 보세요</div>'
     +'<div style="font-size:19px;font-weight:800;line-height:1.5;margin:6px 0 14px">'+esc(it.k||'(뜻 없음)')+'</div>';
+  if(it.hint&&!rev&&(it.box||0)<2)h+='<div style="margin:-6px 0 14px;font-size:14px;color:#1664B0">틀: <span class="zh" style="font-size:17px">'+esc(it.hint)+'</span></div>';
   if(!rev){
     h+='<button class="pr-b" id="fxShow" style="width:100%;padding:14px;font-size:16px;background:var(--navy);color:#fff">🗣 말했어요 → 정답 보기</button>';
   }else{
@@ -9183,6 +9240,7 @@ function fixMark(it,ok){
   if(R.again[it.id]){ /* 이번 판에서 두 번째 — 일정은 첫 결과 유지 */ }
   else if(ok){it.ok=(it.ok||0)+1;it.box=Math.min(FIX_IV.length-1,(it.box||0)+(it.n===1?0:1));it.due=fixAddDays(FIX_IV[it.box]);R.good++;}
   else{it.box=0;it.due=fixAddDays(1);R.again[it.id]=1;R.q.push(it);}
+  if(it._sync)it._sync();
   var d=dayRec();d.n=(d.n||0)+1;if(ok)d.c=(d.c||0)+1;
   R.i++;saveState();fixShow(false);
 }
@@ -9227,7 +9285,7 @@ function ntSteps(){
     {k:'ear',ic:'📞',t:'통화 말하기',s:'AI 상대와 전화 2~3통 — 리뷰 보고 🔁 다시 걸기까지',m:15},
     (function(){var fd=fixDue().length;return fd?{k:'rev',ic:'🧠',t:'교정 문장 말하기',s:'지난 통화에서 고친 말 '+fd+'개 — 뜻 보고 입으로'+(wn?' · 이어서 오답 복습':''),m:6}
       :{k:'rev',ic:'🔁',t:wn?'오답 복습':'단어 10문',s:wn?'복습 대기 '+wn+'개 — 틀린 것부터':'오답이 없어 단어 퀴즈로',m:6};})(),
-    {k:'fill',ic:'✏️',t:'빈칸 채우기',s:'문장 속 단어 — 틀리면 복습으로',m:5},
+    {k:'frm',ic:'🧩',t:'문장 틀 말하기',s:'현장에서 돌려 쓰는 틀 — 뜻 보고 소리 내어',m:5},
     {k:say[0],ic:say[1],t:say[2],s:say[3],m:4}
   ];
 }
@@ -9255,6 +9313,7 @@ function ntCallKey(){
 function ntLaunch(k){
   if(k==='rev'){if(fixDue().length){fixOpen(null,'지난 통화 교정');}else if(wrongIds().length)startReview();else startDaily('pick','word');}
   else if(k==='fill')startDaily('fill','word');
+  else if(k==='frm')frmOpen();
   else if(k==='ear'){goTab('p0');selectView('rp');try{callOpen(ntCallKey());}catch(e){startDaily('number','word');}}
   else if(k==='num')startDaily('number','word');
   else if(k==='rp'){goTab('p0');selectView('rp');}
@@ -9314,7 +9373,7 @@ function ntHomeCard(){
   var done=(state.stats.days[today()]||{}).nd;
   var l2=n.fin?(done?'오늘 '+Math.round(tot/60)+'분 완료 ✓':'오늘 '+Math.round(tot/60)+'분 · 한 번 더 →'):(n.i>=0?(n.i+1)+'단계 진행 중 →':(tot?'이어 하기 '+ntFmt(tot)+' →':'30분 코스 시작 →'));
   return '<button class="nt-card" id="ctaNight"><div class="l1">🌙 오늘의 30분 · 이번 주 '+wk+'/7일</div><div class="l2">'+l2+'</div>'
-    +'<div class="l3">통화 15 → 복습 6 → 빈칸 5 → '+esc(st[3].t)+' 4분</div><div class="nt-steps">'+bars+'</div></button>';
+    +'<div class="l3">통화 15 → 복습 6 → 문장 틀 5 → '+esc(st[3].t)+' 4분</div><div class="nt-steps">'+bars+'</div></button>';
 }
 // 활동 중인 동안 현재 단계 시간 누적 (통화·발음 화면은 손을 안 대도 셈)
 setInterval(function(){
