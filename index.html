@@ -811,7 +811,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#EFE8DE" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:#CFE0F3;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.14.1</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.15.0</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -889,6 +889,7 @@
   <button class="bigbtn" id="btnFix" style="background:#1664B0;margin-bottom:8px" onclick="fixOpen()">🧠 통화 교정 문장 말하기</button>
   <button class="bigbtn" id="btnFrm" style="background:#1E7F4F;margin-bottom:8px" onclick="frmOpen()">🧩 문장 틀 말하기</button>
   <button class="bigbtn" style="background:var(--navy);margin-bottom:8px" onclick="wallOpen()">📱 잠금화면에 띄우기</button>
+  <button class="bigbtn" style="background:#0F4A86;margin-bottom:8px" onclick="hfCommute()">🚗 출근길 듣기 — 화면 안 보고 말하기</button>
   <button class="bigbtn" id="btnReview">오답 복습 퀴즈 시작</button>
   <div class="scenario-note">틀린 문장·단어는 자동으로 여기에 쌓입니다. 복습 퀴즈에서 <b>연속 2회 정답</b>이면 목록에서 빠지고 마스터로 기록됩니다.</div>
   <div id="rvList"></div>
@@ -4907,6 +4908,7 @@ function renderRPHome(){
   area.querySelectorAll('.rp-start').forEach(b=>b.addEventListener('click',()=>startRP(b.dataset.rp)));
   area.querySelectorAll('[data-call]').forEach(b=>b.addEventListener('click',()=>callOpen(b.dataset.call)));
   const clh=document.getElementById('clHomeHist'); if(clh)clh.addEventListener('click',()=>callHistory(''));
+  const clc=document.getElementById('clCustom'); if(clc)clc.addEventListener('click',rhOpen);
 }
 function bub(who,o){
   return '<div class="wx-row '+(who==='me'?'me':'')+'">'
@@ -6006,11 +6008,18 @@ let hfCfg={mode:'shadow',src:0,speed:1.0}, hfRun=null;
 function hfSources(){
   const out=[];
   SCEN_NAMES.forEach(function(n,i){out.push({id:'s'+i,label:n,sub:DATA[i].reduce(function(a,q){return a+1+q.a.length;},0)+'개 문장'});});
+  out.unshift({id:'drill',label:'🧠 교정 문장 + 🧩 문장 틀',sub:'출근길용 — 내가 틀린 말과 현장 틀'});
   out.push({id:'wrong',label:'🔴 오늘 틀린 것',sub:'복습 대기에서'});
   out.push({id:'s301',label:'📗 기초 문장 301',sub:'301개'});
   return out;
 }
 function hfLines(src){
+  if(src==='drill'){ // 2026-10-23 출근길: 교정 문장(복습 날 된 것·상자 낮은 것 먼저) + 문장 틀을 번갈아
+    var fx=[];try{fx=fixSt().items.slice().sort(function(a,b){return (a.due>b.due)-(a.due<b.due)||(a.box||0)-(b.box||0);}).slice(0,12);}catch(e){}
+    var fr=[];try{fr=frmDue(8);}catch(e){}
+    var out=[],i=0;while(out.length<20&&(i<fx.length||i<fr.length)){if(fx[i])out.push(fx[i]);if(fr[i])out.push(fr[i]);i++;}
+    return out.map(function(it){return {z:it.z,p:it.p,k:it.k};});
+  }
   if(src==='wrong'){
     return wrongIds().map(function(id){return ITEMS[id];})
       .filter(function(it){return it&&it.z;})
@@ -6027,6 +6036,7 @@ function renderHandsFree(){
   const area=document.getElementById('shArea');
   const modes=[
     ['shadow','🗣','쉐도잉','중국어를 듣고 그대로 따라 말합니다'],
+    ['commute','🚗','출근길(화면 안 봄)','한국어 뜻을 소리로 → 내가 중국어로 말하기 → 정답 → 한 번 더 따라'],
     ['interp','🔄','통역','한국어 뜻을 보고 중국어로 말한 뒤 정답을 듣습니다'],
     ['listen','👂','듣기만','흘려듣기. 멈춤 없이 이어서 재생합니다']
   ];
@@ -6051,7 +6061,7 @@ function renderHandsFree(){
   area.querySelectorAll('[data-hs]').forEach(function(b){
     b.addEventListener('click',function(){
       var v=b.dataset.hs;
-      hfCfg.src=(v==='wrong'||v==='s301')?v:parseInt(v.replace('s',''));
+      hfCfg.src=(v==='wrong'||v==='s301'||v==='drill')?v:parseInt(v.replace('s',''));
       renderHandsFree();
     });
   });
@@ -6078,15 +6088,29 @@ function hfStart(){
     +'<button class="hf-btn" id="hfNext">▶▶</button></div>'
     +'<div class="hf-bar"><i id="hfBar"></i></div>';
   document.body.appendChild(wrap);
-  const names={shadow:'쉐도잉 — 듣고 따라 말하세요',interp:'통역 — 중국어로 말해보세요',listen:'듣기만'};
+  const names={shadow:'쉐도잉 — 듣고 따라 말하세요',interp:'통역 — 중국어로 말해보세요',listen:'듣기만',commute:'🚗 출근길 — 뜻을 듣고 먼저 말해 보세요'};
   document.getElementById('hfMode').textContent=names[hfCfg.mode]||'';
-  document.getElementById('hfTtl').textContent=(typeof hfCfg.src==='number')?SCEN_NAMES[hfCfg.src]:(hfCfg.src==='wrong'?'오늘 틀린 것':'기초 문장 301');
+  document.getElementById('hfTtl').textContent=(typeof hfCfg.src==='number')?SCEN_NAMES[hfCfg.src]:({wrong:'오늘 틀린 것',drill:'교정 문장 + 문장 틀'}[hfCfg.src]||'기초 문장 301');
+  if(hfCfg.mode==='commute')try{var u0=new SpeechSynthesisUtterance(' ');u0.lang='ko-KR';u0.volume=0;speechSynthesis.speak(u0);}catch(e){} // iOS: 탭 흐름 안에서 한국어 음성 깨우기
   document.getElementById('hfClose').addEventListener('click',hfStop);
   document.getElementById('hfTap').addEventListener('click',hfToggle);
   document.getElementById('hfPause').addEventListener('click',function(e){e.stopPropagation();hfToggle();});
   document.getElementById('hfPrev').addEventListener('click',function(e){e.stopPropagation();hfJump(-1);});
   document.getElementById('hfNext').addEventListener('click',function(e){e.stopPropagation();hfJump(1);});
   hfStep();
+}
+// 한국어 뜻을 브라우저 음성(ko-KR)으로 읽고 끝나면 cb — onend 가 안 오는 경우를 대비해 길이로 시간 제한
+function hfKoSay(t,tok,cb){
+  var done=false,fin=function(){if(done)return;done=true;cb();};
+  try{
+    if(!('speechSynthesis' in window)||!t)return setTimeout(fin,400);
+    speechSynthesis.cancel();
+    var u=new SpeechSynthesisUtterance(String(t).replace(/[（(].*?[）)]/g,''));u.lang='ko-KR';u.rate=1.05;
+    var v=(speechSynthesis.getVoices()||[]).filter(function(x){return /^ko/i.test(x.lang);})[0];if(v)u.voice=v;
+    u.onend=fin;u.onerror=fin;
+    speechSynthesis.speak(u);
+  }catch(e){return setTimeout(fin,400);}
+  setTimeout(fin,Math.min(12000,1500+String(t).length*170));
 }
 function hfEst(z){return Math.max(1300, z.length*270/(rate||1));}
 function hfSet(id,txt,hide){
@@ -6131,6 +6155,23 @@ function hfStep(){
   clearTimeout(hfRun.timer);
   [1,2,3].forEach(function(d){const nx=hfRun.lines[hfRun.idx+d];if(nx)mvPrefetch(nx.z);});
   const sayFor=function(ms){return Math.round((ms||est)*1.5)+600;};   // 따라 말할 시간 (실제 듣기 길이의 1.5배 + 여유)
+  if(hfCfg.mode==='commute'){
+    // 한국어 뜻(소리) → 생각·말할 시간 → 중국어 정답 → 한 번 더 따라 말할 시간
+    hfSet('hfZ','',true);hfSet('hfP','',true);hfSet('hfK',l.k);hfSet('hfWait','🔊 뜻 듣는 중…');
+    mvPrefetch(l.z);
+    hfKoSay(l.k,tok,function(){
+      if(!hfRun||!hfRun.playing||hfRun.tok!==tok)return;
+      var think=Math.max(3000,Math.round(est*1.4)+800);
+      hfSet('hfWait','중국어로 말해 보세요…');hfBar(think);
+      hfRun.timer=setTimeout(function(){
+        if(!hfRun||!hfRun.playing||hfRun.tok!==tok)return;
+        hfSet('hfZ',l.z);hfSet('hfP',l.p);hfSet('hfWait','');
+        speak(l.z);
+        hfWaitAudio(tok,function(ms){var say=sayFor(ms);hfSet('hfWait','한 번 더 따라 말하세요');hfBar(say);hfRun.timer=setTimeout(hfAdvance,say);});
+      },think);
+    });
+    return;
+  }
   if(hfCfg.mode==='interp'){
     // 한국어 뜻 먼저 → 생각할 시간 → 중국어
     hfSet('hfZ','',true);hfSet('hfP','',true);hfSet('hfK',l.k);
@@ -6192,6 +6233,7 @@ function hfJump(d){
   const b=document.getElementById('hfPause');if(b)b.textContent='⏸ 일시정지';
   hfStep();
 }
+function hfCommute(){uT('commute');hfCfg.mode='commute';hfCfg.src='drill';hfStart();}
 function hfStop(){
   if(hfRun){clearTimeout(hfRun.timer);hfRun.playing=false;hfRun=null;}
   stopAll();
@@ -8381,7 +8423,7 @@ function callBase(){
   return c?c.replace(/\/+$/,''):aiUrl();
 }
 function callSc(key){
-  var d=CALL_SC[key]||{}, rp=null;
+  var d=CALL_SC[key]||(String(key).indexOf('cu')===0&&callState().custom&&callState().custom[key])||{}, rp=null;
   RP.forEach(function(s){if(s.id===key)rp=s;});
   var open=d.open;
   if(!open&&rp){var n=rp.nodes[rp.start];open={z:n.npc.z,p:n.npc.p,k:n.npc.k};}
@@ -9420,6 +9462,40 @@ function callHistory(key){
   ov.querySelectorAll('[data-id]').forEach(function(b){b.addEventListener('click',function(){callS=null;callReview(b.dataset.id);});});
   ov.scrollTop=0;
 }
+// ---------- ✍️ 내 상황 리허설 (2026-10-23 소유자 — 내일 실제로 할 통화를 한 줄 적으면 그 상황으로 통화 연습) ----------
+// sz-voice POST /rehearse/plan {text,kind?} → 千问이 상황 한 벌 → state.call.custom[cu<id>] (최대 12, 오래된 것부터 지움) → callOpen
+function rhList(){var c=callState().custom||{};return Object.keys(c).map(function(k){return Object.assign({id:k},c[k]);}).sort(function(a,b){return String(b.t||'').localeCompare(String(a.t||''));});}
+function rhOpen(){
+  var kind='';
+  openSheet('<div style="padding:2px 2px 8px"><div style="font-size:17px;font-weight:800">✍️ 내 상황 리허설</div>'
+    +'<div style="font-size:13px;color:var(--grey);line-height:1.6;margin:6px 0 10px">내일(또는 오늘) 실제로 할 통화를 한국어로 한 줄 적으세요. 숫자·수량·날짜는 그대로 들어갑니다.</div>'
+    +'<textarea id="rhTx" rows="3" style="width:100%;box-sizing:border-box;border:1px solid var(--hair,#ddd);border-radius:10px;padding:10px;font-size:15px" placeholder="예: 남성 셔츠 900장, 공장 견적 85.2원, 본사 목표가 67원. 공장은 공정 난이도를 근거로 버틴다."></textarea>'
+    +'<div style="display:flex;gap:6px;margin:8px 0" id="rhKind"><button class="pr-b on" data-k="">자동</button><button class="pr-b" data-k="work">업무</button><button class="pr-b" data-k="life">생활</button></div>'
+    +'<div style="font-size:12px;color:var(--grey);line-height:1.7">예시 · 동관 공장에 샘플 독촉, 금요일까지 받아야 함 · 원단 로스 5%가 너무 높다고 따지기 · 집주인에게 에어컨 수리 요청</div>'
+    +'<button class="pr-b" id="rhGo" style="width:100%;margin-top:10px;padding:13px;background:#1664B0;color:#fff">📞 이 상황으로 통화하기</button>'
+    +'<div id="rhMsg" style="font-size:13px;margin-top:8px;color:var(--navy)"></div>'
+    +(rhList().length?'<div style="font-size:12px;font-weight:700;margin:14px 0 6px">만든 상황</div>'+rhList().map(function(x){return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><button class="pr-b" style="flex:1;text-align:left" data-go="'+x.id+'">'+(x.icon||'📞')+' '+esc(x.title)+' <small style="color:var(--grey)">'+esc(x.d||'')+'</small></button><button class="pr-b" data-del="'+x.id+'">🗑</button></div>';}).join(''):'')
+    +'</div>');
+  var sb=document.getElementById('sheetBody');
+  sb.querySelectorAll('#rhKind [data-k]').forEach(function(b){b.addEventListener('click',function(){kind=b.dataset.k;sb.querySelectorAll('#rhKind [data-k]').forEach(function(x){x.classList.toggle('on',x===b);});});});
+  sb.querySelectorAll('[data-go]').forEach(function(b){b.addEventListener('click',function(){closeSheet();callOpen(b.dataset.go);});});
+  sb.querySelectorAll('[data-del]').forEach(function(b){b.addEventListener('click',function(){var c=callState().custom||{};delete c[b.dataset.del];saveState();rhOpen();if(typeof renderRPHome==='function')try{renderRPHome();}catch(e){}});});
+  document.getElementById('rhGo').addEventListener('click',async function(){
+    var t=document.getElementById('rhTx').value.trim(), m=document.getElementById('rhMsg'), btn=this;
+    if(t.length<4){m.textContent='상황을 조금 더 적어 주세요.';return;}
+    btn.disabled=true;m.textContent='상대 역할과 첫마디를 만드는 중… (10초 안팎)';
+    try{
+      var r=await vPost('/rehearse/plan',{text:t,kind:kind},45000);
+      var c=callState();if(!c.custom)c.custom={};
+      var id='cu'+Date.now().toString(36);
+      r.t=new Date().toISOString();r.d=today();
+      c.custom[id]=r;
+      var ks=rhList();ks.slice(12).forEach(function(x){delete c.custom[x.id];});
+      saveState();uT('rehearse');
+      closeSheet();callOpen(id);
+    }catch(e){btn.disabled=false;m.textContent='만들기 실패: '+e.message;}
+  });
+}
 function callHomeCard(){
   var c=callState(), n=c.log.length;
   var h='<div class="rp-card cl-home"><div class="t">📞 음성 통화 롤플레이</div>'
@@ -9429,6 +9505,10 @@ function callHomeCard(){
     g[1].forEach(function(k){var sc=callSc(k);h+='<button class="rp-call" data-call="'+k+'">'+sc.icon+' '+esc(sc.title)+'</button>';});
     h+='</div>';
   });
+  var cu=rhList();
+  h+='<div class="cl-gt">✍️ 내 상황 리허설 — 내일 실제로 할 통화</div><div class="cl-hrow">'
+    +'<button class="rp-call" id="clCustom" style="background:#1664B0;color:#fff">＋ 상황 적고 연습하기</button>'
+    +cu.slice(0,6).map(function(x){return '<button class="rp-call" data-call="'+x.id+'">'+(x.icon||'📞')+' '+esc(x.title)+'</button>';}).join('')+'</div>';
   h+=(n?'<div class="cl-hrow" style="margin-top:8px"><button class="rp-call ghost" id="clHomeHist">통화 기록 '+n+'</button></div>':'')+'</div>';
   return h;
 }
@@ -9464,6 +9544,8 @@ function ntWeek(){
 }
 function ntCallKey(){
   var c=callState(), last=c.log.length?c.log[c.log.length-1].key:'', keys=[];
+  var fresh=rhList().filter(function(x){return x.t&&Date.now()-Date.parse(x.t)<2*86400e3&&!c.log.some(function(e){return e.key===x.id;});});
+  if(fresh.length)return fresh[0].id;
   CALL_GROUPS.forEach(function(g){g[1].forEach(function(k){keys.push(k);});});
   keys=keys.filter(function(k){return k!==last;});
   keys.sort(function(a,b){return ((c.score&&c.score[a])||0)-((c.score&&c.score[b])||0)||Math.random()-.5;});

@@ -8,7 +8,7 @@
 // =========================================================
 
 export const APPS = {
-  szcn: { name: "실전 중국어", icon: "🀄", f: { tab_ph: "홈", tab_p0: "회화", tab_p1: "퀴즈", tab_p2: "HSK 단어", tab_p3: "복습", tab_p6: "발음", tab_p5: "현장", tab_p4: "진척", rp: "롤플레이", call: "통화 모드", video: "영상 섀도잉", paste: "대화 붙여넣기", pron: "발음 평가", mv: "내 목소리 듣기", field: "현장 AI", fix: "교정 문장 말하기", frm: "문장 틀 말하기", wall: "잠금화면" } },
+  szcn: { name: "실전 중국어", icon: "🀄", f: { tab_ph: "홈", tab_p0: "회화", tab_p1: "퀴즈", tab_p2: "HSK 단어", tab_p3: "복습", tab_p6: "발음", tab_p5: "현장", tab_p4: "진척", rp: "롤플레이", call: "통화 모드", video: "영상 섀도잉", paste: "대화 붙여넣기", pron: "발음 평가", mv: "내 목소리 듣기", field: "현장 AI", fix: "교정 문장 말하기", frm: "문장 틀 말하기", wall: "잠금화면", rehearse: "내 상황 리허설", commute: "출근길 듣기" } },
   rt: { name: "실시간 통화", icon: "⚡", f: { session: "통화" } },
   pb: { name: "박비서", icon: "🎙", f: { session: "대화", ask: "시리 질문", get_weather: "날씨", convert_currency: "환율", find_place: "주소록 검색", plan_route: "동선", trip_info: "스페인 일정", now: "시각" } },
   didi: { name: "디디 주소록", icon: "🚕", f: { copy_name: "이름 복사·디디 열기", copy_addr: "주소 복사", driver: "기사님 화면", route: "방문 동선", map: "지도 열기", save: "저장·편집", search: "검색" } },

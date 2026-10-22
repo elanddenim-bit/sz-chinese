@@ -57,6 +57,7 @@ import PRE700 from "./fonts/pretendard-700.woff2";
 import BLACKHAN from "./fonts/blackhan.woff";
 import LILITA from "./fonts/lilita.woff";
 import { wallApi, wallGet } from "./wall.js";
+import { rehearseApi } from "./rehearse.js";
 const FONTS = { "/fonts/pretendard-400.woff2": PRE400, "/fonts/pretendard-700.woff2": PRE700, "/fonts/blackhan.woff": BLACKHAN, "/fonts/lilita.woff": LILITA }; // 같은 도메인에서 받음 — 중국에서 외부 글꼴 CDN 막힘 대비. blackhan·lilita = 숏츠 자막 '게임 글꼴'(Black Han Sans·Lilita One, OFL)
 
 // 박비서 홈 화면 아이콘(소유자 지정 일러스트) · PWA manifest
@@ -199,6 +200,7 @@ export default {
       const h = await hash(String(b.code).trim());
       if (url.pathname === "/agent/ask") { const out = await agentAsk(env, b, h); ctx.waitUntil(logUse(env, "pb", { ask: 1, ...Object.fromEntries(Object.entries(out.tools || {})) }, 0, h).catch(() => {})); return json(req, out); }
       if (url.pathname.startsWith("/wall/")) return json(req, await wallApi(env, url.pathname, b, h, url.origin));
+      if (url.pathname.startsWith("/rehearse/")) return json(req, await rehearseApi(env, url.pathname, b, h)); // 📞 내 상황 리허설
       if (url.pathname.startsWith("/quest/")) return json(req, await questApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/mystery/")) return json(req, await mysteryApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/timecam/")) return json(req, await timecamApi(env, ctx, url.pathname, b, h));
