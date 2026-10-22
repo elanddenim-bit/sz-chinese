@@ -811,7 +811,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#EFE8DE" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:#CFE0F3;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.11.2</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.11.3</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -5156,7 +5156,7 @@ function renderWords(){
 }
 
 // ================= 퀴즈 엔진 =================
-let qzSrc='sent', qzMode='pick', qzCur=null, qzSession={n:0,c:0}, reviewMode=false;
+let qzPre=null, qzSrc='sent', qzMode='pick', qzCur=null, qzSession={n:0,c:0}, reviewMode=false;
 let setMode=false, setState=null;
 const SET_SIZE=10;
 function lvBadge(item){
@@ -5259,7 +5259,9 @@ function newQuiz(){
   if(qzMode==='pattern'&&!reviewMode){ptStart();return;}
   if(qzMode==='number'&&!reviewMode){ndQuiz();return;}
   if(qzMode==='fill'&&!reviewMode){fillQuiz();return;}
-  const id=pickWeighted(ids);
+  const id=(qzPre&&ids.indexOf(qzPre)>=0&&!(qzCur&&qzCur.item&&qzCur.item.id===qzPre))?qzPre:pickWeighted(ids);
+  qzPre=null;
+  if(mvOn()){qzPre=pickWeighted(ids);if(qzPre===id)qzPre=pickWeighted(ids);if(ITEMS[qzPre])mvPrefetch(ITEMS[qzPre].z);}
   const item=ITEMS[id];
   if(qzMode==='build'&&!reviewMode&&TOKS[item.id]&&TOKS[item.id].length>=2){buildQuiz(item);return;}
   // 방향: 문장은 항상 듣기→뜻. 단어는 50% 中→韩(음성), 50% 韩→中
@@ -6099,7 +6101,7 @@ function hfBar(ms){
 // 실제 재생이 끝날 때까지 기다린다 — 내 목소리·Azure TTS 는 음성을 만드는 데 시간이 걸려
 // 길이 추정 타이머만 쓰면 재생 중에 다음 문장으로 넘어가 버린다
 function hfWaitAudio(tok,cb){
-  var t0=Date.now(), started=0, startA=null, lim=mvOn()?35000:8000;
+  var t0=Date.now(), started=0, startA=null, lim=10000;
   (function poll(){
     if(!hfRun||!hfRun.playing||hfRun.tok!==tok)return;
     var a=curAudio, el=Date.now()-t0;
@@ -6124,7 +6126,7 @@ function hfStep(){
   const tok=hfRun.tok=(hfRun.tok||0)+1;
   const est=hfEst(l.z);
   clearTimeout(hfRun.timer);
-  const nx=hfRun.lines[hfRun.idx+1];if(nx)mvPrefetch(nx.z);
+  [1,2,3].forEach(function(d){const nx=hfRun.lines[hfRun.idx+d];if(nx)mvPrefetch(nx.z);});
   const sayFor=function(ms){return Math.round((ms||est)*1.5)+600;};   // 따라 말할 시간 (실제 듣기 길이의 1.5배 + 여유)
   if(hfCfg.mode==='interp'){
     // 한국어 뜻 먼저 → 생각할 시간 → 중국어
@@ -8142,12 +8144,35 @@ function rtHang(){
 }
 
 // ---------- 🗣 내 목소리 ----------
-var mvBypass=false,mvAudio=null,mvCache={},mvRec=null,mvPending={};
+var mvBypass=false,mvAudio=null,mvCache={},mvRec=null,mvPending={},mvErr={};
+const MV_WAIT=1500; // 처음 듣는 문장은 이만큼만 기다리고 원래 음성으로 — 내 목소리는 뒤에서 만들어 저장
+// 기기 캐시(szcn-audio) 키 — 한 번 만든 내 목소리는 앱을 다시 열어도 바로 재생
+function mvKey(t){return new URL('./__mv/'+mvSt().voice+'/'+fnv(t)+'.mp3',location.href).href;}
+// 내 목소리 음성 주소를 얻는다: 메모리 → 기기 캐시 → 서버(R2 캐시/새로 합성). 실패하면 null
+function mvGet(t){
+  if(mvCache[t])return Promise.resolve(mvCache[t]);
+  if(mvPending[t])return mvPending[t];
+  var k=mvKey(t), t0=Date.now();
+  var fromDev=window.caches?caches.open('szcn-audio').then(function(c){return c.match(k);}).catch(function(){return null;}):Promise.resolve(null);
+  mvPending[t]=fromDev.then(function(hit){
+    if(hit)return hit.blob();
+    return vPost('/voice/tts',{text:t},30000).then(function(res){
+      if(!res||!res.blob)throw new Error('음성 대신 다른 응답');
+      return res.blob();
+    }).then(function(b){
+      if(window.caches&&b&&b.size>400)caches.open('szcn-audio').then(function(c){return c.put(k,new Response(b,{headers:{'content-type':'audio/mpeg'}}));}).catch(function(){});
+      return b;
+    });
+  }).then(function(b){var u=URL.createObjectURL(b);mvCache[t]=u;delete mvErr[t];return u;},function(e){
+    mvErr[t]=e&&(e.name==='AbortError'||/abort/i.test(e.message||''))?'응답 시간 초과('+Math.round((Date.now()-t0)/1000)+'초)':(e&&e.message)||'알 수 없음';
+    return null;
+  }).then(function(u){delete mvPending[t];return u;});
+  return mvPending[t];
+}
 // 다음에 나올 문장을 내 목소리로 미리 만들어 둔다(재생 대기 시간 단축)
 function mvPrefetch(t){
   if(!t||!mvOn()||mvCache[t]||mvPending[t]||!/[\u4e00-\u9fff]/.test(t))return;
-  mvPending[t]=vPost('/voice/tts',{text:t},30000).then(function(res){if(!res||!res.blob)throw new Error('x');return res.blob();})
-    .then(function(b){mvCache[t]=URL.createObjectURL(b);}).catch(function(){}).then(function(){delete mvPending[t];});
+  mvGet(t);
 }
 function mvSt(){if(!state.myVoice)state.myVoice={on:false,voice:'',st:''};return state.myVoice;}
 function mvOn(){var m=state&&state.myVoice;return !!(m&&m.on&&m.voice&&m.st==='OK');}
@@ -8163,7 +8188,7 @@ function mvCardHtml(){
     h+='<div class="s">목소리를 만드는 중입니다(보통 1분 안쪽). 잠시 뒤 확인을 눌러 주세요.</div>'
       +'<div class="row"><button class="main" id="mvChk">상태 확인</button><button id="mvRe">다시 녹음</button></div>';
   }else{
-    h+='<div class="s">켜 두면 앱의 모든 중국어 문장이 내 목소리로 나옵니다(처음 듣는 문장은 1~2초 걸림). 끄면 원래 원어민 음성.</div>'
+    h+='<div class="s">켜 두면 앱의 모든 중국어 문장이 내 목소리로 나옵니다(처음 듣는 문장은 원래 음성으로 먼저 나오고, 다음부터 내 목소리 — 한 번 만든 건 기기에 저장). 끄면 원래 원어민 음성.</div>'
       +'<div class="row"><button class="'+(m.on?'on':'')+'" id="mvTog">'+(m.on?'✓ 내 목소리 켜짐':'내 목소리 켜기')+'</button>'
       +'<button id="mvTry">▶ 들어보기</button><button id="mvRe">다시 녹음</button></div>';
   }
@@ -8224,20 +8249,18 @@ async function mvCheck(){
 function mvSpeak(t,rr,my){uT('mv');
   // iOS 자동재생 제한: 탭 흐름 안에서 같은 오디오 요소를 먼저 깨워 둔다
   if(!mvAudio){mvAudio=new Audio();mvAudio.setAttribute('playsinline','');}
-  var a=mvAudio;
+  var a=mvAudio, done=false;
   if(!mvCache[t]){try{a.src='data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA';var p0=a.play();if(p0&&p0.catch)p0.catch(function(){});}catch(e){}}
-  function std(){if(my!==speakSeq)return;mvBypass=true;try{speak(t,rr);}finally{mvBypass=false;}}
-  function play(url){if(my!==speakSeq)return;a.src=url;a.playbackRate=rr||1;curAudio=a;var p=a.play();if(p&&p.catch)p.catch(std);}
+  function std(){if(done)return;done=true;if(my!==speakSeq)return;mvBypass=true;try{speak(t,rr);}finally{mvBypass=false;}}
+  function play(url){if(done)return;done=true;if(my!==speakSeq)return;a.src=url;a.playbackRate=rr||1;curAudio=a;var p=a.play();if(p&&p.catch)p.catch(function(){done=false;std();});}
   if(mvCache[t]){play(mvCache[t]);return;}
-  if(mvPending[t]){mvPending[t].then(function(){if(mvCache[t])play(mvCache[t]);else std();});return;}
-  var t0=Date.now();
-  vPost('/voice/tts',{text:t},30000).then(function(res){
-    if(!res||!res.blob)throw new Error('음성 대신 다른 응답');
-    return res.blob();
-  }).then(function(b){var u=URL.createObjectURL(b);mvCache[t]=u;mvMsg('');play(u);}).catch(function(e){
-    // 조용히 원래 음성으로 넘어가면 원인을 알 수 없으므로 카드에 이유 표시
-    var w=e&&(e.name==='AbortError'||/abort/i.test(e.message||''))?'응답 시간 초과('+Math.round((Date.now()-t0)/1000)+'초)':(e&&e.message)||'알 수 없음';
-    mvMsg('내 목소리 재생 실패 → 원래 음성으로 재생: '+w);std();});
+  // 늦으면 원래 음성으로 바로 — 만들던 내 목소리는 저장돼 다음부터 바로 나옴
+  var tm=setTimeout(function(){if(!done){mvMsg('');std();}},MV_WAIT);
+  mvGet(t).then(function(u){
+    clearTimeout(tm);
+    if(u){mvMsg('');play(u);}
+    else{mvMsg('내 목소리 재생 실패 → 원래 음성으로 재생: '+(mvErr[t]||'알 수 없음'));std();}
+  });
 }
 
 // ================= 통화 모드 (음성 롤플레이) =================
