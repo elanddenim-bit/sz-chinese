@@ -170,7 +170,7 @@ function put(kind,item){
 function login(msg){
   $('#nav').style.display='none';$('#back').style.display='none';
   $('#m').innerHTML='<div class="card" style="margin-top:30px"><div class="t">코드 입력 <span class="zh">输入代码</span></div>'+
-  '<p class="s">지사장에게 받은 팀 코드를 넣으세요.<br>请输入支社长提供的团队代码。</p>'+
+  '<p class="s">지사원: 지사장에게 받은 팀 코드 · 지사장: 박비서 초대 코드<br>请输入支社长提供的团队代码。</p>'+
   '<input id="lc" type="password" autocomplete="off" placeholder="코드 代码"><label>내 이름 我的名字 (기록에 남아요 用于记录)</label><input id="ln" value="'+E(ME)+'">'+
   (msg?'<p class="s" style="color:var(--red)">'+E(msg)+'</p>':'')+'<button class="btn wide" id="lb">들어가기 进入</button></div>';
   $('#lb').onclick=function(){
