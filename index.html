@@ -811,7 +811,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#EFE8DE" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:#CFE0F3;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.11.1</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.11.2</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -4645,7 +4645,8 @@ let state={prog:{},stats:{total:0,correct:0,days:{}},mastered:0,myWords:{},rp:{}
   goals:{min:220,sent:60,quiz:200,mast:35}};
 let cfg=null; try{cfg=JSON.parse(localStorage.getItem(CFG_KEY)||'null');}catch(e){}
 let saveTimer=null, remoteTimer=null;
-function today(){return new Date().toISOString().slice(0,10);}
+function ymdL(d){return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);} // 기기 현지 날짜(UTC 쓰면 중국 0~8시가 전날로, 주간 차트 요일이 하루 밀림)
+function today(){return ymdL(new Date());}
 function dayRec(d){
   d=d||today();
   if(!state.stats.days[d])state.stats.days[d]={n:0,c:0};
@@ -6579,7 +6580,7 @@ function mondayOf(dstr){
   d.setDate(d.getDate()-wd);
   return d;
 }
-function fmt(d){return d.toISOString().slice(0,10);}
+function fmt(d){return ymdL(d);}
 function weekDates(){
   const m=mondayOf(today()),out=[];
   for(let i=0;i<7;i++){const d=new Date(m);d.setDate(m.getDate()+i);out.push(fmt(d));}
@@ -7908,7 +7909,7 @@ function prLogHtml(){
   var days=[], i;
   for(i=6;i>=0;i--){
     var dt=new Date();dt.setDate(dt.getDate()-i);
-    var key=dt.toISOString().slice(0,10);
+    var key=ymdL(dt);
     days.push({key:key,n:(state.stats.days[key]&&state.stats.days[key].pr)||0,lbl:(dt.getMonth()+1)+'/'+dt.getDate()});
   }
   var mx=Math.max(1,Math.max.apply(null,days.map(function(d){return d.n;})));
