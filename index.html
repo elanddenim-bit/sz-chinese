@@ -811,7 +811,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#EFE8DE" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:#CFE0F3;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.14.0</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.14.1</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -9246,6 +9246,7 @@ function wallPick(){
   try{var g=gramTop(3).filter(function(x){return x.count>x.fixed;})[0];if(g)out.weak=g.label+' '+(g.count-g.fixed)+'회 — '+(g.right||'');}catch(e){}
   return out;
 }
+var WALL_PY=false; // 잠금화면엔 병음 생략(공간·가독성)
 function wallDraw(){
   var dpr=Math.min(3,window.devicePixelRatio||3), W=Math.round((screen.width||393)*dpr), H=Math.round((screen.height||852)*dpr);
   if(W>H){var t=W;W=H;H=t;}
@@ -9259,14 +9260,15 @@ function wallDraw(){
   function block(it,sc,dry){ // 한 항목: 중문 크게 → 병음 → 뜻
     var fz=Math.round(21*u*sc), fp=Math.round(12*u*sc), fk=Math.round(13*u*sc), h=0, out=[];
     wrap(it.z,'600 '+fz+'px '+FZ,maxW-14*u).forEach(function(l){out.push(['600 '+fz+'px '+FZ,'#FFFFFF',l,fz*1.3]);});
-    if(it.p)wrap(it.p,fp+'px '+FK,maxW-14*u).forEach(function(l){out.push([fp+'px '+FK,'#BFD7F2',l,fp*1.35]);});
+    if(it.p&&WALL_PY)wrap(it.p,fp+'px '+FK,maxW-14*u).forEach(function(l){out.push([fp+'px '+FK,'#BFD7F2',l,fp*1.35]);});
     if(it.k)wrap(it.k,fk+'px '+FK,maxW-14*u).forEach(function(l){out.push([fk+'px '+FK,'rgba(239,232,222,.85)',l,fk*1.4]);});
     out.forEach(function(o){h+=o[3];});
     return {h:h+10*u*sc,lines:out};
   }
-  var secs=[['❌ 어제 틀린 말',d.wrong],['🔁 반복할 틀',d.rep],['💼 오늘 써 볼 말',d.work]].filter(function(s){return s[1].length;});
-  var top=H*0.33, bottom=H-110*u, sc=1;
-  function total(sc){var t=24*u*sc;secs.forEach(function(s){t+=26*u*sc;s[1].forEach(function(it){t+=block(it,sc).h;});t+=8*u*sc;});if(d.weak)t+=30*u*sc;return t;}
+  // 2026-10-23 실제 잠금화면: 아래쪽 절반은 알림·실시간 현황(음악·디디)에 가림 → 위젯 바로 아래(31~60%)에 4개만, 병음 빼고 크게
+  var secs=[['❌ 어제 틀린 말',d.wrong.slice(0,2)],['🔁 반복할 틀',d.rep.slice(0,1)],['💼 오늘 써 볼 말',d.work.slice(0,1)]].filter(function(s){return s[1].length;});
+  var top=H*0.315, bottom=H*0.60, sc=1.08;
+  function total(sc){var t=24*u*sc;secs.forEach(function(s){t+=26*u*sc;s[1].forEach(function(it){t+=block(it,sc).h+4*u*sc;});t+=6*u*sc;});return t;}
   while(sc>0.62&&total(sc)>bottom-top)sc-=0.04;
   var y=top;
   // 날짜 줄
@@ -9277,15 +9279,15 @@ function wallDraw(){
     x.font='700 '+Math.round(13*u*sc)+'px '+FK;x.fillStyle='#EFE8DE';x.fillText(s[0],M,y);y+=24*u*sc;
     s[1].forEach(function(it){
       var b=block(it,sc);
-      x.fillStyle='rgba(255,255,255,.07)';var rr=10*u;x.beginPath();
+      x.fillStyle='rgba(10,30,60,.35)';var rr=10*u;x.beginPath();
       if(x.roundRect)x.roundRect(M,y-4*u*sc,maxW,b.h,rr);else x.rect(M,y-4*u*sc,maxW,b.h);x.fill();
       var yy=y;b.lines.forEach(function(o){x.font=o[0];x.fillStyle=o[1];x.fillText(o[2],M+8*u,yy);yy+=o[3];});
       y+=b.h+4*u*sc;
     });
     y+=6*u*sc;
   });
-  if(d.weak){x.font=Math.round(12*u*sc)+'px '+FK;x.fillStyle='rgba(239,232,222,.75)';wrap('⚠ 약점: '+d.weak,x.font,maxW).slice(0,2).forEach(function(l){x.fillText(l,M,y);y+=17*u*sc;});}
-  return {canvas:c,sig:JSON.stringify([d.wrong.map(function(i){return i.z;}),d.rep.map(function(i){return i.z;}),d.work.map(function(i){return i.z;}),d.weak,today()])};
+  if(false&&d.weak){x.font=Math.round(12*u*sc)+'px '+FK;x.fillStyle='rgba(239,232,222,.75)';wrap('⚠ 약점: '+d.weak,x.font,maxW).slice(0,2).forEach(function(l){x.fillText(l,M,y);y+=17*u*sc;});}
+  return {canvas:c,sig:JSON.stringify([d.wrong.map(function(i){return i.z;}),d.rep.map(function(i){return i.z;}),d.work.map(function(i){return i.z;}),d.weak,today(),'L2'])};
 }
 function wallLS(v){try{if(v)localStorage.setItem('szcn-wall',JSON.stringify(v));else return JSON.parse(localStorage.getItem('szcn-wall')||'{}');}catch(e){return {};}}
 async function wallUpload(force){
