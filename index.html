@@ -811,7 +811,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#EFE8DE" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:#CFE0F3;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.11.4</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.11.5</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -9003,7 +9003,13 @@ async function callReview(id,force){
     +'<div class="cl-wait">내 발화 '+e.turns.filter(function(t){return t.r==='me';}).length+'개를 교정하는 중입니다… (10~20초)</div>'
     +callTranscriptHtml(e,true);
   document.getElementById('clX').addEventListener('click',callClose);
-  var r=await callPost('/call/review',{sc:callScPayload(sc,{targets:e.targets,mission:e.mission}),turns:e.turns.map(function(t){return {r:t.r,z:t.z};})},60000);
+  var body={sc:callScPayload(sc,{targets:e.targets,mission:e.mission}),turns:e.turns.map(function(t){return {r:t.r,z:t.z};})};
+  var r=await callPost('/call/review',body,90000);
+  // 연결이 끊기면 한 번 더 자동으로(긴 통화 리뷰는 서버가 오래 걸려 중간에 끊길 수 있음)
+  if(r.error==='network'||r.error==='timeout'||/^http_5/.test(r.error||'')){
+    var w=ov.querySelector('.cl-wait');if(w)w.textContent='연결이 끊겨 한 번 더 요청하는 중입니다…';
+    r=await callPost('/call/review',body,90000);
+  }
   if(!document.getElementById('callOv'))return;
   if((r.error||!Array.isArray(r.lines))&&e.review&&e.review.slim){callRenderReview(e);return;} // 다시 받기 실패 → 요약만
   if(r.error||!Array.isArray(r.lines)){

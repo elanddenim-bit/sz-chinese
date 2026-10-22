@@ -350,9 +350,30 @@ ${sc.targets.length || sc.mission.length ? "위 JSON 객체에 아래 키도 함
   const tgt = sc.targets.length ? `\n재도전 목표 문장(지난 통화 교정문): ${sc.targets.map((x, k) => `${k + 1}. ${x.z}（${x.k}）`).join(" / ")}` : "";
   const mis = sc.mission.length ? `\n약점 미션: ${sc.mission.map((x) => x.label + (x.ex ? `(예: ${x.ex})` : "")).join(" / ")}` : "";
   const user = `상황: ${sc.title} — ${sc.setting}\n상대: ${sc.npc}\n나의 목표: ${sc.goal}\n참고 핵심 표현: ${sc.keys.join(" / ")}${tgt}${mis}\n\n통화 전사본:\n${script}`;
-  const j = parseJSON(await llm(REVIEW_MODEL, system, user, 10000));
-  if (!j || !Array.isArray(j.lines)) throw err("review", "리뷰 생성 실패", 502);
-  return j;
+  // 발화가 많으면 한 번에 쓰게 하면 1분 넘게 걸려 연결이 끊김(2026-10-22 발화 19개 리뷰 실패)
+  // → 총평(점수·전략·표현·목표·미션)과 발화 교정을 나눠 동시에 생성, 발화 교정은 7개씩 쪼갬
+  const mine = turns.filter((t: any) => t.r === "me").length;
+  if (mine <= 7) {
+    const j = parseJSON(await llm(REVIEW_MODEL, system, user, 6000));
+    if (!j || !Array.isArray(j.lines)) throw err("review", "리뷰 생성 실패", 502);
+    return j;
+  }
+  const CH = 7, jobs: Promise<any>[] = [];
+  jobs.push(llm(REVIEW_MODEL, system + "\n\n이번 요청에서는 lines 를 빈 배열 [] 로 두고 나머지 키만 채웁니다.", user, 3000).then(parseJSON));
+  for (let a = 1; a <= mine; a += CH) {
+    const b2 = Math.min(mine, a + CH - 1);
+    jobs.push(llm(REVIEW_MODEL, system + `\n\n이번 요청에서는 나의 발화 #${a}~#${b2} 만 교정합니다. 출력은 {"lines":[...]} 하나만(i 는 원래 발화 번호 그대로). 다른 키는 쓰지 않습니다.`, user, 4000)
+      .then(parseJSON).catch(() => null));
+  }
+  const [head, ...parts] = await Promise.all(jobs);
+  if (!head || typeof head !== "object") throw err("review", "리뷰 생성 실패", 502);
+  const lines: any[] = [];
+  parts.forEach((p) => { if (p && Array.isArray(p.lines)) lines.push(...p.lines); });
+  if (!lines.length) throw err("review", "발화 교정 생성 실패", 502);
+  const seen = new Set<number>();
+  head.lines = lines.filter((l) => { const k = Number(l?.i); if (!k || seen.has(k)) return false; seen.add(k); return true; })
+    .sort((x, y) => Number(x.i) - Number(y.i));
+  return head;
 }
 
 // ---------------- 千问(알리바바 百炼) ----------------
