@@ -132,6 +132,7 @@ export default {
   async fetch(req, env, ctx) {
     const url = new URL(req.url);
     if (req.method === "OPTIONS") return new Response(null, { headers: cors(req) });
+    if (req.method === "GET" && /^\/[A-Za-z]+\/?$/.test(url.pathname) && /[A-Z]/.test(url.pathname)) return Response.redirect(url.origin + url.pathname.toLowerCase() + url.search, 301); // /GUEST 처럼 대문자로 쳐도 열리게
     try {
       if (url.pathname === "/ping") return json(req, { ok: true, host: host(env).replace(/^ws-[a-z0-9]{4}/, "ws-…"), key: !!env.DASHSCOPE_API_KEY });
       if (url.pathname === "/rt") return await realtime(req, env, ctx, url, false);
