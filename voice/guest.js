@@ -51,6 +51,42 @@ async function role(env, b, allowed, hash, ip) {
   return null;
 }
 
+// 📷 캡처 읽기 — 씨트립 예약(hotel) · 위챗 대화(chat) · 디엔핑 식당(food), 千问 VL. 하루 80번(KV guest:scan:<날짜>)
+const SCAN = {
+  hotel: '你是酒店预订截图识别助手（携程/Trip.com/飞猪/酒店确认短信）。只提取截图里确实有的信息，没有的留空，不要猜。年份缺省取今天(' + "{DAY}" + ')之后最近的日期。只输出 JSON：{"hotel":"酒店名(原文)","addr":"地址","phone":"酒店电话","checkin":"YYYY-MM-DD","checkout":"YYYY-MM-DD","nights":"晚数","rooms":"间数","room":"房型","guests":["入住人姓名(原文)"],"conf":"订单号/确认号","price":"总价(带币种)","breakfast":"含早/不含早","cancel":"取消政策(简短)"}',
+  chat: '你是出差接待助手。截图是韩国总部和广州分公司之间关于出差的微信/KakaoTalk聊天（可能是韩语或中文）。从中提取出差安排。只提取聊天里确实说到的信息，没有的留空，不要猜。年份缺省取今天(' + "{DAY}" + ')之后最近的日期。除地名、店名、工厂名保留原文外，其余用韩语写。只输出 JSON：{"title":"出差名称(韩语，如 品牌+目的)","from":"YYYY-MM-DD 到达日","to":"YYYY-MM-DD 离开日","guests":[{"name":"韩语姓名(不带님)","title":"职位"}],"people":"人数","fin":"到达航班号 时间","fout":"离开航班号 时间","hotel":"酒店","car":"用车需求/安排","purpose":"出差目的","fac":"要去的工厂/市场","food":"饮食偏好·忌口·酒(谁:什么)","note":"其他需要准备的要点(韩语,200字以内)"}',
+  food: '你是大众点评/美团餐厅页面截图识别助手。可能有多张截图，都是同一家店。只提取截图里确实有的信息，没有的留空，不要猜。只输出 JSON：{"name":"店名(原文中文，含分店名)","ko":"店名韩语读音或意思(简短)","area":"区/商圈","cuisine":"菜系(韩语，如 광둥요리·훠궈)","price":"人均价格(数字)","rating":"评分","addr":"地址","phone":"电话","hours":"营业时间","dishes":["推荐菜/招牌菜 原文(韩语意思)"],"room":"包间信息(若可见)","note":"特点(韩语,80字以内，如 환경·추천 이유)"}',
+};
+function host(env) { return (env.DASHSCOPE_WS_HOST || "dashscope.aliyuncs.com").replace(/^https?:\/\//, "").replace(/\/.*$/, ""); }
+async function scan(env, b) {
+  const kind = SCAN[b.kind] ? b.kind : "";
+  if (!kind) return { error: "kind" };
+  if (!env.DASHSCOPE_API_KEY) return { error: "config", msg: "AI 키가 없어요" };
+  const imgs = (Array.isArray(b.images) ? b.images : []).filter((x) => /^data:image\/(jpeg|png|webp);base64,/.test(String(x))).slice(0, 4);
+  const text = String(b.text || "").slice(0, 3000);
+  if (!imgs.length && !text.trim()) return { error: "empty", msg: "캡처를 넣어 주세요 请上传截图" };
+  if (imgs.join("").length > 9e6) return { error: "big", msg: "사진이 너무 커요. 장수를 줄여 주세요" };
+  const day = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+  const ck = "guest:scan:" + day, n = Number(await env.KV.get(ck)) || 0;
+  if (n >= (Number(env.GUEST_SCAN_DAY) || 80)) return { error: "daily", msg: "오늘 캡처 읽기 한도를 다 썼어요" };
+  await env.KV.put(ck, String(n + 1), { expirationTtl: 172800 });
+  const content = [...imgs.map((u) => ({ type: "image_url", image_url: { url: u } })), { type: "text", text: text || "识别截图" }];
+  const call = async (fmt) => {
+    const r = await fetch("https://" + host(env) + "/compatible-mode/v1/chat/completions", {
+      method: "POST", headers: { authorization: "Bearer " + env.DASHSCOPE_API_KEY, "content-type": "application/json" },
+      body: JSON.stringify({ model: env.GUEST_VL_MODEL || env.QUEST_VL_MODEL || "qwen3-vl-plus", temperature: 0.1, enable_thinking: false, ...(fmt ? { response_format: { type: "json_object" } } : {}),
+        messages: [{ role: "system", content: SCAN[kind].replace("{DAY}", day) }, { role: "user", content }] }),
+    });
+    if (r.status === 400 && fmt) return call(false);
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error("千问 " + ((j.error && j.error.message) || r.status));
+    const t = String(j.choices[0].message.content);
+    return JSON.parse(t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1));
+  };
+  try { return { ok: true, kind, data: clean(await call(true)) }; }
+  catch (e) { return { error: "ai", msg: "캡처를 못 읽었어요: " + String(e.message || e).slice(0, 120) }; }
+}
+
 export async function guestApi(req, env, path, b, allowed, hash) {
   const ip = req.headers.get("cf-connecting-ip") || "";
   const r = await role(env, b, allowed, hash, ip);
@@ -71,6 +107,7 @@ export async function guestApi(req, env, path, b, allowed, hash) {
     await env.KV.put(DB_KEY, JSON.stringify(db));
     return { ok: true, item: it };
   }
+  if (path === "/guest/scan") return await scan(env, b);
   if (r !== "owner") return { error: "owner_only", msg: "지사장만 할 수 있어요 仅限支社长" };
   if (path === "/guest/team") {
     const t = String(b.team || "").trim();
@@ -253,6 +290,7 @@ function vTrip(){
   var t=CUR,s=tripState(t),td=today();
   var h='<div class="card"><div class="row"><div class="grow t" style="font-size:17px">'+E(t.title||'새 출장 新出差')+'</div>'+(s.dd?'<span class="badge">'+E(s.dd)+'</span>':'')+'</div>'+
   (t.by?'<div class="s">마지막 저장 '+E(t.by)+' · '+new Date(t.upd).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})+'</div>':'')+'</div>';
+  h+='<div class="two" style="margin-bottom:4px"><button class="btn ghost" id="sc_h">📷 씨트립 예약 캡처<br><span class="zh">携程订单截图</span></button><button class="btn ghost" id="sc_c">💬 위챗 대화 캡처<br><span class="zh">微信聊天截图</span></button></div>';
   h+='<h2>준비 체크 <span class="zh">准备清单</span></h2><div class="card">'+(t.from?CHK.map(function(c){
     var ok=t.chk&&t.chk[c[0]],d=due(t,c),late=!ok&&td>d;
     return '<div class="chk"><input type="checkbox" data-c="'+c[0]+'"'+(ok?' checked':'')+'><div class="grow"><div>'+c[2]+' <span class="zh">'+c[3]+'</span></div><div class="s">'+(c[1]<0?'D'+c[1]:'D+'+c[1])+' · '+md(d)+(late?' <span class="badge red">지연 延迟</span>':'')+'</div></div></div>';
@@ -281,6 +319,8 @@ function vTrip(){
   [].forEach.call(document.querySelectorAll('[data-c]'),function(x){x.onchange=function(){CUR.chk=CUR.chk||{};CUR.chk[x.dataset.c]=x.checked;collect();saveTrip(true)}});
   $('#ngb').onclick=function(){var n=v('ng');if(!n)return;var g={id:uid(),name:n};put('guests',g).then(function(){CUR.guests=(CUR.guests||[]).concat(g.id);$('#ng').value='';drawChips()}).catch(function(e){toast(e.message)})};
   $('#am').onclick=function(){collect();mealForm(null)};
+  $('#sc_h').onclick=function(){collect();scanSheet('hotel',applyHotel)};
+  $('#sc_c').onclick=function(){collect();scanSheet('chat',applyChat)};
   [].forEach.call(document.querySelectorAll('[data-meal]'),function(x){x.onclick=function(){collect();mealForm(x.dataset.meal)}});
   $('#sv').onclick=function(){collect();saveTrip(false)};
   $('#cp').onclick=function(){collect();copyPlan()};
@@ -311,12 +351,15 @@ function mealForm(id){
   m=m||{id:uid(),date:CUR.from||today()};
   sheet('<div class="t" style="font-size:17px">식사 기록 <span class="zh">用餐记录</span></div>'+
    inp('m_date','날짜 日期',m.date,'date')+inp('m_place','식당 餐厅',m.place,'','','dlf')+dl('dlf','food')+
-   inp('m_menu','먹은 메뉴 菜品',m.menu,'','오리구이, 딤섬…')+
+   inp('m_menu','먹은 메뉴 菜品',m.menu,'','오리구이, 딤섬…')+'<div class="chips" id="mdish" style="margin-top:6px"></div>'+
    inp('m_mood','분위기 氛围',m.mood,'','룸, 시끄러움, 조용, 술자리…')+
    '<label>전체 반응 整体反应</label><div class="chips">'+[3,2,1].map(function(r){return '<span class="chip'+(m.rate==r?' on':'')+'" data-r="'+r+'">'+RATE[r]+'</span>'}).join('')+'</div>'+
    txt('m_who','누가 뭘 좋아했나 · 안 먹었나 谁喜欢/不吃什么',m.who,'김부장님 마라 좋아함, 이과장님 고수 안 드심')+
    '<button class="btn wide" id="ms">저장 保存</button>'+(id?'<button class="btn ghost wide" id="md" style="color:var(--red)">삭제 删除</button>':'')+'<button class="btn ghost wide" onclick="closeSheet()">닫기 关闭</button>');
   var rate=m.rate||0;
+  var dish=function(){var p=placeBy(v('m_place')),ds=(p&&p.dishes)||[];$('#mdish').innerHTML=ds.length?'<span class="s">추천 메뉴 탭해서 추가:</span> '+ds.map(function(d,i){return '<span class="chip" data-d="'+i+'">'+E(d)+'</span>'}).join(''):'';
+    [].forEach.call(document.querySelectorAll('[data-d]'),function(x){x.onclick=function(){var cur=v('m_menu'),d=ds[x.dataset.d];if(cur.indexOf(d)<0)$('#m_menu').value=cur?cur+', '+d:d;x.classList.add('on')}})};
+  $('#m_place').oninput=dish;dish();
   [].forEach.call(document.querySelectorAll('[data-r]'),function(x){x.onclick=function(){rate=Number(x.dataset.r);[].forEach.call(document.querySelectorAll('[data-r]'),function(y){y.classList.toggle('on',y===x)})}});
   $('#ms').onclick=function(){
     var nm={id:m.id,date:v('m_date'),place:v('m_place'),menu:v('m_menu'),mood:v('m_mood'),rate:rate,who:v('m_who')};
@@ -393,12 +436,15 @@ function placeMeals(name){var r=[];live('trips').forEach(function(t){(t.meals||[
 function vPlaces(){
   var ps=live('places').filter(function(p){return p.kind===PSEG}).sort(function(a,b){return (a.name||'').localeCompare(b.name||'')});
   $('#m').innerHTML='<div class="seg">'+Object.keys(PK).map(function(k){return '<button data-k="'+k+'"'+(k===PSEG?' class="on"':'')+'>'+PK[k][0]+' <span class="zh">'+PK[k][1]+'</span></button>'}).join('')+'</div>'+
-   '<button class="btn red wide" id="np" style="margin:0 0 12px">+ '+PK[PSEG][0].split(' ')[1]+' 추가 添加</button>'+
+   (PSEG==='food'?'<button class="btn wide" id="scf" style="margin:0 0 8px">📷 디엔핑 캡처로 식당 추가 <span class="zh">大众点评截图</span></button>':PSEG==='hotel'?'<button class="btn wide" id="sch" style="margin:0 0 8px">📷 씨트립 캡처로 호텔 추가 <span class="zh">携程截图</span></button>':'')+
+   '<button class="btn red wide" id="np" style="margin:0 0 12px">+ '+PK[PSEG][0].split(' ')[1]+' 직접 추가 添加</button>'+
    (ps.length?ps.map(function(p){var ms=PSEG==='food'?placeMeals(p.name):[],g=ms.filter(function(x){return x.m.rate==3}).length;
     return '<div class="card tap" data-place="'+E(p.id)+'"><div class="t">'+E(p.name)+'</div><div class="s">'+E([p.area,p.cuisine,p.price?p.price+' RMB':'',p.phone].filter(Boolean).join(' · '))+'</div>'+
-    (ms.length?'<span class="badge">방문 '+ms.length+'회</span>'+(g?'<span class="badge ok">😀 '+g+'</span>':''):'')+'</div>'}).join(''):'<div class="empty">아직 없어요 暂无</div>');
+    (ms.length?'<span class="badge">방문 '+ms.length+'회 · 최근 '+E(ms[0].m.date||'')+'</span>'+(g?'<span class="badge ok">😀 '+g+'</span>':'')+'<div class="s">'+E(uniq(ms.map(function(x){return brandOf(x.t)})).slice(0,4).join(' · '))+'</div>':(p.rating?'<span class="badge">★ '+E(p.rating)+'</span>':''))+'</div>'}).join(''):'<div class="empty">아직 없어요 暂无</div>');
   [].forEach.call(document.querySelectorAll('[data-k]'),function(x){x.onclick=function(){PSEG=x.dataset.k;vPlaces()}});
   $('#np').onclick=function(){CUR={id:uid(),kind:PSEG,name:''};go(vPlace)};
+  if($('#scf'))$('#scf').onclick=function(){scanSheet('food',applyFood)};
+  if($('#sch'))$('#sch').onclick=function(){scanSheet('hotel',function(d){var p=upsertHotel(d);if(!p)return toast('호텔 이름을 못 찾았어요');put('places',p).then(function(it){CUR=JSON.parse(JSON.stringify(it));go(vPlace);toast('호텔 저장됨')})})};
   bindTap();
 }
 function vPlace(){
@@ -407,16 +453,85 @@ function vPlace(){
    '<label>종류 类别</label><select id="p_kind">'+Object.keys(PK).map(function(k){return '<option value="'+k+'"'+(k===p.kind?' selected':'')+'>'+PK[k][0]+' '+PK[k][1]+'</option>'}).join('')+'</select>'+
    '<div class="two"><div>'+inp('p_area','지역 区域',p.area,'','판위, 톈허, 바이윈')+'</div><div>'+inp('p_cuisine','요리·차종 菜系/车型',p.cuisine,'','광둥요리, 7인승')+'</div></div>'+
    '<div class="two"><div>'+inp('p_price','단가 单价 (RMB)',p.price,'','1인 200 / 하루 800')+'</div><div>'+inp('p_phone','연락처 联系方式',p.phone)+'</div></div>'+
-   inp('p_addr','주소 地址',p.addr)+txt('p_memo','메모 备注',p.memo,'룸 있음, 예약 필수, 협약가, 기사 이름')+'</div>'+
+   inp('p_addr','주소 地址',p.addr)+
+   (p.kind==='food'?'<div class="two"><div>'+inp('p_rating','평점 评分',p.rating)+'</div><div>'+inp('p_hours','영업시간 营业时间',p.hours)+'</div></div>'+inp('p_dishes','추천 메뉴 招牌菜 (쉼표로 구분)',(p.dishes||[]).join(', '))+inp('p_room','룸 包间',p.room):'')+
+   txt('p_memo','메모 备注',p.memo,'룸 있음, 예약 필수, 협약가, 기사 이름')+'</div>'+
    '<button class="btn wide" id="ps">저장 保存</button>'+(byId('places',p.id)?'<button class="btn ghost wide" id="pd" style="color:var(--red)">삭제 删除</button>':'');
-  if(ms.length)h+='<h2>이곳 식사 기록 <span class="zh">该餐厅记录</span></h2>'+ms.map(function(x){return '<div class="card"><div class="s">'+E(x.m.date)+' · '+E((x.t.guests||[]).map(gName).join(', '))+'</div>'+mealCard(x.m).replace('class="card tap"','style=""')+'</div>'}).join('');
+  if(ms.length)h+='<h2>이곳 식사 기록 <span class="zh">该餐厅记录</span></h2>'+ms.map(function(x){return '<div class="card"><div class="s">'+E(x.m.date)+' · <b>'+E(x.t.title||'')+'</b>'+((x.t.guests||[]).length?' · '+E((x.t.guests||[]).map(gName).join(', ')):'')+'</div>'+mealCard(x.m).replace('class="card tap"','style=""')+'</div>'}).join('');
   $('#m').innerHTML=h;
   $('#ps').onclick=function(){
     var old=p.name;p.name=v('p_name');if(!p.name)return toast('이름을 넣어 주세요');
+    if(p.kind==='food'&&$('#p_rating')){p.rating=v('p_rating');p.hours=v('p_hours');p.room=v('p_room');p.dishes=v('p_dishes').split(/[,，]/).map(function(x){return x.trim()}).filter(Boolean)}
     p.kind=v('p_kind');p.area=v('p_area');p.cuisine=v('p_cuisine');p.price=v('p_price');p.phone=v('p_phone');p.addr=v('p_addr');p.memo=v('p_memo');
     put('places',p).then(function(it){CUR=JSON.parse(JSON.stringify(it));PSEG=it.kind;toast('저장됨 已保存');render()}).catch(function(e){toast(e.message)});
   };
   if($('#pd'))$('#pd').onclick=function(){if(!confirm('삭제할까요? 确定删除？'))return;p.del=true;put('places',p).then(function(){STACK.pop();render()})};
+}
+
+// ---------- 캡처 읽기 ----------
+function uniq(a){var o=[];a.forEach(function(x){if(x&&o.indexOf(x)<0)o.push(x)});return o}
+function brandOf(t){return String(t.title||'').replace(/\(.*?\)/g,'').split(/ 원팀| \d+월| 출장/)[0].trim()}
+function placeBy(n){n=String(n||'').trim();if(!n)return null;var l=live('places');for(var i=0;i<l.length;i++){var p=l[i];if(p.name===n||p.zh===n||(p.ko&&p.ko===n))return p}return null}
+function shrink(f){return new Promise(function(ok,no){var u=URL.createObjectURL(f),im=new Image();im.onload=function(){var k=Math.min(1,1600/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*k);c.height=Math.round(im.height*k);c.getContext('2d').drawImage(im,0,0,c.width,c.height);URL.revokeObjectURL(u);ok(c.toDataURL('image/jpeg',0.82))};im.onerror=function(){no(new Error('사진을 못 열었어요'))};im.src=u})}
+var SCN={hotel:['📷 씨트립 예약 캡처','携程订单截图','예약 상세 화면(호텔명·날짜·예약번호가 보이게) 1~2장'],chat:['💬 위챗 대화 캡처','微信聊天截图','출장 일정·인원·항공·호텔·식사 얘기가 나온 대화 1~4장'],food:['📷 디엔핑 식당 캡처','大众点评截图','같은 식당의 가게 정보·추천 메뉴 화면 1~4장']};
+function scanSheet(kind,apply){
+  var c=SCN[kind];
+  sheet('<div class="t" style="font-size:17px">'+c[0]+' <span class="zh">'+c[1]+'</span></div><p class="s">'+c[2]+'. AI가 읽어서 빈 칸을 채워요.</p>'+
+   '<label class="btn ghost wide" style="text-align:center">사진 고르기 选择图片<input id="scf_in" type="file" accept="image/*" multiple style="display:none"></label><div class="s" id="scf_n" style="margin-top:6px"></div>'+
+   txt('scf_t','덧붙일 말 (선택) 补充说明','','예: 이건 스파오 4월 출장 건')+
+   '<button class="btn wide" id="scf_go">읽기 识别</button><button class="btn ghost wide" onclick="closeSheet()">닫기 关闭</button>');
+  var files=[];
+  $('#scf_in').onchange=function(){files=[].slice.call(this.files,0,4);$('#scf_n').textContent=files.length+'장 선택됨'+(this.files.length>4?' (앞 4장만)':'')};
+  $('#scf_go').onclick=function(){
+    if(!files.length&&!v('scf_t'))return toast('사진을 골라 주세요');
+    var b=$('#scf_go');b.disabled=true;b.textContent='읽는 중… 识别中 (10~30초)';
+    Promise.all(files.map(shrink)).then(function(imgs){return api('scan',{kind:kind,images:imgs,text:v('scf_t')})})
+     .then(function(j){closeSheet();apply(j.data||{})})
+     .catch(function(e){b.disabled=false;b.textContent='다시 읽기 重试';toast(e.message)});
+  };
+}
+function fillEmpty(o,k,val,done){val=String(val||'').trim();if(val&&!String(o[k]||'').trim()){o[k]=val;done.push(k)}}
+function upsertHotel(d){
+  if(!d.hotel)return null;var p=placeBy(d.hotel);
+  p=p?JSON.parse(JSON.stringify(p)):{id:uid(),kind:'hotel',name:d.hotel};
+  var done=[];fillEmpty(p,'addr',d.addr,done);fillEmpty(p,'phone',d.phone,done);
+  if(d.price&&String(p.memo||'').indexOf(d.price)<0)p.memo=(p.memo?p.memo+'\n':'')+'최근 예약가 '+d.price+(d.room?' ('+d.room+')':'');
+  return p;
+}
+function applyHotel(d){
+  var t=CUR,done=[];
+  if(!d.hotel&&!d.checkin)return toast('예약 정보를 못 찾았어요');
+  fillEmpty(t,'hotel',d.hotel,done);fillEmpty(t,'from',d.checkin,done);fillEmpty(t,'to',d.checkout,done);
+  if(d.conf&&String(t.hconf||'').indexOf(d.conf)<0){t.hconf=t.hconf?t.hconf+', '+d.conf:d.conf;done.push('hconf')}
+  var hn=[d.room,d.rooms?d.rooms+'실':'',d.nights?d.nights+'박':'',d.breakfast,d.price,(d.guests||[]).length?'투숙 '+d.guests.join('·'):'',d.cancel?'취소: '+d.cancel:''].filter(Boolean).join(' / ');
+  if(hn&&String(t.hnote||'').indexOf(hn)<0){t.hnote=t.hnote?t.hnote+' | '+hn:hn;done.push('hnote')}
+  t.chk=t.chk||{};t.chk.hotel=true;
+  var p=upsertHotel(d);if(p)put('places',p).catch(function(){});
+  saveTrip(true);setTimeout(function(){render();toast('호텔 정보 채움 '+done.length+'칸 · 체크 완료')},300);
+}
+function applyChat(d){
+  var t=CUR,done=[];
+  ['title','from','to','fin','fout','hotel','purpose','fac'].forEach(function(k){fillEmpty(t,k,d[k],done)});
+  if(d.car)fillEmpty(t,'cnote',d.car,done);
+  var adds=[],tasks=[];
+  (d.guests||[]).forEach(function(g){var n=String(g&&g.name||'').replace(/님$/,'').trim();if(!n)return;
+    var hit=live('guests').filter(function(x){return x.name===n})[0];
+    if(hit){if((t.guests||[]).indexOf(hit.id)<0){t.guests=(t.guests||[]).concat(hit.id);adds.push(n)}}
+    else{var ng={id:uid(),name:n,title:g.title||''};tasks.push(put('guests',ng));t.guests=(t.guests||[]).concat(ng.id);adds.push(n+'(새로)')}});
+  var nt=[d.people?'인원 '+d.people:'',d.food?'식사: '+d.food:'',d.note].filter(Boolean).join(' / ');
+  if(nt&&String(t.note||'').indexOf(nt)<0){t.note=(t.note?t.note+'\n':'')+'[위챗 '+today()+'] '+nt;done.push('note')}
+  t.chk=t.chk||{};if(t.from&&(t.guests||[]).length)t.chk.info=true;
+  Promise.all(tasks).then(function(){saveTrip(true);setTimeout(function(){render();toast('채움 '+done.length+'칸'+(adds.length?' · 손님 '+adds.join(', '):''))},300)}).catch(function(e){toast(e.message)});
+}
+function applyFood(d){
+  if(!d.name)return toast('식당 이름을 못 찾았어요');
+  var p=placeBy(d.name)||placeBy(d.ko);p=p?JSON.parse(JSON.stringify(p)):{id:uid(),kind:'food',name:d.name};
+  var done=[];['area','cuisine','price','rating','addr','phone','hours','room'].forEach(function(k){fillEmpty(p,k,d[k],done)});
+  if(d.rating)p.rating=d.rating;
+  if(d.ko)p.ko=d.ko;
+  p.dishes=uniq((p.dishes||[]).concat(d.dishes||[])).slice(0,20);
+  if(d.note&&String(p.memo||'').indexOf(d.note)<0)p.memo=(p.memo?p.memo+'\n':'')+d.note;
+  put('places',p).then(function(it){PSEG='food';CUR=JSON.parse(JSON.stringify(it));go(vPlace);toast('식당 저장됨 · 메뉴 '+(it.dishes||[]).length+'개')}).catch(function(e){toast(e.message)});
 }
 
 // ---------- 설정 ----------
@@ -425,10 +540,10 @@ function vSet(){
   if(ROLE==='owner'){
     h+='<h2>팀 코드 (지사장) <span class="zh">团队代码</span></h2><div class="card"><p class="s">지사원이 이 코드로 들어옵니다. 바꾸면 기존 코드는 바로 막혀요. 6자 이상.</p>'+
      '<input id="s_team" type="text" autocomplete="off" placeholder="새 팀 코드"><button class="btn sm" id="s_teams" style="margin-top:8px">설정</button></div>';
-    h+='<h2>가져오기 · 백업</h2><div class="card"><p class="s">Claude가 정리해 준 JSON을 붙여넣으면 같은 id는 덮어쓰고 새 것은 추가합니다.</p>'+
-     '<textarea id="s_imp" placeholder="{&quot;guests&quot;:[…], &quot;trips&quot;:[…], &quot;places&quot;:[…]}"></textarea><button class="btn sm" id="s_imps" style="margin-top:8px">가져오기</button> '+
-     '<label class="btn sm ghost" style="margin-top:8px">📂 파일에서 가져오기<input id="s_file" type="file" accept=".json,application/json" style="display:none"></label> '+
-     '<button class="btn sm ghost" id="s_exp" style="margin-top:8px">⬇ 백업 내려받기</button></div>';
+    h+='<h2>가져오기 · 백업</h2><div class="card"><p class="s">Claude가 만든 .json 파일을 고르면 바로 들어갑니다. 같은 id는 덮어쓰고 새 것은 추가해요.</p>'+
+     '<label class="btn wide" style="text-align:center">📂 JSON 파일 골라서 가져오기<input id="s_file" type="file" accept=".json,application/json,text/plain" style="display:none"></label>'+
+     '<details style="margin-top:10px"><summary class="s">글로 붙여넣기</summary><textarea id="s_imp" placeholder="{&quot;guests&quot;:[…], &quot;trips&quot;:[…], &quot;places&quot;:[…]}"></textarea><button class="btn sm" id="s_imps" style="margin-top:8px">붙여넣은 글 가져오기</button></details>'+
+     '<button class="btn ghost wide" id="s_exp">⬇ 백업 내려받기</button></div>';
   }
   h+='<h2>사용법 <span class="zh">使用说明</span></h2><div class="card s">'+
    '1. 출장 요청이 오면 <b>출장</b>에 새 건을 만들고 도착일·손님·담당을 넣습니다. 收到出差请求后新建，填写日期、客人、负责人。<br>'+
@@ -441,9 +556,10 @@ function vSet(){
   $('#s_out').onclick=function(){ls('gs-auth',null);AUTH=null;login()};
   if(ROLE!=='owner')return;
   $('#s_teams').onclick=function(){api('team',{team:v('s_team')}).then(function(){$('#s_team').value='';toast('팀 코드 설정됨')}).catch(function(e){toast(e.message)})};
-  $('#s_imps').onclick=function(){var d;try{d=JSON.parse(v('s_imp'))}catch(e){return toast('JSON 형식이 아니에요')}
-    api('import',{db:d}).then(function(j){toast(j.n+'건 가져옴');$('#s_imp').value='';return reload()}).catch(function(e){toast(e.message)})};
-  $('#s_file').onchange=function(){var f=this.files[0];if(!f)return;f.text().then(function(t){$('#s_imp').value=t;$('#s_imps').click()})};
+  var doImp=function(raw){var d;try{d=JSON.parse(String(raw||'').replace(/^\uFEFF/,''))}catch(e){return toast('JSON 형식이 아니에요 — 파일 내용을 확인해 주세요')}
+    toast('가져오는 중…');api('import',{db:d}).then(function(j){toast(j.n+'건 가져옴 已导入');if($('#s_imp'))$('#s_imp').value='';return reload()}).catch(function(e){toast(e.message)})};
+  $('#s_imps').onclick=function(){var raw=v('s_imp');if(!raw)return toast('붙여넣은 글이 없어요');doImp(raw)};
+  $('#s_file').onchange=function(){var f=this.files[0];this.value='';if(!f)return;f.text().then(doImp)};
   $('#s_exp').onclick=function(){var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(DB,null,1)],{type:'application/json'}));a.download='guest-backup-'+today()+'.json';a.click()};
 }
 
