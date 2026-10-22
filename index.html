@@ -811,7 +811,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#EFE8DE" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:#CFE0F3;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.11.5</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.12.0</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -886,6 +886,7 @@
     <div class="statbox"><div class="v red" id="stWrong">0</div><div class="k">복습 대기</div></div>
     <div class="statbox"><div class="v" style="color:#1E7F4F" id="stMaster">0</div><div class="k">마스터</div></div>
   </div>
+  <button class="bigbtn" id="btnFix" style="background:#1664B0;margin-bottom:8px" onclick="fixOpen()">🧠 통화 교정 문장 말하기</button>
   <button class="bigbtn" id="btnReview">오답 복습 퀴즈 시작</button>
   <div class="scenario-note">틀린 문장·단어는 자동으로 여기에 쌓입니다. 복습 퀴즈에서 <b>연속 2회 정답</b>이면 목록에서 빠지고 마스터로 기록됩니다.</div>
   <div id="rvList"></div>
@@ -6486,6 +6487,7 @@ function drillFeedbackHtml(r,myText){
 
 // ================= 복습 탭 =================
 function renderReview(){
+  try{var fb=document.getElementById('btnFix'),fd=fixDue().length;if(fb)fb.textContent='🧠 통화 교정 문장 말하기'+(fd?' · 오늘 '+fd+'개':' · 오늘 없음');}catch(x){}
   const wrap=document.getElementById('rvList');wrap.innerHTML='';
   const ids=wrongIds();
   if(!ids.length){wrap.innerHTML='<div class="qz-empty">현재 복습 대기 항목이 없습니다.</div>';renderWords();renderMyWords();renderGram();return;}
@@ -9030,6 +9032,7 @@ async function callReview(id,force){
   r.lines.forEach(function(l){
     if(!wasSlim&&l&&l.issues&&l.issues.length)gramRecord({issues:l.issues,corrected:l.z||'',corrected_ko:l.k||''},l.my||'',sit);
   });
+  if(!wasSlim)fixAdd(r,sc.title,e.id);
   callPrune();
   saveState();
   callRenderReview(e);
@@ -9096,6 +9099,7 @@ function callRenderReview(e){
   }
   h+='</div>'+callTranscriptHtml(e,false)
     +'<div class="cl-end">'
+    +(fixOf(e.id).length?'<button class="cl-dial" id="clFix" style="background:#1664B0">🧠 지금 교정 문장 '+fixOf(e.id).length+'개 입으로 말해 보기</button>':'')
     +(callRetryTargets(r).length&&!r.slim?'<button class="cl-dial" id="clRetry">🔁 교정받은 말로 다시 걸기</button>':'')
     +'<button class="cl-dial'+(callRetryTargets(r).length&&!r.slim?' sub':'')+'" id="clAgainCall">📞 같은 상황 다시 통화</button>'
     +'<button class="pr-b" id="clHist2" style="width:100%;margin-top:9px">통화 기록</button></div>';
@@ -9107,9 +9111,82 @@ function callRenderReview(e){
   var rt=document.getElementById('clRetry');
   if(rt)rt.addEventListener('click',function(){callS=null;callOpen(e.key,{targets:callRetryTargets(r),retryOf:e.id});});
   document.getElementById('clHist2').addEventListener('click',function(){callHistory('');});
+  var fx=document.getElementById('clFix');
+  if(fx)fx.addEventListener('click',function(){var l=fixOf(e.id);callClose();fixOpen(l,'방금 통화 교정');});
   ov.querySelectorAll('[data-say]').forEach(function(b){b.addEventListener('click',function(){speak(b.dataset.say);});});
   azPrefetch([].concat((r.lines||[]).map(function(l){return l.z;}),(r.phrases||[]).map(function(p){return p.z;})).filter(Boolean));
 }
+// ---------- 🧠 교정 문장 말하기 복습 (2026-10-22 소유자 '교정받으면 바로 까먹는다') ----------
+// 통화 리뷰에서 틀린 발화의 교정문·전략 한 마디를 state.fix 에 쌓고, 한국어 뜻을 보고 입으로 먼저 말한 뒤
+// 정답 확인 → 말했다/못 했다. 간격 반복(1·2·4·7·15·30일), 못 하면 내일 다시 + 이번 판 끝에 한 번 더.
+const FIX_IV=[1,2,4,7,15,30];
+function fixSt(){
+  if(!state.fix||!Array.isArray(state.fix.items)){
+    state.fix={items:[]};
+    // 처음 한 번: 이미 받은 통화 리뷰(전문이 남은 것)에서 가져옴
+    try{callState().log.forEach(function(e){if(e.review&&!e.review.slim)fixAdd(e.review,callSc(e.key).title,e.id);});}catch(x){}
+  }
+  return state.fix;}
+function fixAddDays(n){var d=new Date();d.setDate(d.getDate()+n);return fmt(d);}
+function fixAdd(r,src,cid){
+  var f=fixSt(), have={}, add=[];
+  f.items.forEach(function(x){have[x.z]=1;});
+  function push(z,p,k){z=String(z||'').trim();if(!z||have[z]||!/[一-鿿]/.test(z)||z.length>60)return;have[z]=1;
+    add.push({id:'f'+Date.now().toString(36)+add.length,z:z,p:String(p||''),k:String(k||''),src:src,cid:cid,d:today(),due:today(),box:0,n:0,ok:0});}
+  (r.lines||[]).filter(function(l){return l&&!l.ok&&l.z;}).slice(0,5).forEach(function(l){push(l.z,l.p,l.k);});
+  (r.strategy||[]).slice(0,2).forEach(function(x){if(x)push(x.z,x.p,x.k);});
+  f.items=f.items.concat(add);
+  if(f.items.length>200){f.items.sort(function(a,b){return (b.box>=5)-(a.box>=5)||a.d.localeCompare(b.d);});f.items=f.items.slice(f.items.length-200);}
+}
+function fixOf(cid){return fixSt().items.filter(function(x){return x.cid===cid&&x.due<=today();});}
+function fixDue(){return fixSt().items.filter(function(x){return x.due<=today();}).sort(function(a,b){return a.box-b.box||a.due.localeCompare(b.due);});}
+var fixRun=null;
+function fixOpen(list,title){
+  list=(list||fixDue()).slice(0,12);
+  if(!list.length){openSheet('<div style="padding:18px 4px;text-align:center">오늘 말해 볼 교정 문장이 없습니다. 🎉<br><span style="font-size:13px;color:var(--grey)">통화 리뷰를 받으면 틀린 문장이 여기로 모입니다.</span></div>');return;}
+  fixRun={q:list.slice(),i:0,again:{},good:0,title:title||'교정 문장 말하기'};uT('fix');
+  fixShow(false);
+}
+function fixShow(rev){
+  var R=fixRun;if(!R)return;
+  var it=R.q[R.i];
+  if(!it){
+    openSheet('<div style="padding:10px 4px 6px;text-align:center"><div style="font-size:34px">🧠</div><div style="font-size:17px;font-weight:800;margin:6px 0">'+R.good+' / '+R.q.length+' 말했습니다</div>'
+      +'<div style="font-size:13px;color:var(--grey);line-height:1.6">말한 문장은 점점 간격을 늘려(1·2·4·7·15·30일) 다시 나옵니다.<br>못 한 문장은 내일 다시 나옵니다.</div>'
+      +'<button class="pr-b" id="fxEnd" style="width:100%;margin-top:14px">닫기</button></div>');
+    document.getElementById('fxEnd').addEventListener('click',closeSheet);fixRun=null;saveState();return;
+  }
+  var h='<div style="padding:4px 2px"><div style="display:flex;justify-content:space-between;font-size:12px;color:var(--grey)"><span>🧠 '+esc(R.title)+'</span><span>'+(R.i+1)+' / '+R.q.length+'</span></div>'
+    +'<div style="font-size:12px;color:var(--grey);margin-top:10px">'+esc(it.src||'')+' · 이걸 중국어로 소리 내어 말해 보세요</div>'
+    +'<div style="font-size:19px;font-weight:800;line-height:1.5;margin:6px 0 14px">'+esc(it.k||'(뜻 없음)')+'</div>';
+  if(!rev){
+    h+='<button class="pr-b" id="fxShow" style="width:100%;padding:14px;font-size:16px;background:var(--navy);color:#fff">🗣 말했어요 → 정답 보기</button>';
+  }else{
+    h+='<div style="background:#EFE8DE;border-radius:12px;padding:12px 14px;margin-bottom:12px"><div class="zh" style="font-size:20px;line-height:1.5">'+esc(it.z)+'</div>'
+      +'<div style="color:#1664B0;font-size:13px;margin-top:4px">'+esc(it.p||'')+'</div>'
+      +'<button class="pr-b" id="fxPlay" style="margin-top:8px">▶ 다시 듣기</button></div>'
+      +'<div style="font-size:12.5px;color:var(--grey);margin-bottom:8px">듣고 한 번 더 따라 말한 뒤 고르세요</div>'
+      +'<div style="display:flex;gap:8px"><button class="pr-b" id="fxNo" style="flex:1;padding:13px">❌ 못 했다</button>'
+      +'<button class="pr-b" id="fxYes" style="flex:1;padding:13px;background:#1E7F4F;color:#fff">✅ 거의 맞게 말했다</button></div>';
+  }
+  openSheet(h+'</div>');
+  var b;
+  if((b=document.getElementById('fxShow')))b.addEventListener('click',function(){fixShow(true);speak(it.z);});
+  if((b=document.getElementById('fxPlay')))b.addEventListener('click',function(){speak(it.z);});
+  if((b=document.getElementById('fxYes')))b.addEventListener('click',function(){fixMark(it,true);});
+  if((b=document.getElementById('fxNo')))b.addEventListener('click',function(){fixMark(it,false);});
+  if(R.q[R.i+1])mvPrefetch(R.q[R.i+1].z);
+}
+function fixMark(it,ok){
+  var R=fixRun;if(!R)return;
+  it.n=(it.n||0)+1;
+  if(R.again[it.id]){ /* 이번 판에서 두 번째 — 일정은 첫 결과 유지 */ }
+  else if(ok){it.ok=(it.ok||0)+1;it.box=Math.min(FIX_IV.length-1,(it.box||0)+(it.n===1?0:1));it.due=fixAddDays(FIX_IV[it.box]);R.good++;}
+  else{it.box=0;it.due=fixAddDays(1);R.again[it.id]=1;R.q.push(it);}
+  var d=dayRec();d.n=(d.n||0)+1;if(ok)d.c=(d.c||0)+1;
+  R.i++;saveState();fixShow(false);
+}
+
 function callHistory(key){
   callTeardown();
   var list=callState().log.filter(function(e){return !key||e.key===key;});
@@ -9148,7 +9225,8 @@ function ntSteps(){
   return [
     // 2026-10-22: 말하기 우선 — 통화를 맨 앞·15분(막힌 단어는 뒤의 복습·빈칸으로 메움)
     {k:'ear',ic:'📞',t:'통화 말하기',s:'AI 상대와 전화 2~3통 — 리뷰 보고 🔁 다시 걸기까지',m:15},
-    {k:'rev',ic:'🔁',t:wn?'오답 복습':'단어 10문',s:wn?'복습 대기 '+wn+'개 — 틀린 것부터':'오답이 없어 단어 퀴즈로',m:6},
+    (function(){var fd=fixDue().length;return fd?{k:'rev',ic:'🧠',t:'교정 문장 말하기',s:'지난 통화에서 고친 말 '+fd+'개 — 뜻 보고 입으로'+(wn?' · 이어서 오답 복습':''),m:6}
+      :{k:'rev',ic:'🔁',t:wn?'오답 복습':'단어 10문',s:wn?'복습 대기 '+wn+'개 — 틀린 것부터':'오답이 없어 단어 퀴즈로',m:6};})(),
     {k:'fill',ic:'✏️',t:'빈칸 채우기',s:'문장 속 단어 — 틀리면 복습으로',m:5},
     {k:say[0],ic:say[1],t:say[2],s:say[3],m:4}
   ];
@@ -9175,7 +9253,7 @@ function ntCallKey(){
   return keys[0]||'delay';
 }
 function ntLaunch(k){
-  if(k==='rev'){if(wrongIds().length)startReview();else startDaily('pick','word');}
+  if(k==='rev'){if(fixDue().length){fixOpen(null,'지난 통화 교정');}else if(wrongIds().length)startReview();else startDaily('pick','word');}
   else if(k==='fill')startDaily('fill','word');
   else if(k==='ear'){goTab('p0');selectView('rp');try{callOpen(ntCallKey());}catch(e){startDaily('number','word');}}
   else if(k==='num')startDaily('number','word');
