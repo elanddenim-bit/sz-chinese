@@ -811,7 +811,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#EFE8DE" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:#CFE0F3;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.15.1</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.15.2</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -4635,6 +4635,23 @@ const W7=[
 ["反馈","fǎn kuì","피드백(하다)"]
 ];
 W7.forEach(function(w,i){var id='w7-'+i;ITEMS[id]={id:id,kind:'word',lv:'biz',z:w[0],p:w[1],k:w[2]};W7_IDS.push(id);});
+// 생활 현지어 — 아파트 입주민 단톡방 등 실제 대화에서 (추가는 배열 끝에)
+const W8=[
+["干嘛","gàn má","뭐 해, 뭐 하는 거야(구어)"],
+["霸着","bà zhe","독차지하고 안 놓다"],
+["霸着电梯","bà zhe diàn tī","엘리베이터를 잡고 안 놓다"],
+["一直霸着电梯不下来","yì zhí bà zhe diàn tī bú xià lái","계속 엘리베이터를 잡고 안 내려와요"],
+["监控","jiān kòng","CCTV·감시 카메라"],
+["麻烦看一下监控","má fan kàn yí xià jiān kòng","번거롭겠지만 CCTV 좀 봐 주세요"],
+["物业","wù yè","관리사무소"],
+["物业管家","wù yè guǎn jiā","관리사무소 담당 직원"],
+["业主","yè zhǔ","입주민·집주인"],
+["业主群","yè zhǔ qún","입주민 단톡방"],
+["小区","xiǎo qū","아파트 단지"],
+["抢修","qiǎng xiū","긴급 수리하다"],
+["是师傅在抢修","shì shī fu zài qiǎng xiū","기사님이 긴급 수리 중이에요"]
+];
+W8.forEach(function(w,i){var id='w8-'+i;ITEMS[id]={id:id,kind:'word',lv:'biz',z:w[0],p:w[1],k:w[2]};W7_IDS.push(id);});
 const VOCAB_BY_ZH={};
 W4_IDS.concat(W5_IDS,W301_IDS,W7_IDS).forEach(id=>{VOCAB_BY_ZH[ITEMS[id].z]=id;});
 
@@ -6982,7 +6999,7 @@ document.getElementById('qzSel').addEventListener('click',function(){
 // ---- 단어장 시트 ----
 document.getElementById('wfSel').addEventListener('click',function(){
   var h='<h4>단어장</h4><div class="optgrid c1">'
-    +[[4,'HSK 4급','509단어',cssv('lv4')],[5,'HSK 5급','1,316단어',cssv('lv5')],[301,'회화 301구','810단어',cssv('c3')],['biz','실무 어휘','소싱·무역 46',cssv('c5')],['my','내 단어',(typeof MY_IDS!=='undefined'?MY_IDS.length:0)+'단어 · 사진에서 추가',cssv('c1')]]
+    +[[4,'HSK 4급','509단어',cssv('lv4')],[5,'HSK 5급','1,316단어',cssv('lv5')],[301,'회화 301구','810단어',cssv('c3')],['biz','실무 어휘','소싱·무역·생활 '+W7_IDS.length,cssv('c5')],['my','내 단어',(typeof MY_IDS!=='undefined'?MY_IDS.length:0)+'단어 · 사진에서 추가',cssv('c1')]]
       .map(function(o){return '<button class="obtn'+(curLv===o[0]?' on':'')+'" data-lv="'+o[0]+'" style="--o-color:'+o[3]+';--o-bg:#fff"><span class="ot">'+o[1]+'<span class="osub">'+o[2]+'</span></span></button>';}).join('')
     +'</div>';
   openSheet(h);
