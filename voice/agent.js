@@ -307,9 +307,28 @@ function pcmPull(P,out){var N=out.length,i=0;
 function pcmStop(P){if(!P)return;P.r=0;P.w=0;P.on=false;P.left=null;}
 function pcmBusy(P){return !!P&&(P.on||P.w-P.r>1);}
 function pcmLeftMs(P){return P?Math.max(0,(P.w-P.r)/24000*1000):0;}
-function play(d){pcmPush(S.pl,d);}
-function stopPlay(){pcmStop(S.pl);}
-function speaking(){return pcmBusy(S.pl);}
+// 2026-10-28 소유자 '여전히 지지직': 재생을 마이크 처리 노드(메인 스레드)에서 빼서 AudioWorklet(오디오 스레드)로 — 화면 갱신·base64 처리로 메인이 밀리면 출력이 끊겨 지지직.
+// 선버퍼 250ms, 중간에 바닥나면 다음부터 100ms씩 늘림(최대 600ms). AudioWorklet 없는 브라우저는 예전 방식(pcmPull).
+var WK=['class P extends AudioWorkletProcessor{constructor(o){super();this.rate=o.processorOptions.rate;this.N=24000*90;this.b=new Float32Array(this.N);this.r=0;this.w=0;this.on=false;this.g=0;this.done=false;this.pre=6000;this.last=0;this.gen=0;this.k=0;',
+'this.port.onmessage=e=>{const m=e.data;if(m.t==="p"){const d=m.d,N=this.N;if(this.w+d.length-this.r>N-2)return;for(let i=0;i<d.length;i++)this.b[(this.w+i)%N]=d[i];this.w+=d.length;}else if(m.t==="s"){this.r=0;this.w=0;this.on=false;this.gen=m.g;}else if(m.t==="d"){this.done=m.v;}};}',
+'process(_,outs){const o=outs[0][0],L=o.length,N=this.N;let i=0;',
+'if(!this.on){const a=this.w-this.r;if(a>=this.pre||(this.done&&a>1)){this.on=true;this.g=0;}}',
+'if(this.on){for(;i<L;i++){const x=Math.floor(this.r);if(x+1>=this.w){this.on=false;if(!this.done)this.pre=Math.min(14400,this.pre+2400);break;}const f=this.r-x,a=this.b[x%N],c=this.b[(x+1)%N];if(this.g<1)this.g=Math.min(1,this.g+1/240);o[i]=(a+(c-a)*f)*this.g;this.r+=this.rate;}if(i)this.last=o[i-1];}',
+'for(;i<L;i++){this.last*=0.97;o[i]=this.last;}',
+'if(!this.on&&this.w-this.r<=1&&this.w>0){this.r=0;this.w=0;}',
+'if(++this.k%8===0)this.port.postMessage({g:this.gen,left:Math.max(0,this.w-this.r),on:this.on});return true;}}',
+'registerProcessor("pb-out",P);'].join('\n');
+async function mkOut(ctx){try{if(!ctx.audioWorklet||!window.AudioWorkletNode)return null;var u=URL.createObjectURL(new Blob([WK],{type:'application/javascript'}));await ctx.audioWorklet.addModule(u);
+  var n=new AudioWorkletNode(ctx,'pb-out',{numberOfInputs:0,numberOfOutputs:1,outputChannelCount:[1],processorOptions:{rate:24000/ctx.sampleRate}});
+  var O={n:n,gen:0,left:0,on:false,pend:0,left1:null};n.port.onmessage=function(e){var m=e.data;if(m.g!==O.gen)return;O.left=m.left;O.on=m.on;O.pend=0;};n.connect(ctx.destination);return O;}catch(e){return null;}}
+function wPush(O,d){var bin=atob(d),L=bin.length+(O.left1!=null?1:0),a=new Uint8Array(L),o=0;if(O.left1!=null){a[0]=O.left1;o=1;O.left1=null;}for(var k=0;k<bin.length;k++)a[o+k]=bin.charCodeAt(k);
+  if(L%2){O.left1=a[L-1];L--;}var n=L>>1;if(!n)return;var f=new Float32Array(n);for(var i=0;i<n;i++){var v=a[2*i]|(a[2*i+1]<<8);if(v>=0x8000)v-=0x10000;f[i]=v/0x8000;}
+  O.pend+=n;O.n.port.postMessage({t:'p',d:f},[f.buffer]);}
+function play(d){if(S.out)wPush(S.out,d);else pcmPush(S.pl,d);}
+function stopPlay(){if(S.out){var O=S.out;O.gen++;O.left=0;O.on=false;O.pend=0;O.left1=null;O.n.port.postMessage({t:'s',g:O.gen});}else pcmStop(S.pl);}
+function speaking(){if(S&&S.out)return S.out.on||S.out.left>1||S.out.pend>0;return pcmBusy(S&&S.pl);}
+function leftMs(){if(S&&S.out)return (S.out.left+S.out.pend)/24;return pcmLeftMs(S&&S.pl);}
+function setDone(v){if(S.out){S.out.n.port.postMessage({t:'d',v:v});if(!v)S.out.left1=null;}else{S.pl.done=v;if(!v)S.pl.left=null;}}
 function send(o){if(S&&S.ws&&S.ws.readyState===1)S.ws.send(JSON.stringify(o));}
 function ev(e){
   var t=e.type;
@@ -319,11 +338,11 @@ function ev(e){
   if(t==='input_audio_buffer.speech_stopped'){S.me=add('me','…');say('생각하는 중…');return;}
   if(t==='conversation.item.input_audio_transcription.completed'){if(S.me){S.me.textContent=e.transcript||'(인식 안 됨)';S.me=null;}else add('me',e.transcript||'');return;}
   if(t==='agent.tool'){add('tool','🔧 '+e.label);say('찾아보는 중…');return;}
-  if(t==='response.created'){S.resp=true;S.cur=null;S.pl.left=null;S.pl.done=false;return;}
+  if(t==='response.created'){S.resp=true;S.cur=null;setDone(false);return;}
   if(t==='response.audio_transcript.delta'){if(!S.cur)S.cur=add('ai','');S.cur.textContent+=e.delta||'';log.scrollTop=log.scrollHeight;return;}
   if(t==='response.audio_transcript.done'){if(S.cur&&e.transcript)S.cur.textContent=e.transcript;return;}
   if(t==='response.audio.delta'){if(e.delta)play(e.delta);say('🔊');return;}
-  if(t==='response.done'){S.resp=false;S.pl.done=true;setTimeout(function(){if(S&&!S.resp)say('말씀하세요');},pcmLeftMs(S.pl)+250);return;}
+  if(t==='response.done'){S.resp=false;setDone(true);setTimeout(function(){if(S&&!S.resp)say('말씀하세요');},leftMs()+400);return;}
   if(t==='error'){add('tool','⚠ '+((e.error&&(e.error.message||e.error.code))||'오류'));return;}
   if(t==='relay.closed'){end();}
 }
@@ -333,9 +352,10 @@ async function start(){
   catch(e){say('마이크 권한이 필요합니다');ctx.close();return;}
   S={ctx:ctx,stream:stream,pl:mkPcm(ctx.sampleRate),ready:false,resp:false,barge:document.getElementById('barge').checked};
   var src=ctx.createMediaStreamSource(stream),pr=ctx.createScriptProcessor(4096,1,1);
-  pr.onaudioprocess=function(e){pcmPull(S&&S.pl,e.outputBuffer.getChannelData(0));if(!S||!S.ready)return;if(!S.barge&&(S.resp||speaking()))return;
+  pr.onaudioprocess=function(e){var ob=e.outputBuffer.getChannelData(0);if(S&&S.out)ob.fill(0);else pcmPull(S&&S.pl,ob);if(!S||!S.ready)return;if(!S.barge&&(S.resp||speaking()))return;
     send({type:'input_audio_buffer.append',audio:b64(down(e.inputBuffer.getChannelData(0),ctx.sampleRate))});};
   src.connect(pr);pr.connect(ctx.destination);S.pr=pr;S.src=src;
+  S.out=await mkOut(ctx);if(!S)return;
   var ws=new WebSocket(location.origin.replace(/^http/,'ws')+'/agent?code='+encodeURIComponent(CODE));S.ws=ws;
   ws.onmessage=function(m){var e;try{e=JSON.parse(m.data)}catch(_){return}ev(e);};
   ws.onerror=function(){say('서버 연결 실패');};
@@ -343,7 +363,7 @@ async function start(){
   if(navigator.geolocation)navigator.geolocation.getCurrentPosition(function(p){var g=p.coords.longitude.toFixed(6)+','+p.coords.latitude.toFixed(6);var k=setInterval(function(){if(ws.readyState===1){ws.send(JSON.stringify({type:'agent.gps',loc:g}));clearInterval(k);}},300);},function(){}, {timeout:8000,maximumAge:120000});
   mic.classList.add('on');mic.textContent='■';say('연결 중…');
 }
-function end(){if(!S)return;var s=S;S=null;try{s.ws.close()}catch(e){}try{s.pr.disconnect();s.src.disconnect()}catch(e){}
+function end(){if(!S)return;var s=S;S=null;try{s.ws.close()}catch(e){}try{s.pr.disconnect();s.src.disconnect()}catch(e){}try{s.out&&s.out.n.disconnect()}catch(e){}
   try{s.stream.getTracks().forEach(function(t){t.stop()})}catch(e){}try{s.ctx.close()}catch(e){}
   mic.classList.remove('on');mic.textContent='🎙';say('');}
 mic.onclick=function(){S?end():start();};
