@@ -20,6 +20,7 @@ export const AGENT_TOOLS = [
     start: { type: "string", description: "出发地：地址簿里的地点名称，或者 '当前位置'" },
     stops: { type: "array", items: { type: "string" }, description: "要去的地点名称列表（1~9个）" },
   }, ["start", "stops"]),
+  fn("biz_trips", "用户自己的出差日程（出差简报里登记的：日期、飞机/高铁/车/当地、出发到达城市、时间、航班车次、出发机场车站、座位、酒店、会议备注）。问出差、明天去哪、几点的飞机、住哪里时调用。", { date: { type: "string", description: "要查的日期 YYYY-MM-DD；不给则返回今天起14天内的全部日程" } }, []),
   fn("trip_info", "用户一家的西班牙旅行（2026年12月23日~2027年1月1日）日程和距离出发还有几天。", {}, []),
   fn("now", "现在的日期、星期和时间（广州时间）。", {}, []),
 ];
@@ -30,7 +31,9 @@ function fn(name, description, properties, required) {
 export const AGENT_PROMPT = [
   "你是用户的私人语音秘书，名字叫「박비서」。用户是住在广州的韩国人，E·LAND 广州深圳分公司负责人（朴总）。",
   "用户主要说韩语。你必须用韩语回答，口语、简短，一般一到两句；数字、时间、金额要说清楚。",
-  "需要天气、汇率、地点、路线、旅行日程、当前时间这些信息时，一定先调用工具，不要猜，不要编造。",
+  "需要天气、汇率、地点、路线、出差日程、西班牙旅行日程、当前时间这些信息时，一定先调用工具，不要猜，不要编造。",
+  "用户说「出差」「明天去哪」「几点的飞机」等指的是 biz_trips（用户在박비서出差简报里登记的日程），不是西班牙家庭旅行（trip_info）。说到「明天」「后天」先用 now 确认日期。",
+  "用户常去中国城市出差（宁波、济南、深圳等）。语音识别可能把中国城市听成外国城市（例如 닝보→리스본），城市名和对话不符时先看 biz_trips 或向用户确认，再查天气。",
   "工具返回失败或找不到时，直接告诉用户没找到，并建议换个说法。",
   "不要说你是AI模型，不要长篇解释。",
 ].join("\n");
@@ -41,7 +44,7 @@ export async function agentAsk(env, b, h) {
   const text = String(b.text || "").trim().slice(0, 500);
   if (!text) return { ok: false, error: "empty", reply: "무엇을 도와드릴까요?" };
   const host = (env.DASHSCOPE_WS_HOST || "dashscope.aliyuncs.com").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
-  const sess = { gps: /^-?\d+\.\d+,-?\d+\.\d+$/.test(String(b.gps || "")) ? String(b.gps) : "", tools: {} };
+  const sess = { h, gps: /^-?\d+\.\d+,-?\d+\.\d+$/.test(String(b.gps || "")) ? String(b.gps) : "", tools: {} };
   const messages = [{ role: "system", content: AGENT_PROMPT + "\n这是文字问答（Siri 快捷指令），回答会被朗读：只用纯文本，不用 markdown、列表、表情符号，两句以内。" }, { role: "user", content: text }];
   const model = env.AGENT_TEXT_MODEL || env.QUEST_MODEL || "qwen3.8-flash";
   let reply = "";
@@ -73,6 +76,7 @@ export async function agentAsk(env, b, h) {
 export async function runTool(env, sess, name, args) {
   try {
     if (name === "now") return nowText();
+    if (name === "biz_trips") return await bizTrips(env, sess, String(args.date || ""));
     if (name === "trip_info") return await tripText(env);
     if (name === "get_weather") return await weather(String(args.city || ""));
     if (name === "convert_currency") return await fx(Number(args.amount), String(args.from || ""), String(args.to || ""));
@@ -87,6 +91,22 @@ function nowText() {
   const d = new Date(Date.now() + 8 * 3600e3);
   const w = "日一二三四五六"[d.getUTCDay()];
   return "广州时间 " + d.toISOString().slice(0, 16).replace("T", " ") + "，星期" + w;
+}
+// 출장 일정: 출장 브리핑(brief.js)에 넣은 일정을 그대로 읽음(KV brief:<코드 해시>) — 2026-10-28 소유자 '박비서가 출장 스케줄을 모름'
+const HOWK = { plane: "비행기", train: "고속철", car: "차", stay: "현지" };
+async function bizTrips(env, sess, date) {
+  if (!sess.h) return "无法识别用户（缺少邀请码），读不到出差日程。";
+  const doc = await env.KV.get("brief:" + sess.h, "json").catch(() => null);
+  const all = (doc && Array.isArray(doc.trips)) ? doc.trips : [];
+  const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+  const end = new Date(Date.parse(today) + 14 * 86400e3).toISOString().slice(0, 10);
+  const list = /^\d{4}-\d{2}-\d{2}$/.test(date) ? all.filter((x) => x.d === date) : all.filter((x) => x.d >= today && x.d <= end);
+  if (!list.length) return (date ? date + " 没有登记的出差日程。" : "今天起14天内没有登记的出差日程。") + "（今天 " + today + "）";
+  return "今天 " + today + "。出差日程（按此回答，不要编造）：\n" + list.map((x) => [
+    x.d, HOWK[x.how] || x.how, x.how === "stay" ? (x.to || x.from) : (x.from || "") + "→" + (x.to || ""),
+    x.t ? "출발 " + x.t : "", x.arr ? "도착 " + x.arr : "", x.no, x.dep ? "출발지 " + x.dep : "", x.seat ? "좌석 " + x.seat : "",
+    x.go ? "집 출발 " + x.go : "", x.stay ? "숙소 " + x.stay : "", x.meet ? "메모 " + x.meet.slice(0, 120) : "",
+  ].filter(Boolean).join(" · ")).join("\n");
 }
 // 스페인 일정: 사본을 들고 있지 않고 threepark-spain 의 /api/trip 을 서비스 바인딩(SPAIN)으로 읽음(2026-10-19)
 // 못 읽으면 KV trip:spain(마지막 성공 응답), 그것도 없으면 못 불러왔다고 답함

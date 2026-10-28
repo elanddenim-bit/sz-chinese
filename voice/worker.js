@@ -289,7 +289,7 @@ async function realtime(req, env, ctx, url, agent) {
     ]));
   };
   const timer = setTimeout(() => end("time_limit"), limit * 1000);
-  const sess = {};
+  const sess = { h: who };
   const toUp = (o) => { try { ws.send(JSON.stringify(o)); } catch { end("upstream_send"); } };
   const toDown = (o) => { try { server.send(JSON.stringify(o)); } catch {} };
   server.addEventListener("message", (e) => {
@@ -334,7 +334,7 @@ async function realtime(req, env, ctx, url, agent) {
   return new Response(null, { status: 101, webSocket: client });
 }
 
-const TOOL_LABEL = { get_weather: "날씨 조회", convert_currency: "환율 계산", find_place: "주소록 검색", plan_route: "동선 계산(高德)", trip_info: "스페인 일정", now: "현재 시각" };
+const TOOL_LABEL = { get_weather: "날씨 조회", convert_currency: "환율 계산", find_place: "주소록 검색", plan_route: "동선 계산(高德)", biz_trips: "출장 일정", trip_info: "스페인 일정", now: "현재 시각" };
 
 // ---------------- 내 목소리 (CosyVoice 음성 복제) ----------------
 const ttsModel = (env) => env.TTS_MODEL || "cosyvoice-v3.5-plus";
