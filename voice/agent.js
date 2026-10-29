@@ -21,6 +21,12 @@ export const AGENT_TOOLS = [
     stops: { type: "array", items: { type: "string" }, description: "要去的地点名称列表（1~9个）" },
   }, ["start", "stops"]),
   fn("biz_trips", "用户自己的出差日程（出差简报里登记的：日期、飞机/高铁/车/当地、出发到达城市、时间、航班车次、出发机场车站、座位、酒店、会议备注）。问出差、明天去哪、几点的飞机、住哪里时调用。", { date: { type: "string", description: "要查的日期 YYYY-MM-DD；不给则返回今天起14天内的全部日程" } }, []),
+  fn("leave_time", "计算最晚几点出门才能赶上飞机/高铁（代码计算，规则：飞机起飞前90分钟到机场、国际航班150分钟，高铁开车前30分钟到站，再加路上时间和10分钟余量）。用户问几点出发/几点出门/来不来得及时必须调用，不要自己算。", {
+    depart: { type: "string", description: "飞机起飞或高铁开车时间 HH:MM（24小时制）" },
+    how: { type: "string", enum: ["plane", "train"], description: "plane 飞机 / train 高铁" },
+    travel_min: { type: "number", description: "从出发地到机场/车站路上要几分钟（用户说的或估计）" },
+    intl: { type: "boolean", description: "是否国际航班" },
+  }, ["depart", "how", "travel_min"]),
   fn("trip_info", "用户一家的西班牙旅行（2026年12月23日~2027年1月1日）日程和距离出发还有几天。", {}, []),
   fn("now", "现在的日期、星期和时间（广州时间）。", {}, []),
 ];
@@ -34,6 +40,7 @@ export const AGENT_PROMPT = [
   "需要天气、汇率、地点、路线、出差日程、西班牙旅行日程、当前时间这些信息时，一定先调用工具，不要猜，不要编造。",
   "用户说「出差」「明天去哪」「几点的飞机」等指的是 biz_trips（用户在박비서出差简报里登记的日程），不是西班牙家庭旅行（trip_info）。说到「明天」「后天」先用 now 确认日期。",
   "用户常去中国城市出差（宁波、济南、深圳等）。语音识别可能把中国城市听成外国城市（例如 닝보→리스본），城市名和对话不符时先看 biz_trips 或向用户确认，再查天气。",
+  "几点出门、几点出发、来不来得及：一定调用 leave_time（路上时间用用户说的分钟数），按结果回答；绝不能用起飞时间减路上时间就当出门时间。用户质疑时间时，重新调用工具核对，不要只道歉随口改数字。",
   "工具返回失败或找不到时，直接告诉用户没找到，并建议换个说法。",
   "不要说你是AI模型，不要长篇解释。",
 ].join("\n");
@@ -76,6 +83,7 @@ export async function agentAsk(env, b, h) {
 export async function runTool(env, sess, name, args) {
   try {
     if (name === "now") return nowText();
+    if (name === "leave_time") return leaveTime(args);
     if (name === "biz_trips") return await bizTrips(env, sess, String(args.date || ""));
     if (name === "trip_info") return await tripText(env);
     if (name === "get_weather") return await weather(String(args.city || ""));
@@ -92,6 +100,20 @@ function nowText() {
   const w = "日一二三四五六"[d.getUTCDay()];
   return "广州时间 " + d.toISOString().slice(0, 16).replace("T", " ") + "，星期" + w;
 }
+// 출발 시각 계산(2026-10-29 소유자: 17:50 비행기에 공항 10분 거리라고 하자 '17:40 출발'이라고 답함) — 모델이 직접 빼지 않고 코드가 계산
+const STATION = { plane: 90, train: 30 }, CLOSE = { plane: 45, train: 5 };
+const hm = (m) => { m = ((m % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
+const toMin = (t) => { const m = /^(\d{1,2})[:：](\d{2})$/.exec(String(t || "").trim()); return m ? +m[1] * 60 + +m[2] : null; };
+function leaveTime(a) {
+  const how = a.how === "train" ? "train" : "plane", d = toMin(a.depart);
+  if (d == null) return "出发时间格式不对，需要 HH:MM。";
+  const buf = how === "plane" ? (a.intl ? 150 : STATION.plane) : STATION.train, trav = Math.max(0, Math.round(Number(a.travel_min) || 0));
+  const arrive = d - buf, leave = arrive - trav - 10, close = d - (how === "plane" ? (a.intl ? 60 : CLOSE.plane) : CLOSE.train);
+  return "计算结果（照此回答，不要改数字）：" + (how === "plane" ? "飞机 " : "高铁 ") + hm(d) + " 出发。"
+    + "最晚 " + hm(leave) + " 出门（路上 " + trav + " 分钟 + 余量10分钟）→ " + hm(arrive) + " 前到" + (how === "plane" ? "机场" : "车站") + "（提前 " + buf + " 分钟）。"
+    + (how === "plane" ? "值机/托运截止约 " + hm(close) + "。" : "检票截止约 " + hm(close) + "。")
+    + "绝对来不及的底线：" + hm(close - trav) + " 之后才出门就很可能赶不上。";
+}
 // 출장 일정: 출장 브리핑(brief.js)에 넣은 일정을 그대로 읽음(KV brief:<코드 해시>) — 2026-10-28 소유자 '박비서가 출장 스케줄을 모름'
 const HOWK = { plane: "비행기", train: "고속철", car: "차", stay: "현지" };
 async function bizTrips(env, sess, date) {
@@ -104,7 +126,7 @@ async function bizTrips(env, sess, date) {
   if (!list.length) return (date ? date + " 没有登记的出差日程。" : "今天起14天内没有登记的出差日程。") + "（今天 " + today + "）";
   return "今天 " + today + "。出差日程（按此回答，不要编造）：\n" + list.map((x) => [
     x.d, HOWK[x.how] || x.how, x.how === "stay" ? (x.to || x.from) : (x.from || "") + "→" + (x.to || ""),
-    x.t ? "출발 " + x.t : "", x.arr ? "도착 " + x.arr : "", x.no, x.dep ? "출발지 " + x.dep : "", x.seat ? "좌석 " + x.seat : "",
+    x.t ? "출발 " + x.t : "", (x.t && STATION[x.how]) ? (x.how === "plane" ? "공항" : "역") + " 도착 권장 " + hm(toMin(x.t) - STATION[x.how]) + "(" + STATION[x.how] + "분 전)" : "", x.arr ? "도착 " + x.arr : "", x.no, x.dep ? "출발지 " + x.dep : "", x.seat ? "좌석 " + x.seat : "",
     x.go ? "집 출발 " + x.go : "", x.stay ? "숙소 " + x.stay : "", x.meet ? "메모 " + x.meet.slice(0, 120) : "",
   ].filter(Boolean).join(" · ")).join("\n");
 }
