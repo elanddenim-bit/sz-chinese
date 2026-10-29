@@ -811,7 +811,7 @@
   <svg class="logo-sym" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="30" height="30"><path d="M16 8H48A8 8 0 0 1 56 16V40A8 8 0 0 1 48 48H27L14 58L15.5 48H16A8 8 0 0 1 8 40V16A8 8 0 0 1 16 8Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path><path d="M22 28H26M38 28H42" fill="none" stroke="#EFE8DE" stroke-width="4.5" stroke-linecap="round"></path></svg>
   <div style="flex:1">
     <div style="color:#CFE0F3;font-size:11.5px;letter-spacing:0.5px">광저우 지사장의</div>
-    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.15.2</span></div>
+    <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-0.3px;margin-top:1px">실전 중국어 <span style="color:#EFE8DE;font-size:11px;font-weight:700;vertical-align:2px">BETA 3.15.3</span></div>
   </div>
   <div class="hstat" id="hstat">오늘 0문<br>정답률 –</div>
 </header>
@@ -890,6 +890,7 @@
   <button class="bigbtn" id="btnFrm" style="background:#1E7F4F;margin-bottom:8px" onclick="frmOpen()">🧩 문장 틀 말하기</button>
   <button class="bigbtn" style="background:var(--navy);margin-bottom:8px" onclick="wallOpen()">📱 잠금화면에 띄우기</button>
   <button class="bigbtn" style="background:#0F4A86;margin-bottom:8px" onclick="hfCommute()">🚗 출근길 듣기 — 화면 안 보고 말하기</button>
+  <button class="bigbtn" style="background:#B8860B;margin-bottom:8px" onclick="hfDidi()">🚕 디디 듣기 — 앱·기사님 말 귀 트이기</button>
   <button class="bigbtn" id="btnReview">오답 복습 퀴즈 시작</button>
   <div class="scenario-note">틀린 문장·단어는 자동으로 여기에 쌓입니다. 복습 퀴즈에서 <b>연속 2회 정답</b>이면 목록에서 빠지고 마스터로 기록됩니다.</div>
   <div id="rvList"></div>
@@ -6021,6 +6022,49 @@ function ndFinish(){
 }
 
 
+// 🚕 디디 듣기 팩(2026-10-29 소유자 '디디에서 나오는 말을 모아 귀 트이게') — 앱 안내·기사 전화·차 안·하차 순. 추가는 배열 끝에
+const DIDI_LISTEN=[
+["正在为您寻找附近的司机，请稍候。","zhèngzài wèi nín xúnzhǎo fùjìn de sījī, qǐng shāohòu.","근처 기사님을 찾고 있습니다. 잠시만 기다려 주세요."],
+["司机已接单，正在赶来。","sījī yǐ jiēdān, zhèngzài gǎnlái.","기사님이 배차를 수락해 오는 중입니다."],
+["司机预计三分钟后到达上车点。","sījī yùjì sān fēnzhōng hòu dàodá shàngchēdiǎn.","기사님이 약 3분 뒤 탑승 지점에 도착합니다."],
+["司机已到达上车点，请尽快上车。","sījī yǐ dàodá shàngchēdiǎn, qǐng jǐnkuài shàngchē.","기사님이 탑승 지점에 도착했습니다. 빨리 탑승해 주세요."],
+["请核对车牌号后再上车。","qǐng héduì chēpáihào hòu zài shàngchē.","차량 번호를 확인한 뒤 탑승하세요."],
+["司机已等待两分钟，超时可能产生等待费。","sījī yǐ děngdài liǎng fēnzhōng, chāoshí kěnéng chǎnshēng děngdàifèi.","기사님이 2분째 기다리고 있습니다. 시간을 넘기면 대기 요금이 붙을 수 있습니다."],
+["行程已开始，请系好安全带。","xíngchéng yǐ kāishǐ, qǐng jìhǎo ānquándài.","운행을 시작합니다. 안전벨트를 매 주세요."],
+["本次行程已开启全程录音。","běn cì xíngchéng yǐ kāiqǐ quánchéng lùyīn.","이번 운행은 전 구간 녹음됩니다."],
+["即将到达目的地，请带好随身物品。","jíjiāng dàodá mùdìdì, qǐng dàihǎo suíshēn wùpǐn.","곧 목적지에 도착합니다. 소지품을 챙기세요."],
+["行程已结束，请确认费用并支付。","xíngchéng yǐ jiéshù, qǐng quèrèn fèiyòng bìng zhīfù.","운행이 끝났습니다. 요금을 확인하고 결제해 주세요."],
+["请为本次行程评价。","qǐng wèi běn cì xíngchéng píngjià.","이번 운행을 평가해 주세요."],
+["喂，你好，我是滴滴司机。","wéi, nǐ hǎo, wǒ shì Dīdī sījī.","여보세요, 디디 기사입니다."],
+["你在哪个门？","nǐ zài nǎge mén?","어느 문에 계세요?"],
+["我到了，你出来吧。","wǒ dào le, nǐ chūlái ba.","도착했어요, 나오세요."],
+["我在路边停着，打着双闪。","wǒ zài lùbiān tíngzhe, dǎzhe shuāngshǎn.","길가에 비상등 켜고 서 있어요."],
+["这里不能停车，我在前面路口等你。","zhèlǐ bù néng tíngchē, wǒ zài qiánmiàn lùkǒu děng nǐ.","여기는 정차가 안 돼서 앞 교차로에서 기다릴게요."],
+["你那个定位不准，你发个位置给我。","nǐ nàge dìngwèi bù zhǔn, nǐ fā ge wèizhì gěi wǒ.","위치가 정확하지 않네요, 위치 좀 보내 주세요."],
+["保安不让进，你走出来一点。","bǎo'ān bú ràng jìn, nǐ zǒu chūlái yìdiǎn.","경비가 못 들어가게 해요, 조금만 걸어 나오세요."],
+["前面堵车，我晚两分钟到。","qiánmiàn dǔchē, wǒ wǎn liǎng fēnzhōng dào.","앞이 막혀서 2분 늦게 도착해요."],
+["你手机尾号多少？","nǐ shǒujī wěihào duōshao?","휴대폰 끝 번호가 몇 번이세요?"],
+["尾号是几？我核对一下。","wěihào shì jǐ? wǒ héduì yíxià.","끝 번호가 뭐예요? 확인 좀 할게요."],
+["是去白云区那边吗？","shì qù Báiyún Qū nàbiān ma?","바이윈구 쪽 가시는 거죠?"],
+["按导航走可以吗？","àn dǎoháng zǒu kěyǐ ma?","내비 따라가도 될까요?"],
+["走高速还是走下面？","zǒu gāosù háishi zǒu xiàmiàn?","고속도로로 갈까요, 아래 길로 갈까요?"],
+["走高速要过路费，你确定吗？","zǒu gāosù yào guòlùfèi, nǐ quèdìng ma?","고속도로는 통행료가 있는데 괜찮으세요?"],
+["空调温度可以吗？","kōngtiáo wēndù kěyǐ ma?","에어컨 온도 괜찮으세요?"],
+["后排也要系安全带。","hòupái yě yào jì ānquándài.","뒷좌석도 안전벨트 매셔야 해요."],
+["这个点儿高峰，有点堵。","zhège diǎnr gāofēng, yǒudiǎn dǔ.","지금 출퇴근 시간이라 좀 막혀요."],
+["前面修路，要绕一下。","qiánmiàn xiūlù, yào rào yíxià.","앞에 공사 중이라 좀 돌아가야 해요."],
+["你是韩国人吧？来广州多久了？","nǐ shì Hánguórén ba? lái Guǎngzhōu duōjiǔ le?","한국 분이시죠? 광저우 오신 지 얼마나 됐어요?"],
+["在哪儿停？门口还是地下车库？","zài nǎr tíng? ménkǒu háishi dìxià chēkù?","어디 세워 드릴까요? 입구요, 지하 주차장이요?"],
+["这里不能停太久，你快点下。","zhèlǐ bù néng tíng tài jiǔ, nǐ kuàidiǎn xià.","여기 오래 못 세워요, 빨리 내리세요."],
+["下车注意后面的电动车。","xiàchē zhùyì hòumiàn de diàndòngchē.","내릴 때 뒤에 오는 전동 스쿠터 조심하세요."],
+["东西都拿好了吗？","dōngxi dōu náhǎo le ma?","물건 다 챙기셨어요?"],
+["麻烦给个五星好评，谢谢。","máfan gěi ge wǔ xīng hǎopíng, xièxie.","별 다섯 개 좋은 평가 부탁드려요, 감사합니다."],
+["师傅，我在小区南门，你到了打我电话。","shīfu, wǒ zài xiǎoqū nánmén, nǐ dàole dǎ wǒ diànhuà.","기사님, 단지 남문에 있어요. 도착하면 전화 주세요."],
+["师傅，我马上下来，等我一分钟。","shīfu, wǒ mǎshàng xiàlái, děng wǒ yì fēnzhōng.","기사님, 금방 내려가요. 1분만 기다려 주세요."],
+["师傅，前面靠边停就行。","shīfu, qiánmiàn kàobiān tíng jiù xíng.","기사님, 앞에서 길가에 세워 주시면 돼요."],
+["师傅，开一下后备箱。","shīfu, kāi yíxià hòubèixiāng.","기사님, 트렁크 좀 열어 주세요."],
+["不好意思，我叫错地方了，可以改一下目的地吗？","bù hǎoyìsi, wǒ jiào cuò dìfang le, kěyǐ gǎi yíxià mùdìdì ma?","죄송한데 장소를 잘못 불렀어요. 목적지 바꿔도 될까요?"]
+];
 // ================= 핸즈프리 =================
 let hfCfg={mode:'shadow',src:0,speed:1.0}, hfRun=null;
 function hfSources(){
@@ -6028,6 +6072,7 @@ function hfSources(){
   SCEN_NAMES.forEach(function(n,i){out.push({id:'s'+i,label:n,sub:DATA[i].reduce(function(a,q){return a+1+q.a.length;},0)+'개 문장'});});
   out.unshift({id:'drill',label:'🧠 교정 문장 + 🧩 문장 틀',sub:'출근길용 — 내가 틀린 말과 현장 틀'});
   out.push({id:'wrong',label:'🔴 오늘 틀린 것',sub:'복습 대기에서'});
+  out.push({id:'didi',label:'🚕 디디 듣기 팩',sub:'앱 안내·기사 전화·차 안 — '+(DIDI_LISTEN.length)+'문장, 귀 트이기용'});
   out.push({id:'s301',label:'📗 기초 문장 301',sub:'301개'});
   return out;
 }
@@ -6043,6 +6088,7 @@ function hfLines(src){
       .filter(function(it){return it&&it.z;})
       .map(function(it){return {z:it.z,p:it.p,k:it.k};});
   }
+  if(src==='didi')return DIDI_LISTEN.map(function(w){return {z:w[0],p:w[1],k:w[2]};});
   if(src==='s301'){
     return S301.slice().sort(function(){return Math.random()-0.5;}).slice(0,40)
       .map(function(w){return {z:w[0],p:w[1],k:w[2]};});
@@ -6079,7 +6125,7 @@ function renderHandsFree(){
   area.querySelectorAll('[data-hs]').forEach(function(b){
     b.addEventListener('click',function(){
       var v=b.dataset.hs;
-      hfCfg.src=(v==='wrong'||v==='s301'||v==='drill')?v:parseInt(v.replace('s',''));
+      hfCfg.src=(v==='wrong'||v==='s301'||v==='drill'||v==='didi')?v:parseInt(v.replace('s',''));
       renderHandsFree();
     });
   });
@@ -6108,7 +6154,7 @@ function hfStart(){
   document.body.appendChild(wrap);
   const names={shadow:'쉐도잉 — 듣고 따라 말하세요',interp:'통역 — 중국어로 말해보세요',listen:'듣기만',commute:'🚗 출근길 — 뜻을 듣고 먼저 말해 보세요'};
   document.getElementById('hfMode').textContent=names[hfCfg.mode]||'';
-  document.getElementById('hfTtl').textContent=(typeof hfCfg.src==='number')?SCEN_NAMES[hfCfg.src]:({wrong:'오늘 틀린 것',drill:'교정 문장 + 문장 틀'}[hfCfg.src]||'기초 문장 301');
+  document.getElementById('hfTtl').textContent=(typeof hfCfg.src==='number')?SCEN_NAMES[hfCfg.src]:({wrong:'오늘 틀린 것',drill:'교정 문장 + 문장 틀',didi:'🚕 디디 듣기 팩'}[hfCfg.src]||'기초 문장 301');
   if(hfCfg.mode==='commute')try{var u0=new SpeechSynthesisUtterance(' ');u0.lang='ko-KR';u0.volume=0;speechSynthesis.speak(u0);}catch(e){} // iOS: 탭 흐름 안에서 한국어 음성 깨우기
   document.getElementById('hfClose').addEventListener('click',hfStop);
   document.getElementById('hfTap').addEventListener('click',hfToggle);
@@ -6251,6 +6297,7 @@ function hfJump(d){
   const b=document.getElementById('hfPause');if(b)b.textContent='⏸ 일시정지';
   hfStep();
 }
+function hfDidi(){uT('didi');hfCfg.mode='listen';hfCfg.src='didi';hfStart();}
 function hfCommute(){uT('commute');hfCfg.mode='commute';hfCfg.src='drill';hfStart();}
 function hfStop(){
   if(hfRun){clearTimeout(hfRun.timer);hfRun.playing=false;hfRun=null;}
