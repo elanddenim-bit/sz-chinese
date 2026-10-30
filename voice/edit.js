@@ -464,8 +464,13 @@ function firstFrame(v){return new Promise(function(ok){var done=false;function f
   else{(function chk(n){if(v.readyState>=3||n>20)return setTimeout(fin,40);setTimeout(function(){chk(n+1);},30);})(0);}
   setTimeout(fin,900);});}
 // 내레이션을 자막 토막으로: 문장부호 뒤에서 끊고, 긴 토막은 띄어쓰기 기준으로 반씩
+function subBrk(x){var best=-1,bd=1e9,U=['원','위안','달러','개','명','초','분','시간','살','층','번','km','kg','%'];for(var i=4;i<x.length-2;i++){if(x.charAt(i)!==' ')continue;var L=x.slice(0,i),R=x.slice(i+1),lt=L.slice(L.lastIndexOf(' ')+1),rt=R.split(' ')[0];
+  if(/[0-9]/.test(lt))continue;if(U.some(function(u){return rt.indexOf(u)===0;}))continue;var d=Math.abs(i-x.length/2)+(L.length>16||R.length>16?20:0);if(d<bd){bd=d;best=i;}}
+  if(best<0){best=x.lastIndexOf(' ',Math.ceil(x.length/2)+3);if(best<5)best=x.indexOf(' ',5);}return best;}
 function sayChunks(t){t=String(t||'').trim();if(!t)return [];var parts=t.replace(/([,.!?…，。！？~]+)(?![0-9])\s*/g,'$1\n').split('\n').map(function(x){return x.trim();}).filter(Boolean),out=[];
-  parts.forEach(function(x){while(x.length>18){var m=x.lastIndexOf(' ',Math.ceil(x.length/2)+3);if(m<6)m=x.indexOf(' ',6);if(m<0)break;out.push(x.slice(0,m));x=x.slice(m+1).trim();}if(x)out.push(x);});
+  parts.forEach(function(x){while(x.length>16){var m=subBrk(x);if(m<0)break;out.push(x.slice(0,m));x=x.slice(m+1).trim();}if(x)out.push(x);});
+  // 넷플릭스 한국어 자막 지침(2026-10-31 소유자): 한 토막 16자, 끝 마침표·쉼표 없음, 말줄임은 ...
+  out=out.map(function(x){x=x.split('…').join('...').trim();while(x.length&&'.,。，'.indexOf(x.charAt(x.length-1))>=0&&x.slice(-3)!=='...')x=x.slice(0,-1);return x.trim();}).filter(Boolean);
   var tot=out.reduce(function(a,x){return a+x.length+2;},0);return out.map(function(x){return {t:x,w:(x.length+2)/tot};});}
 // 자막 토막을 실제 내레이션의 숨 쉬는 자리(무음)에 맞춤 — 글자 수 비례만 쓰면 말과 자막이 어긋남(2026-10-12 소유자 지적)
 function alignW(buf,chs){if(!buf||!chs||chs.length<2)return chs;try{

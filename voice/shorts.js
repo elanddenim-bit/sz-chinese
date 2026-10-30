@@ -189,7 +189,9 @@ async function krw(env) {
   try { const j = await (await fetch("https://api.frankfurter.app/latest?from=CNY&to=KRW")).json(); return Math.round(j.rates.KRW); } catch { return 0; }
 }
 // 숏츠 멘트 말투(2026-10-12 소유자 '멘트가 너무 짜친다' — 감탄사·과장·이모지 범벅 금지)
-const TONE_RULES = "말투: 친구에게 폰 화면을 보여주며 옆에서 말하듯 1인칭 구어체(~해요·~더라고요·~거든요를 섞어서, 같은 어미 반복 금지). " +
+// 📏 자막 표기 — 넷플릭스 한국어 자막 지침 기준(2026-10-31 소유자 지정). 화면 글자(cap)·내레이션 자막(say)·영상 속 말 자막 전부
+const SUB_RULES = "자막 표기(넷플릭스 한국어 자막 지침 기준): 한 줄 16자 이내·최대 2줄, 읽기 속도 초당 12자 이내, 문장 끝 마침표는 찍지 않음(물음표·느낌표는 필요할 때만), 줄 끝 쉼표 금지, 말 흐림·머뭇거림은 '...'(점 세 개), 숫자는 아라비아 숫자(만 단위 이상은 '1만 2천 원'처럼 한글 단위 섞기), 띄어쓰기·맞춤법은 국립국어원 표준, 외래어는 국립국어원 외래어 표기법, 의미 단위로 끊고 조사·어미만 다음 줄로 넘기지 않음, 숫자와 단위·이름과 직함은 같은 줄. ";
+const TONE_RULES = SUB_RULES + "말투: 친구에게 폰 화면을 보여주며 옆에서 말하듯 1인칭 구어체(~해요·~더라고요·~거든요를 섞어서, 같은 어미 반복 금지). " +
   "금지어: 폭발, 미쳤다, 엄청나다, 대박, 역대급, 실화, 레전드, 찢었다, 난리, 무조건, 꼭 가세요. 느낌표 연발 금지. 이모지는 영상 전체에서 cap 1~2개까지만. " +
   "명사형 끝맺음(~함, ~옴, ~예쁨)과 메모체 금지 — 소리 내어 읽었을 때 자연스러운 완결 문장. " +
   "cap 은 감탄이 아니라 그 장면의 핵심 정보·대비·숫자·구체 명사(예: '지하철 나오자마자 이 줄'), say 는 cap 을 되풀이하지 말고 화면에 안 보이는 맥락·이유·내 느낌 한 가지만. " +
@@ -2129,6 +2131,14 @@ function loadImg(u){return new Promise(function(ok){if(!u)return ok(null);var im
 function loadVid(u){return new Promise(function(ok){if(!u)return ok(null);var v=document.createElement('video');v.muted=true;v.playsInline=true;v.setAttribute('playsinline','');v.loop=true;v.preload='auto';var done=false;v.oncanplaythrough=v.onloadeddata=function(){if(!done){done=true;ok(v);}};v.onerror=function(){if(!done){done=true;ok(null);}};v.src=u;v.load();setTimeout(function(){if(!done){done=true;ok(v.readyState>=2?v:null);}},15000);});}
 function decode(ac,ab){return new Promise(function(ok,no){try{var p=ac.decodeAudioData(ab,ok,no);if(p&&p.then)p.then(ok,no);}catch(e){no(e);}});}
 // 줄바꿈은 띄어쓰기 단위로(숫자·단어 중간에서 안 끊김: '2.5/6만원' 같은 오독 방지), 한 단어가 너무 길 때만 글자 단위
+// 넷플릭스 한국어 자막 지침: 한 토막 16자·2줄, 끝 마침표·쉼표 없음, 말줄임은 ...
+function subChunks(t){t=String(t||'').trim();var P=',.!?…，。！？~',parts=[],cur='';for(var i=0;i<t.length;i++){var c=t.charAt(i);cur+=c;if(P.indexOf(c)>=0&&P.indexOf(t.charAt(i+1))<0&&!(t.charAt(i+1)>='0'&&t.charAt(i+1)<='9')){parts.push(cur.trim());cur='';}}if(cur.trim())parts.push(cur.trim());
+  var out=[];parts.forEach(function(x){while(x.length>16){var m=subBrk(x);if(m<0)break;out.push(x.slice(0,m));x=x.slice(m+1).trim();}if(x)out.push(x);});
+  return out.map(subClean).filter(Boolean);}
+function subBrk(x){var best=-1,bd=1e9,U=['원','위안','달러','개','명','초','분','시간','살','층','번','km','kg','%'];for(var i=4;i<x.length-2;i++){if(x.charAt(i)!==' ')continue;var L=x.slice(0,i),R=x.slice(i+1),lt=L.slice(L.lastIndexOf(' ')+1),rt=R.split(' ')[0];
+  if(/[0-9]/.test(lt))continue;if(U.some(function(u){return rt.indexOf(u)===0;}))continue;var d=Math.abs(i-x.length/2)+(L.length>16||R.length>16?20:0);if(d<bd){bd=d;best=i;}}
+  if(best<0){best=x.lastIndexOf(' ',Math.ceil(x.length/2)+3);if(best<5)best=x.indexOf(' ',5);}return best;}
+function subClean(x){x=String(x||'').split('…').join('...').trim();while(x.length&&'.,。，'.indexOf(x.charAt(x.length-1))>=0&&x.slice(-3)!=='...')x=x.slice(0,-1);return x.trim();}
 function wrap(g,t,max){t=String(t||'');var out=[],cur='';function fits(x){return g.measureText(x).width<=max;}
   t.split(/ +/).forEach(function(w){if(!w)return;var n=cur?cur+' '+w:w;if(fits(n)){cur=n;return;}if(cur)out.push(cur);cur='';
     if(fits(w)){cur=w;return;}for(var i=0;i<w.length;i++){var m=cur+w[i];if(!fits(m)&&cur){out.push(cur);cur=w[i];}else cur=m;}});
@@ -2180,7 +2190,7 @@ async function render(){
     var gr=g.createLinearGradient(0,H*0.5,0,H);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(0,0,0,.6)');g.fillStyle=gr;g.fillRect(0,H*0.5,W,H*0.5);
     var sc=D.scenes[s.i];
     if(sc.cap){var pop=Math.min(1,(tt-s.t0)/0.18),fs=Math.round(68*(0.85+0.15*pop));g.font=fnt(fs);var cl=wrap(g,sc.cap,W-140);cl.forEach(function(l,k){stroke(l,W/2,H*0.20+k*(fs+12),fnt(fs),k===0&&s.i===0?'#FFD84D':'#FFFFFF',14);});}
-    if(sc.say){var f36=fnt(36);g.font=f36;var sl=wrap(g,sc.say,W-170).slice(0,4);sl.forEach(function(l,k){stroke(l,W/2-20,H*0.66+k*48-(sl.length-1)*24,f36,'#FFFFFF',9);});}
+    if(sc.say){var f36=fnt(36);g.font=f36;var sch=subChunks(sc.say),stot=sch.reduce(function(a,x){return a+x.length+2;},0),sacc=0,spick=sch[sch.length-1]||'';for(var si=0;si<sch.length;si++){sacc+=(sch[si].length+2)/stot;if(p<sacc){spick=sch[si];break;}}var sl=wrap(g,spick,W-170).slice(0,2);sl.forEach(function(l,k){stroke(l,W/2-20,H*0.66+k*48-(sl.length-1)*24,f36,'#FFFFFF',9);});}
     g.font=fnt(22);g.textAlign='left';g.fillStyle='rgba(255,255,255,.75)';g.fillText('📍 광저우 广州',30,60);
     var b=$('rb');if(b)b.style.width=Math.min(100,tt/total*100)+'%';
   }
@@ -2265,7 +2275,7 @@ async function asr(env, b, h) {
   const l = await recognize(env, pcm);
   let rows = [];
   if (l.length) {
-    const out = await qwen(env, [{ role: "user", content: "광저우에서 찍은 영상 속 현지인 말(표준 중국어 또는 광둥어)을 인식한 문장들이다. 한국 유튜브 숏츠 자막으로 옮겨라: 문장마다 자연스러운 한국어 구어체, 18자 이내, 상황을 모르면 직역보다 뜻 위주. 인식이 엉망인 잡음 문장은 빈 문자열.\n" +
+    const out = await qwen(env, [{ role: "user", content: "광저우에서 찍은 영상 속 현지인 말(표준 중국어 또는 광둥어)을 인식한 문장들이다. 한국 유튜브 숏츠 자막으로 옮겨라: 문장마다 자연스러운 한국어 구어체, 16자 이내(넷플릭스 한국어 자막 지침 — 문장 끝 마침표 없음, 말 흐림은 ...), 상황을 모르면 직역보다 뜻 위주. 인식이 엉망인 잡음 문장은 빈 문자열.\n" +
       l.map((x, i) => i + 1 + ". " + x.zh).join("\n") + '\nJSON만 출력: {"ko":["…"]} (순서·개수 그대로)' }], { model: env.SHORTS_MODEL || "qwen3.8-flash" });
     const ko = Array.isArray(out.ko) ? out.ko : [];
     rows = cleanAsr(l.map((x, i) => [x.t0, x.t1, x.zh, String(ko[i] || "")])).filter((x) => x[3]);
