@@ -28,9 +28,10 @@ export const APPS = {
   novel: { name: "우리 연재 소설", icon: "📖", f: { write: "한 화 쓰기", s_warm: "잔잔한 에세이", s_sitcom: "시트콤", s_noir: "하드보일드" } },
   signs: { name: "간판 사냥", icon: "🪧", f: { hunt: "간판 잡기", t_engrish: "엉뚱한 영어", t_pun: "말장난", t_big: "과장 광고", t_name: "희한한 이름", t_wisdom: "생활 명언", t_rule: "이상한 안내문", t_plain: "평범" } },
   timecam: { name: "타임머신 카메라", icon: "🕰", f: { make: "사진 보내기", era_e1930: "1930년대", era_e1985: "1985년", era_e2080: "2080년", era_snow: "눈 오는 날" } },
+  me: { name: "나 살피기", icon: "🪞", f: { open: "열어 봄", health: "건강 기록 받음", week: "주간 알림", team: "팀 알림" } },
   mystery: { name: "광저우 미스터리", icon: "🕵️", f: { new: "사건 받기", clue: "현장 사진 단서", fail: "사진 불통과", skip: "못 가요", solve: "사건 해결", wrong: "오답" } },
 };
-const OWNER_SCOPED = new Set(["szcn", "rt", "pb", "quest", "shorts", "mystery", "timecam", "signs", "novel", "trend"]); // 초대 코드별 앱 — 주인 것만 따로 보여 줌
+export const OWNER_SCOPED = new Set(["szcn", "rt", "pb", "quest", "shorts", "mystery", "timecam", "signs", "novel", "trend"]); // 초대 코드별 앱 — 주인 것만 따로 보여 줌
 
 const cnDay = (t = Date.now()) => new Date(t + 8 * 3600e3).toISOString().slice(0, 10);
 const ipHits = new Map();
@@ -78,7 +79,7 @@ async function hash(s) {
 // 실전 중국어 학습 기록(Supabase, 앱과 같은 공개키)
 const SB_URL = "https://qmxcfsozzrcdakkiozts.supabase.co";
 const SB_KEY = "sb_publishable_fTwyVCtEqz7HhSBJ74X9HQ_OjaVZam8";
-async function study(code) {
+export async function study(code) {
   try {
     const r = await fetch(SB_URL + "/rest/v1/trainer?id=eq." + encodeURIComponent(code) + "&select=data", { headers: { apikey: SB_KEY, authorization: "Bearer " + SB_KEY } });
     if (!r.ok) return null;

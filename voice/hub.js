@@ -21,6 +21,9 @@ main{max-width:640px;margin:0 auto;padding:14px 16px 48px}h2{font-size:13px;colo
 </style></head><body>
 <header><a class="back" href="/" aria-label="박비서">‹</a><h1>🧰 도구함</h1></header>
 <main>
+<h2>나</h2><div class="g">
+<a href="/me"><i>🪞</i><b>나 살피기</b><small>이번 주 수면·작업 시각·안 쓰는 도구 · 수원·T1 경기</small></a>
+</div>
 <h2>업무</h2><div class="g">
 <a href="/guest"><i>🤝</i><b>출장자 지원</b><small>호텔·차량·식사·손님 취향, 지사원과 공유</small></a>
 <a href="/brief"><i>🧳</i><b>출장 브리핑</b><small>전날 밤 날씨·출발·챙길 것 알림</small></a>

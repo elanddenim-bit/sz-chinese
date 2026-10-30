@@ -49,6 +49,7 @@ import { liveRelay, LIVE_HTML } from "./live.js";
 import { memoirApi, memoirGet, memoirPrompt, memoirCron, MEMOIR_HTML } from "./memoir.js";
 import { guestApi, GUEST_HTML } from "./guest.js";
 import { vpnApi, vpnCron, VPN_HTML } from "./vpn.js";
+import { meApi, meCron, ME_HTML } from "./me.js";
 import ICON180 from "./icon-180.png";
 import ICON192 from "./icon-192.png";
 import ICON512 from "./icon-512.png";
@@ -131,6 +132,7 @@ export default {
       ctx.waitUntil(tvCron(env, uh, um).catch((e) => console.log("tvCron", e && e.message)));
       ctx.waitUntil(dailyCron(env, ctx, uh, um).catch((e) => console.log("dailyCron", e && e.message))); // 🌏 오늘의 중국 — 중국 06시 판 만들기
       ctx.waitUntil(artCron(env, ctx, uh, um).catch((e) => console.log("artCron", e && e.message))); // 🖼 오늘의 그림 — 중국 06시
+      ctx.waitUntil(meCron(env, uh, um).catch((e) => console.log("meCron", e && e.message))); // 🪞 나 살피기 주간 알림 · ⚽ 내 팀 경기
       ctx.waitUntil(vpnCron(env, uh, um).catch((e) => console.log("vpnCron", e && e.message))); // 📶 VPN 용량 알림(정한 시각)
       ctx.waitUntil(todoCron(env).catch((e) => console.log("todoCron", e && e.message))); // 📅 업무 일정 → 네이버 캘린더 보정 동기화 // 📺 박비서 TV 채널 목록(중국 새벽 4시) // 🎙 구술 자서전 밤 질문(정한 시각 정각 틱)
     }
@@ -186,6 +188,7 @@ export default {
       if (url.pathname === "/todo/ics" && req.method === "GET") return todoIcs(url);
       if (url.pathname === "/tv" && req.method === "GET") return new Response(TV_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/guest" && req.method === "GET") return new Response(GUEST_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } }); // 🤝 출장자 지원(지사원 팀 코드)
+      if (url.pathname === "/me" && req.method === "GET") return new Response(ME_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } }); // 🪞 나 살피기
       if (url.pathname === "/vpn" && req.method === "GET") return new Response(VPN_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } }); // 📶 VPN 용량
       if (url.pathname === "/hub" && req.method === "GET") return new Response(HUB_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/special" && req.method === "GET") return new Response(SPECIAL_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
@@ -214,6 +217,7 @@ export default {
       if (url.pathname.startsWith("/tv/")) return json(req, await tvApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/novel/")) return json(req, await novelApi(env, ctx, url.pathname, b, h));
       if (url.pathname.startsWith("/vpn/")) return json(req, await vpnApi(env, url.pathname, b, h));
+      if (url.pathname.startsWith("/me/")) return json(req, await meApi(env, url.pathname, b, h));
       if (url.pathname.startsWith("/brief/")) return json(req, await briefApi(env, ctx, url.pathname, b, h));
       if (url.pathname === "/mag/today" || url.pathname === "/mag/radio/make") return jsonStream(req, () => magApi(env, ctx, url.pathname, b, h, synth));
       if (url.pathname.startsWith("/mag/")) return json(req, await magApi(env, ctx, url.pathname, b, h, synth));
