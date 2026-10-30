@@ -17,6 +17,7 @@
 // 저장: KV me:<해시> {cfg, health{날짜:{st,sl,at}}, study{날짜:{min,n}}, gh{at,days,repos,priv,err}, teams{at,fb,lol}, sent{week,team{키:날짜}}}
 // =========================================================
 import { barkPush, leaveAt } from "./brief.js";
+import { todoUpcoming } from "./todo.js";
 import { APPS, OWNER_SCOPED, study as studyDays, logUse } from "./usage.js";
 
 const TZ = 8 * 3600e3;
@@ -357,6 +358,72 @@ export async function meCron(env, uh, um) {
 }
 
 // ---------- API ----------
+
+// ---------- 📱 위젯용: 실전 중국어 진도(Supabase trainer prog) · 단어 이름표(앱 index.html 에서 하루 한 번 뽑아 KV 캐시) ----------
+const TR_URL = "https://qmxcfsozzrcdakkiozts.supabase.co", TR_KEY = "sb_publishable_fTwyVCtEqz7HhSBJ74X9HQ_OjaVZam8";
+async function trainer(code) {
+  try {
+    const r = await fetch(TR_URL + "/rest/v1/trainer?id=eq." + encodeURIComponent(code) + "&select=prog:data->prog,days:data->stats->days", { headers: { apikey: TR_KEY, authorization: "Bearer " + TR_KEY } });
+    if (!r.ok) return null;
+    const j = await r.json(); return (j && j[0]) || null;
+  } catch { return null; }
+}
+// 단어 배열 이름 → 진도 id 접두어 (index.html 의 forEach 와 같게. 배열은 끝에만 추가되므로 순서 = 번호)
+const WORD_ARR = { W4: "w4-", W4B: "w4b-", W4C: "w4c-", W5: "w5-", W5B: "w5b-", W5C: "w5c-", W7: "w7-" };
+const HSK4 = ["W4", "W4B", "W4C"];
+// 배열 리터럴의 닫는 ] 위치(문자열 안 괄호는 건너뜀)
+function arrEnd(h, i) {
+  let dep = 0, q = "";
+  for (let k = i; k < h.length && k < i + 400000; k++) {
+    const ch = h[k];
+    if (q) { if (ch === "\\") k++; else if (ch === q) q = ""; continue; }
+    if (ch === '"' || ch === "'" || ch === "`") q = ch;
+    else if (ch === "[") dep++;
+    else if (ch === "]" && --dep === 0) return k;
+  }
+  return -1;
+}
+async function wordMap(env) {
+  const c = await env.KV.get("me:words", "json");
+  if (c && c.at > Date.now() - 7 * 864e5 && c.m) return c.m;
+  try {
+    const r = await fetch((env.SZCN_URL || "https://elanddenim-bit.github.io/sz-chinese/") + "index.html", { cf: { cacheTtl: 0 } });
+    if (!r.ok) throw new Error(r.status);
+    const h = await r.text(), m = {};
+    for (const n of Object.keys(WORD_ARR)) {
+      const i = h.indexOf("const " + n + "=["); if (i < 0) continue;
+      const j = arrEnd(h, h.indexOf("[", i)); if (j < 0) continue;
+      const rows = [...h.slice(i, j + 1).matchAll(/\[\s*"((?:\\.|[^"\\])*)"\s*,\s*"((?:\\.|[^"\\])*)"\s*,\s*"((?:\\.|[^"\\])*)"\s*\]/g)];
+      if (rows.length) m[n] = rows.map((x) => [x[1], x[3]]);
+    }
+    if (HSK4.every((n) => m[n])) { await env.KV.put("me:words", JSON.stringify({ at: Date.now(), m })); return m; }
+  } catch {}
+  return (c && c.m) || null;
+}
+function studyCard(tr, m, today) {
+  const prog = (tr && tr.prog) || {}, days = (tr && tr.days) || {};
+  const word = (id) => { for (const [n, pre] of Object.entries(WORD_ARR)) if (id.startsWith(pre)) { const i = Number(id.slice(pre.length)); return m && m[n] && m[n][i] ? { z: m[n][i][0], k: m[n][i][1], n } : null; } return null; };
+  const isWord = (id) => Object.values(WORD_ARR).some((p) => id.startsWith(p));
+  const h4 = (id) => /^w4[bc]?-/.test(id);
+  let seen = 0, mast = 0, all = 0;
+  for (const [id, p] of Object.entries(prog)) {
+    if (!p || !isWord(id)) continue;
+    const touched = (p.w || 0) + (p.c || 0) > 0 || p.mastered;
+    if (touched) all++;
+    if (h4(id)) { if (touched) seen++; if (p.mastered) mast++; }
+  }
+  const total = m ? HSK4.reduce((a, n) => a + m[n].length, 0) : 509;
+  const lv = mast >= total * 0.8 ? 5 : 4;
+  // 다시 볼 단어: 오답 중 많이 틀린 것 → 거의 익힌 것(연속 정답 1+)
+  const ids = Object.keys(prog).filter((id) => isWord(id) && prog[id]);
+  const wrong = ids.filter((id) => prog[id].inWrong).sort((a, b) => (prog[b].w || 0) - (prog[a].w || 0));
+  const near = ids.filter((id) => !prog[id].inWrong && !prog[id].mastered && (prog[id].streak || 0) >= 1);
+  const chips = [];
+  for (const id of wrong.concat(near)) { const w = word(id); if (w && !chips.some((c) => c.z === w.z)) chips.push({ z: w.z, k: String(w.k).split(/[·(]/)[0].trim().slice(0, 8), wrong: !!prog[id].inWrong }); if (chips.length >= 6) break; }
+  const t = days[today] || {};
+  return { hsk: { lv, total, seen, mast }, words: all, todayN: t.n || 0, chips };
+}
+
 export async function meApi(env, path, b, h) {
   await owner(env, h);
   const d = await load(env, h);
@@ -395,7 +462,18 @@ export async function meApi(env, path, b, h) {
     games.sort((a, b) => a.t - b.t);
     const ns = (d.notes && d.notes.list) || [];
     const note = ns.find((n) => n.lv === "r") || ns.find((n) => n.lv === "w") || ns[0] || null;
-    return { ok: true, d: today, study: { today: mins(today), goal: d.cfg.gstudy || 30, streak, week }, trip, game: games[0] ? games[0].line : "", note };
+    // 큰 위젯: 단어 진도 · 다음 일정 여러 개(출장 + 업무 일정) · 팀 경기 3개
+    const [tr, wm, todos] = await Promise.all([trainer(code), wordMap(env), todoUpcoming(env, 4).catch(() => [])]);
+    const sc = studyCard(tr, wm, today);
+    const plan = legs.slice(0, 3).map((x) => ({ d: x.d, t: x.t || "", icon: { plane: "✈️", train: "🚄", car: "🚗" }[x.how] || "🧳", title: (x.from ? x.from + " → " : "") + (x.to || ""), sub: [x.no, leaveAt(x) ? "나갈 시각 " + leaveAt(x) : ""].filter(Boolean).join(" · ") }))
+      .concat(todos.map((x) => ({ d: x.d, t: x.t, icon: x.t ? "🕘" : "📅", title: x.title, sub: x.end ? "~" + x.end.slice(5).replace("-", "/") : "" })))
+      .sort((a, b) => (a.d + (a.t || "00:00")).localeCompare(b.d + (b.t || "00:00"))).slice(0, 4);
+    const gl = [];
+    if (d.cfg.suwon && fb) for (const e of (fb.ev || []).filter((x) => !fbDone(x) && x.t > now - 3 * 3600e3).slice(0, 3)) { const home = e.hid === fb.id; gl.push({ t: e.t, k: "fb", me: "수원", op: kr(home ? e.away : e.home), tag: home ? "홈" : "원정", home }); }
+    if (d.cfg.t1 && lol) for (const e of (lol.ev || []).filter((x) => !lolDone(x) && x.t > now - 3 * 3600e3).slice(0, 3)) gl.push({ t: e.t, k: "lol", me: "T1", op: e.op, tag: e.lg || "LoL", bo: e.bo || 0 });
+    gl.sort((a, b) => a.t - b.t);
+    const gview = gl.slice(0, 3).map((g) => { const x = new Date(g.t + TZ); return { ...g, d: x.toISOString().slice(0, 10), hm: x.toISOString().slice(11, 16) }; });
+    return { ok: true, d: today, study: { today: mins(today), goal: d.cfg.gstudy || 30, streak, week, n: sc.todayN }, hsk: sc.hsk, words: sc.words, chips: sc.chips, trip, plan, games: gview, game: games[0] ? games[0].line : "", note };
   }
   if (path === "/me/cfg") {
     const c = d.cfg;
@@ -604,13 +682,21 @@ function arc(ctx, cx, cy, r, w, frac, color) {
     ctx.fillEllipse(new Rect(cx + r * Math.cos(a) - w / 2, cy + r * Math.sin(a) - w / 2, w, w));
   }
 }
-function ring(frac) {
+function ring(frac, label, size) {
   const S = 200, ctx = new DrawContext(); ctx.size = new Size(S, S); ctx.opaque = false; ctx.respectScreenScale = true;
   const r = 78, w = 34;
   arc(ctx, S / 2, S / 2, r, w, 1, C.ringBg);
   if (frac > 0) arc(ctx, S / 2, S / 2, r, w, Math.min(frac, 1), C.ring);
-  ctx.setTextAlignedCenter(); ctx.setFont(Font.boldRoundedSystemFont(64)); ctx.setTextColor(frac >= 1 ? C.ok : C.txt);
-  ctx.drawTextInRect(frac >= 1 ? "✓" : "中", new Rect(0, S / 2 - 40, S, 80));
+  ctx.setTextAlignedCenter(); ctx.setFont(Font.boldRoundedSystemFont(size || 64)); ctx.setTextColor(!label && frac >= 1 ? C.ok : C.txt);
+  const t = label || (frac >= 1 ? "✓" : "中"), fh = (size || 64) * 1.25;
+  ctx.drawTextInRect(t, new Rect(0, S / 2 - fh / 2, S, fh));
+  return ctx.getImage();
+}
+// 가로 막대: 진하게 = 익힘, 옅게 = 학습
+function bar(f1, f2, W) {
+  const H = 10, ctx = new DrawContext(); ctx.size = new Size(W, H); ctx.opaque = false; ctx.respectScreenScale = true;
+  const rr = (x, w, col) => { if (w <= 0) return; const p = new Path(); p.addRoundedRect(new Rect(x, 0, Math.max(w, H), H), H / 2, H / 2); ctx.addPath(p); ctx.setFillColor(col); ctx.fillPath(); };
+  rr(0, W, new Color("#FFFFFF", 0.14)); rr(0, W * Math.min(f2, 1), new Color("#FF375F", 0.4)); rr(0, W * Math.min(f1, 1), C.ring);
   return ctx.getImage();
 }
 const md = (d) => { const p = d.split("-"); return Number(p[1]) + "/" + Number(p[2]); };
@@ -632,7 +718,7 @@ function txt(st, s, size, color, lines, weight) {
 function bgImage(fam) {
   if (!FM.fileExists(BG)) return null;
   const src = Image.fromFile(BG); if (!src) return null;
-  const W = fam === "medium" ? 720 : 340, H = 340;
+  const W = fam === "small" ? 340 : 720, H = fam === "large" || fam === "extraLarge" ? 760 : 340;
   const ctx = new DrawContext(); ctx.size = new Size(W, H); ctx.opaque = true; ctx.respectScreenScale = false;
   const k = Math.max(W / src.size.width, H / src.size.height), w = src.size.width * k, h = src.size.height * k;
   ctx.drawImageInRect(src, new Rect((W - w) / 2, (H - h) / 2, w, h));
@@ -650,11 +736,112 @@ async function pickBg() {
     return true;
   } catch (e) { return false; }
 }
-function build(j, fam) {
+// ---------- 큰 화면용 카드(어두운 반투명 카드, 배경 사진 위) ----------
+function card(parent) {
+  const c = parent.addStack(); c.layoutVertically(); c.setPadding(10, 12, 10, 12); c.cornerRadius = 16;
+  c.backgroundColor = HASBG ? new Color("#1C1C1E", 0.72) : new Color("#2C2C2E"); return c;
+}
+function head(c, title, right) {
+  const r = c.addStack(); r.centerAlignContent(); txt(r, title, 13, C.txt, 1, "b"); r.addSpacer();
+  if (right) txt(r, right, 11, C.sub); c.addSpacer(6);
+}
+const n0 = (x) => Number(x || 0).toLocaleString();
+function dayLabel(j, d) {
+  if (d === j.d) return "오늘";
+  const dd = Math.round((Date.parse(d + "T00:00:00Z") - Date.parse(j.d + "T00:00:00Z")) / 864e5);
+  return dd === 1 ? "내일" : md(d);
+}
+function studySec(w, j, big) {
+  const s = j.study || {}, hk = j.hsk || { lv: 4, total: 509, seen: 0, mast: 0 };
+  const c = card(w); head(c, "중국어 학습 진척", "HSK " + hk.lv);
+  const pct = hk.total ? hk.mast / hk.total : 0;
+  const top = c.addStack(); top.centerAlignContent();
+  const im = top.addImage(ring(pct, Math.round(pct * 100) + "%", 52)); im.imageSize = new Size(big ? 64 : 50, big ? 64 : 50);
+  top.addSpacer(10);
+  const R = top.addStack(); R.layoutVertically();
+  txt(R, "HSK " + hk.lv + " 단어 " + n0(hk.total) + "개 중", 12, C.sub);
+  const l2 = R.addStack(); l2.centerAlignContent(); txt(l2, n0(hk.mast) + "개 익힘", 16, C.txt, 1, "b"); txt(l2, "  · 학습 " + n0(hk.seen), 11, C.sub);
+  R.addSpacer(5);
+  const b = R.addImage(bar(pct, hk.total ? hk.seen / hk.total : 0, 220)); b.imageSize = new Size(big ? 220 : 200, 8);
+  c.addSpacer(big ? 10 : 7);
+  const tiles = c.addStack(); tiles.layoutHorizontally();
+  const tile = (lab, val, col) => { const t = tiles.addStack(); t.layoutVertically(); t.setPadding(6, 7, 6, 7); t.cornerRadius = 10; t.backgroundColor = new Color("#FFFFFF", 0.07); t.size = new Size(68, 0); txt(t, lab, 10, C.sub); txt(t, val, 15, col || C.txt, 1, "b"); };
+  tile("오늘 학습", (s.today || 0) + "/" + (s.goal || 30) + "분", (s.today || 0) >= (s.goal || 30) ? C.ok : C.ring); tiles.addSpacer(5);
+  tile("오늘 문제", (s.n || 0) + "개"); tiles.addSpacer(5);
+  tile("누적 단어", n0(j.words)); tiles.addSpacer(5);
+  tile("연속", s.streak ? "🔥" + s.streak + "일" : "0일", C.warn);
+  const ch = (j.chips || []).slice(0, big ? 4 : 2);
+  if (ch.length) {
+    c.addSpacer(big ? 10 : 7);
+    txt(c, ch.some((x) => x.wrong) ? "다시 볼 단어" : "거의 익힌 단어", 10, C.sub); c.addSpacer(4);
+    const rows = big ? [ch.slice(0, 2), ch.slice(2, 4)] : [ch];
+    for (const row of rows) {
+      if (!row.length) continue;
+      const r = c.addStack(); r.layoutHorizontally();
+      row.forEach((x, i) => {
+        const p = r.addStack(); p.centerAlignContent(); p.setPadding(5, 8, 5, 8); p.cornerRadius = 9; p.size = new Size(big ? 142 : 136, 0);
+        p.backgroundColor = x.wrong ? new Color("#FF375F", 0.18) : new Color("#5AC8FA", 0.15);
+        txt(p, x.z, 15, C.txt, 1, "b"); p.addSpacer(6); txt(p, x.k, 11, C.sub); p.addSpacer();
+        if (i < row.length - 1) r.addSpacer(6);
+      });
+      c.addSpacer(5);
+    }
+  }
+  return c;
+}
+function planSec(w, j, n) {
+  const c = card(w); head(c, "다음 일정");
+  const L = (j.plan || []).slice(0, n);
+  if (!L.length) { txt(c, "다가오는 일정 없음", 12, C.sub); return c; }
+  L.forEach((x, i) => {
+    const r = c.addStack(); r.centerAlignContent();
+    const t = r.addStack(); t.layoutVertically(); t.size = new Size(46, 0);
+    txt(t, dayLabel(j, x.d), 11, x.d === j.d ? C.ring : C.sub, 1, "b"); txt(t, x.t || "종일", 12, C.txt, 1, "b");
+    r.addSpacer(8);
+    const m = r.addStack(); m.layoutVertically();
+    txt(m, x.icon + " " + x.title, 13, C.txt, 1, "b"); if (x.sub) txt(m, x.sub, 10, C.sky);
+    r.addSpacer();
+    if (i < L.length - 1) c.addSpacer(6);
+  });
+  return c;
+}
+function teamSec(w, j, n) {
+  const c = card(w); head(c, "좋아하는 팀 일정");
+  const L = (j.games || []).slice(0, n);
+  if (!L.length) { txt(c, "예정된 경기 없음", 12, C.sub); return c; }
+  L.forEach((g, i) => {
+    const r = c.addStack(); r.centerAlignContent();
+    txt(r, dayLabel(j, g.d) + " " + g.hm, 11, C.sub); r.addSpacer(6);
+    txt(r, (g.k === "fb" ? "⚽ " : "🎮 ") + g.me + " vs " + g.op, 13, C.txt, 1, "b"); r.addSpacer();
+    const p = r.addStack(); p.setPadding(2, 6, 2, 6); p.cornerRadius = 7;
+    p.backgroundColor = g.k === "fb" ? (g.home ? new Color("#1664B0", 0.85) : new Color("#8E8E93", 0.45)) : new Color("#D21624", 0.75);
+    txt(p, g.tag, 10, C.txt, 1, "b");
+    if (i < L.length - 1) c.addSpacer(5);
+  });
+  return c;
+}
+function build(j, fam, param) {
   const w = new ListWidget(); w.backgroundColor = C.bg; w.url = "https://voice.zhnote.net/me";
   const bg = bgImage(fam); HASBG = !!bg; if (bg) w.backgroundImage = bg;
   w.refreshAfterDate = new Date(Date.now() + 20 * 60e3);
   if (j.err) { w.setPadding(14, 14, 14, 14); txt(w, "나 살피기\n" + j.err + "\n\n앱에서 한 번 실행해 주세요", 13, C.sub, 6); return w; }
+  const P = String(param || "").trim().toLowerCase();
+  // 큰 위젯: study(공부 카드 크게) / plan(일정·팀) / 비우면 셋 다
+  if (fam === "large" || fam === "extraLarge") {
+    w.setPadding(8, 8, 8, 8);
+    if (P === "study") { studySec(w, j, true); w.addSpacer(); }
+    else if (P === "plan") { planSec(w, j, 4); w.addSpacer(8); teamSec(w, j, 3); w.addSpacer(); }
+    else { studySec(w, j, false); w.addSpacer(6); planSec(w, j, 2); w.addSpacer(6); teamSec(w, j, 2); w.addSpacer(); }
+    if (j.stale) { const f = w.addText("⚠︎ 저장본"); f.font = Font.systemFont(9); f.textColor = C.sub; }
+    return w;
+  }
+  // 중간 위젯 + plan: 일정·팀 두 칸
+  if (fam === "medium" && (P === "plan" || P === "team")) {
+    w.setPadding(8, 8, 8, 8);
+    if (P === "team") { teamSec(w, j, 3); } else { planSec(w, j, 2); w.addSpacer(6); teamSec(w, j, 1); }
+    w.addSpacer(); return w;
+  }
+  if (fam === "medium" && P === "study") { w.setPadding(8, 8, 8, 8); studySec(w, j, false); w.addSpacer(); return w; }
   const s = j.study || { today: 0, goal: 30, streak: 0, week: 0 };
   const frac = s.goal ? s.today / s.goal : 0;
   const tl = tripLines(j.trip);
@@ -694,15 +881,20 @@ function build(j, fam) {
 let c = await code(false);
 if (config.runsInApp) {
   if (!c) c = await code(true);
-  const a = new Alert(); a.title = "나 살피기 위젯"; a.addAction("작은 위젯 미리보기"); a.addAction("중간 위젯 미리보기"); a.addAction("🖼 배경 사진 고르기"); a.addAction("배경 사진 지우기"); a.addAction("초대 코드 다시 넣기"); a.addCancelAction("닫기");
-  let k = await a.presentSheet();
-  if (k === 2) { const ok = await pickBg(); if (ok) k = 1; } // 고르면 바로 중간 크기 미리보기
-  else if (k === 3) { if (FM.fileExists(BG)) FM.remove(BG); k = 0; }
-  if (k === 4) { c = await code(true); }
-  else if (k === 0 || k === 1) { const j = c ? await load(c) : { err: "초대 코드 없음" }; const w = build(j, k === 1 ? "medium" : "small"); if (k === 1) await w.presentMedium(); else await w.presentSmall(); }
+  const a = new Alert(); a.title = "나 살피기 위젯";
+  const ACT = [["작은 위젯", "small", ""], ["중간 위젯", "medium", ""], ["큰 위젯 · 전부", "large", ""], ["큰 위젯 · 공부(study)", "large", "study"], ["큰 위젯 · 일정·팀(plan)", "large", "plan"], ["중간 위젯 · 일정·팀(plan)", "medium", "plan"]];
+  ACT.forEach((x) => a.addAction(x[0] + " 미리보기")); a.addAction("🖼 배경 사진 고르기"); a.addAction("배경 사진 지우기"); a.addAction("초대 코드 다시 넣기"); a.addCancelAction("닫기");
+  let k = await a.presentSheet(); const N = ACT.length;
+  if (k === N) { const ok = await pickBg(); if (ok) k = 2; } // 고르면 바로 큰 위젯 미리보기
+  else if (k === N + 1) { if (FM.fileExists(BG)) FM.remove(BG); k = 0; }
+  if (k === N + 2) { c = await code(true); }
+  else if (k >= 0 && k < N) {
+    const j = c ? await load(c) : { err: "초대 코드 없음" }; const w = build(j, ACT[k][1], ACT[k][2]);
+    if (ACT[k][1] === "large") await w.presentLarge(); else if (ACT[k][1] === "medium") await w.presentMedium(); else await w.presentSmall();
+  }
 } else {
   const j = c ? await load(c) : { err: "초대 코드 없음" };
-  Script.setWidget(build(j, config.widgetFamily || "small"));
+  Script.setWidget(build(j, config.widgetFamily || "small", args.widgetParameter));
 }
 Script.complete();
 `;

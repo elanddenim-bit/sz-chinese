@@ -167,3 +167,24 @@ export async function todoCron(env) {
   const k = await env.KV.get("todo:ws"); if (!k) return;
   await todoSync(env, k, false);
 }
+
+// 📱 나 살피기 위젯용: 앞으로의 업무 일정(종일·기간) + 시각 있는 안 끝난 TO-DO, 가까운 순 n개 [{d,t,title,end?}]
+export async function todoUpcoming(env, n) {
+  const k = await env.KV.get("todo:ws"); if (!k) return [];
+  const db = await loadDb(k).catch(() => null); if (!db) return [];
+  const now = Date.now(), cn = new Date(now + 8 * 3600e3).toISOString(), today = cn.slice(0, 10), hm = cn.slice(11, 16);
+  const out = [];
+  for (const s of db.sched || []) {
+    if (!s || !DATE_RE.test(s.start || "") || !DATE_RE.test(s.end || "") || s.end < today) continue;
+    out.push({ d: s.start < today ? today : s.start, t: "", title: String(s.title || "").slice(0, 60), end: s.end !== s.start ? s.end : "" });
+  }
+  for (const [d, day] of Object.entries(db.days || {})) {
+    if (!DATE_RE.test(d) || d < today) continue;
+    for (const t of (day && day.todos) || []) {
+      if (!t || t.done || !/^\d{1,2}:\d{2}$/.test(t.time || "")) continue;
+      const tt = t.time.padStart(5, "0"); if (d === today && tt < hm) continue;
+      out.push({ d, t: tt, title: String(t.text || "").slice(0, 60) });
+    }
+  }
+  return out.sort((a, b) => (a.d + (a.t || "00:00")).localeCompare(b.d + (b.t || "00:00"))).slice(0, n || 4);
+}
