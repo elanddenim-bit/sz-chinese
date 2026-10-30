@@ -1395,7 +1395,8 @@ function NT(st, s, size, color, weight, lines) {
   t.font = weight === "b" ? Font.boldSystemFont(size) : weight === "h" ? Font.heavySystemFont(size) : weight === "m" ? Font.semiboldSystemFont(size) : Font.systemFont(size);
   t.textColor = color || NC.txt; t.lineLimit = lines || 1; t.minimumScaleFactor = 0.72; return t;
 }
-function NCard(parent, pad, h) { const c = parent.addStack(); c.layoutVertically(); c.backgroundColor = NC.card; c.cornerRadius = 16; c.borderWidth = 1; c.borderColor = NC.line; c.setPadding(pad, 12, pad, 12); if (h) c.size = new Size(0, h); return c; }
+let PHOTO = false; // 배경 사진이 깔려 있으면 카드를 살짝 비쳐 보이게
+function NCard(parent, pad, h) { const c = parent.addStack(); c.layoutVertically(); c.backgroundColor = PHOTO ? new Color("#0C1A3A", 0.78) : NC.card; c.cornerRadius = 16; c.borderWidth = 1; c.borderColor = NC.line; c.setPadding(pad, 12, pad, 12); if (h) c.size = new Size(0, h); return c; }
 function NBox(parent, bg, line, r, px, py) { const b = parent.addStack(); b.backgroundColor = bg; b.cornerRadius = r; if (line) { b.borderWidth = 1; b.borderColor = line; } b.setPadding(py, px, py, px); b.centerAlignContent(); return b; }
 function NHead(c, emoji, title, right, rightBox) {
   const h = c.addStack(); h.centerAlignContent();
@@ -1500,12 +1501,24 @@ function NTeam(w, j, n, fbOnly, Q, lite) {
   return c;
 }
 // 큰 위젯: 비움·all = 공부+일정+팀 / study = 공부(크게)+일정 / plan = 일정 3+팀 3 · 중간 위젯 team = 팀 3 / plan = 일정 2+팀 1
+// 배경 사진(앨범에서 고른 me-widget-bg.jpg): 위젯 비율로 가운데를 잘라 채우고 남색을 35% + 아래로 갈수록 조금 더 — 글자는 카드 위 WidgetText 라 그대로 선명
+function bgPhotoN(fam) {
+  if (!FM.fileExists(BG)) return null;
+  const src = Image.fromFile(BG); if (!src) return null;
+  const sz = wsize(fam), W = sz.width * 2, H = sz.height * 2;
+  const c = new DrawContext(); c.size = new Size(W, H); c.opaque = true; c.respectScreenScale = false;
+  const k = Math.max(W / src.size.width, H / src.size.height), w = src.size.width * k, h = src.size.height * k;
+  c.drawImageInRect(src, new Rect((W - w) / 2, (H - h) / 2, w, h));
+  c.setFillColor(new Color("#071028", 0.35)); c.fillRect(new Rect(0, 0, W, H));
+  for (let i = 0; i < 12; i++) { c.setFillColor(new Color("#071028", 0.03)); c.fillRect(new Rect(0, H * (0.4 + i * 0.05), W, H)); }
+  return c.getImage();
+}
 function native(j, fam, P0) {
   if (P0 === "all") P0 = "";
   // 화면 높이에 따라 여백·링·숫자 크기를 줄임(428 폭 382pt 기준, 390 폭 354 · 375 폭 324) — 글자 크기는 규칙 안에서만
   const sz = wsize(fam), H = sz.height, Q = fam === "medium" ? { pad: 8, g: 5, ring: 84, tp: 5, tv: 18, out: 8 } : H >= 370 ? { pad: 8, g: 6, ring: 92, tp: 5, tv: 20, out: 8 } : H >= 340 ? { pad: 6, g: 4, ring: 84, tp: 4, tv: 20, out: 6 } : { pad: 6, g: 3, ring: 76, tp: 3, tv: 19, out: 5 };
   const W = sz.width - Q.out * 2, w = new ListWidget(); w.url = "https://voice.zhnote.net/me"; w.refreshAfterDate = new Date(Date.now() + 20 * 60e3);
-  const bg = bgImage(fam); if (bg) w.backgroundImage = bg; else { const g = new LinearGradient(); g.colors = [NC.bg1, NC.bg2]; g.locations = [0, 1]; w.backgroundGradient = g; }
+  const bg = bgPhotoN(fam); PHOTO = !!bg; if (bg) w.backgroundImage = bg; else { const g = new LinearGradient(); g.colors = [NC.bg1, NC.bg2]; g.locations = [0, 1]; w.backgroundGradient = g; }
   w.setPadding(Q.out, Q.out, Q.out, Q.out);
   if (fam === "medium") {
     if (P0 === "plan") { NPlan(w, j, 1, Q); w.addSpacer(6); NTeam(w, j, 1, false, Q, true); }
