@@ -1169,7 +1169,7 @@ const SLOT = { hsk_badge: [296, 21, 47, 13], hsk_level: [37, 87, 57, 15], hsk_pe
   game_row_1: [118, 321, 225, 14], game_row_2: [118, 347, 225, 14], no_games_message: [115, 328, 224, 29] };
 const RING = { cx: 65, cy: 111, r: 40, w: 8, color: "#28E9C7" };
 const IC = { txt: new Color("#F1F7FF"), sub: new Color("#A8BDDF"), acc: new Color("#28E9C7"), warn: new Color("#FFB86B"), bad: new Color("#FF9AA8"), mine: new Color("#7FB2FF") };
-function bgImage() { try { if (FM.fileExists(IMGBG)) return Image.fromFile(IMGBG); } catch (e) {} return null; }
+function imgBg() { try { if (FM.fileExists(IMGBG)) return Image.fromFile(IMGBG); } catch (e) {} return null; }
 // 칸 안에 글자: 높이에 맞춰 크기를 정하고, 폭이 넘치면 줄였다가 말줄임
 function S(c, key, t, size, color, weight, align) {
   const [x, y, w, h] = SLOT[key]; t = String(t == null ? "" : t); if (!t) return;
@@ -1238,7 +1238,7 @@ async function pickBgImg() {
 // 큰 위젯: 비움·all = 공부+일정+팀 / study = 공부(크게)+일정 / plan = 일정+팀 · 중간 위젯 plan·team = 팀
 function pro(j, fam, P0) {
   if (P0 === "all") P0 = "";
-  if (fam !== "medium" && !P0) { const bg = bgImage(); if (bg) return proImg(j, bg); } // 배경 그림이 있으면 이미지 하이브리드
+  if (fam !== "medium" && !P0) { const bg = imgBg(); if (bg) return proImg(j, bg); } // 배경 그림이 있으면 이미지 하이브리드
   const sz = wsize(fam), c = D(sz);
   c.drawImageInRect(baseImage(fam, P0, sz), new Rect(0, 0, sz.width * K, sz.height * K));
   for (const b of layout(fam, P0, sz.width, sz.height)) { if (b.k === "study") studyCard(c, j, b); else if (b.k === "plan") planCard(c, j, b); else teamCard(c, j, b); }
