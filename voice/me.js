@@ -363,7 +363,7 @@ export async function meCron(env, uh, um) {
 const TR_URL = "https://qmxcfsozzrcdakkiozts.supabase.co", TR_KEY = "sb_publishable_fTwyVCtEqz7HhSBJ74X9HQ_OjaVZam8";
 async function trainer(code) {
   try {
-    const r = await fetch(TR_URL + "/rest/v1/trainer?id=eq." + encodeURIComponent(code) + "&select=prog:data->prog,days:data->stats->days", { headers: { apikey: TR_KEY, authorization: "Bearer " + TR_KEY } });
+    const r = await fetch(TR_URL + "/rest/v1/trainer?id=eq." + encodeURIComponent(code) + "&select=prog:data->prog,days:data->stats->days,frm:data->frm->p,fix:data->fix->items,pron:data->pron->sents,call:data->call->score", { headers: { apikey: TR_KEY, authorization: "Bearer " + TR_KEY } });
     if (!r.ok) return null;
     const j = await r.json(); return (j && j[0]) || null;
   } catch { return null; }
@@ -405,12 +405,13 @@ function studyCard(tr, m, today) {
   const word = (id) => { for (const [n, pre] of Object.entries(WORD_ARR)) if (id.startsWith(pre)) { const i = Number(id.slice(pre.length)); return m && m[n] && m[n][i] ? { z: m[n][i][0], k: m[n][i][1], n } : null; } return null; };
   const isWord = (id) => Object.values(WORD_ARR).some((p) => id.startsWith(p));
   const h4 = (id) => /^w4[bc]?-/.test(id);
-  let seen = 0, mast = 0, all = 0;
+  let seen = 0, mast = 0, all = 0, mast5 = 0;
   for (const [id, p] of Object.entries(prog)) {
     if (!p || !isWord(id)) continue;
     const touched = (p.w || 0) + (p.c || 0) > 0 || p.mastered;
     if (touched) all++;
     if (h4(id)) { if (touched) seen++; if (p.mastered) mast++; }
+    if (/^w5[bc]?-/.test(id) && p.mastered) mast5++;
   }
   const total = m ? HSK4.reduce((a, n) => a + m[n].length, 0) : 509;
   const lv = mast >= total * 0.8 ? 5 : 4;
@@ -421,7 +422,23 @@ function studyCard(tr, m, today) {
   const chips = [];
   for (const id of wrong.concat(near)) { const w = word(id); if (w && !chips.some((c) => c.z === w.z)) chips.push({ z: w.z, k: String(w.k).split(/[·(]/)[0].trim().slice(0, 8), wrong: !!prog[id].inWrong }); if (chips.length >= 6) break; }
   const t = days[today] || {};
-  return { hsk: { lv, total, seen, mast }, words: all, todayN: t.n || 0, chips };
+  const total5 = m && m.W5 ? ["W5", "W5B", "W5C"].reduce((a, n) => a + ((m[n] && m[n].length) || 0), 0) : 1264;
+  return { hsk: { lv, total, seen, mast }, hsk5: { total: total5, mast: mast5 }, words: all, todayN: t.n || 0, chips };
+}
+
+// 위젯 링에 무엇을 보일지(/me 화면에서 고름, cfg.ring)
+export const RINGS = { time: "오늘 공부 시간", week: "이번 주 공부 시간", hsk4: "HSK 4 단어 익힘", hsk5: "HSK 5 단어 익힘", frame: "문장 틀 말하기", fix: "교정 문장 말하기", pron: "발음 통과", call: "통화 연습 점수" };
+function ringOf(k, o) {
+  const tr = o.tr || {}, pct = (a, b) => (b ? Math.min(1, a / b) : 0), boxed = (arr) => arr.filter((x) => x && (x.box || 0) >= 3).length;
+  if (!RINGS[k]) k = "hsk4";
+  if (k === "time") return { k, title: "오늘 공부", big: String(o.today), unit: "분", sub: "목표 " + o.goal + "분", pct: pct(o.today, o.goal) };
+  if (k === "week") return { k, title: "이번 주", big: String(o.week), unit: "분", sub: "목표 " + o.goal * 7 + "분", pct: pct(o.week, o.goal * 7) };
+  if (k === "hsk5") { const h = o.sc.hsk5; return { k, title: "HSK 5", big: String(Math.round(pct(h.mast, h.total) * 100)), unit: "%", sub: h.mast.toLocaleString() + " / " + h.total.toLocaleString(), pct: pct(h.mast, h.total) }; }
+  if (k === "frame") { const n = boxed(Object.values(tr.frm || {})); return { k, title: "문장 틀", big: String(Math.round(pct(n, 60) * 100)), unit: "%", sub: "익힘 " + n + " / 60", pct: pct(n, 60) }; }
+  if (k === "fix") { const a = Array.isArray(tr.fix) ? tr.fix : [], n = boxed(a); return { k, title: "교정 문장", big: String(Math.round(pct(n, a.length) * 100)), unit: "%", sub: "익힘 " + n + " / " + a.length, pct: pct(n, a.length) }; }
+  if (k === "pron") { const v = Object.values(tr.pron || {}), n = v.filter((x) => x && (x.best || 0) >= 80).length; return { k, title: "발음", big: String(Math.round(pct(n, v.length) * 100)), unit: "%", sub: "통과 " + n + " / " + v.length + "문장", pct: pct(n, v.length) }; }
+  if (k === "call") { const v = Object.values(tr.call || {}).map(Number).filter((x) => x >= 0); const avg = v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : 0; return { k, title: "통화 점수", big: String(avg), unit: "점", sub: "상황 " + v.length + "개 평균", pct: avg / 100 }; }
+  const h = o.sc.hsk; return { k: "hsk4", title: "HSK 4", big: String(Math.round(pct(h.mast, h.total) * 100)), unit: "%", sub: h.mast.toLocaleString() + " / " + h.total.toLocaleString(), pct: pct(h.mast, h.total) };
 }
 
 export async function meApi(env, path, b, h) {
@@ -465,6 +482,7 @@ export async function meApi(env, path, b, h) {
     // 큰 위젯: 단어 진도 · 다음 일정 여러 개(출장 + 업무 일정) · 팀 경기 3개
     const [tr, wm, todos] = await Promise.all([trainer(code), wordMap(env), todoUpcoming(env, 4).catch(() => [])]);
     const sc = studyCard(tr, wm, today);
+    const ring = ringOf(d.cfg.ring, { tr, sc, today: mins(today), week: (() => { let s = 0; for (let i = 0; i < 7; i++) s += mins(cnDay(now - i * 864e5)); return s; })(), goal: d.cfg.gstudy || 30 });
     const plan = legs.slice(0, 3).map((x) => ({ d: x.d, t: x.t || "", icon: { plane: "✈️", train: "🚄", car: "🚗" }[x.how] || "🧳", title: (x.from ? x.from + " → " : "") + (x.to || ""), sub: [x.no, leaveAt(x) ? "나갈 시각 " + leaveAt(x) : ""].filter(Boolean).join(" · ") }))
       .concat(todos.map((x) => ({ d: x.d, t: x.t, icon: x.t ? "🕘" : "📅", title: x.title, sub: x.end ? "~" + x.end.slice(5).replace("-", "/") : "" })))
       .sort((a, b) => (a.d + (a.t || "00:00")).localeCompare(b.d + (b.t || "00:00"))).slice(0, 4);
@@ -474,7 +492,7 @@ export async function meApi(env, path, b, h) {
     gl.sort((a, b) => a.t - b.t);
     const gview = gl.slice(0, 3).map((g) => { const x = new Date(g.t + TZ); return { ...g, d: x.toISOString().slice(0, 10), hm: x.toISOString().slice(11, 16) }; });
     const days7 = []; for (let i = 6; i >= 0; i--) { const k = cnDay(now - i * 864e5); days7.push({ d: k, min: mins(k) }); }
-    return { ok: true, d: today, study: { today: mins(today), goal: d.cfg.gstudy || 30, streak, week, n: sc.todayN, days7 }, hsk: sc.hsk, words: sc.words, chips: sc.chips, trip, plan, games: gview, gerr: [d.cfg.suwon && fb && fb.err ? "⚽ " + fb.err : "", d.cfg.t1 && lol && lol.err ? "🎮 " + lol.err : "", !d.cfg.suwon && !d.cfg.t1 ? "/me 화면에서 팀을 켜 주세요" : ""].filter(Boolean).join(" · "), game: games[0] ? games[0].line : "", note };
+    return { ok: true, d: today, study: { today: mins(today), goal: d.cfg.gstudy || 30, streak, week, n: sc.todayN, days7 }, hsk: sc.hsk, ring, words: sc.words, chips: sc.chips, trip, plan, games: gview, gerr: [d.cfg.suwon && fb && fb.err ? "⚽ " + fb.err : "", d.cfg.t1 && lol && lol.err ? "🎮 " + lol.err : "", !d.cfg.suwon && !d.cfg.t1 ? "/me 화면에서 팀을 켜 주세요" : ""].filter(Boolean).join(" · "), game: games[0] ? games[0].line : "", note };
   }
   if (path === "/me/cfg") {
     const c = d.cfg;
@@ -483,6 +501,7 @@ export async function meApi(env, path, b, h) {
     if (b.gstudy !== undefined && Number(b.gstudy) >= 5 && Number(b.gstudy) <= 120) c.gstudy = Math.round(Number(b.gstudy));
     if (b.gsl !== undefined && Number(b.gsl) >= 240 && Number(b.gsl) <= 600) c.gsl = Math.round(Number(b.gsl));
     for (const k of ["on", "team", "suwon", "t1"]) if (typeof b[k] === "boolean") c[k] = b[k];
+    if (b.ring !== undefined && RINGS[b.ring]) c.ring = b.ring;
     if (b.wday !== undefined && Number(b.wday) >= 0 && Number(b.wday) <= 6) c.wday = Number(b.wday);
     if (b.hour !== undefined && Number(b.hour) >= 6 && Number(b.hour) <= 23) c.hour = Number(b.hour);
     if (b.mh !== undefined && Number(b.mh) >= 6 && Number(b.mh) <= 12) c.mh = Number(b.mh);
@@ -611,6 +630,7 @@ function draw(j){
   h+='<h2>📱 아이폰 위젯</h2><div class="card"><p style="margin:0 0 6px">오늘 중국어 공부(링·연속 일수) · 다음 출장과 나갈 시각 · 다음 경기 · 이번 주 경고 한 줄.</p><ol>';
   h+='<li>아래 버튼으로 스크립트를 복사</li><li><b>Scriptable</b> 앱 → 오른쪽 위 <b>+</b> → 붙여넣기 → 이름 <code>나 살피기</code> (이미 있으면 내용을 통째로 바꿔 붙여넣기)</li><li>그 스크립트를 한 번 실행 → 초대 코드 입력 → 미리보기 확인 (메뉴의 <b>🖼 배경 사진 고르기</b>로 앨범 사진을 배경에 — 글씨가 보이게 어둡게 덮어요)</li><li>홈 화면 길게 누르기 → 편집 → 위젯 추가 → Scriptable(작게 또는 중간) → 위젯을 눌러 Script 를 <b>나 살피기</b>로</li></ol>';
   h+='<label for="g_cn">중국어 하루 목표</label><select id="g_cn">'+[15,20,30,45,60].map(function(x){return '<option value="'+x+'"'+(x===(c0.gstudy||30)?' selected':'')+'>'+x+'분</option>'}).join('')+'</select>';
+  h+='<label for="w_ring">위젯 링에 보일 것</label><select id="w_ring">'+Object.keys(RG).map(function(k){return '<option value="'+k+'"'+(k===(c0.ring||'hsk4')?' selected':'')+'>'+RG[k]+'</option>'}).join('')+'</select>';
   h+='<button class="btn" id="wcopy">위젯 스크립트 복사</button><p class="hint">스크립트에는 초대 코드가 들어 있지 않아요(폰 안에만 저장). 경고 한 줄은 이 화면을 열 때와 매일 아침 6시에 새로 계산해요.</p></div>';
   // 설정
   var c=j.cfg;h+='<h2>알림 설정</h2><div class="card">';
@@ -628,6 +648,7 @@ function draw(j){
   $('c_su').onchange=function(){cfg({suwon:this.checked})};$('c_t1').onchange=function(){cfg({t1:this.checked})};
   $('c_wd').onchange=function(){cfg({wday:Number(this.value)})};$('c_h').onchange=function(){cfg({hour:Number(this.value)})};$('c_mh').onchange=function(){cfg({mh:Number(this.value)})};
   $('g_cn').onchange=function(){cfg({gstudy:Number(this.value)})};
+  $('w_ring').onchange=function(){cfg({ring:this.value})};
   $('wcopy').onclick=function(){var t=WJS;if(!t){toast('스크립트를 받는 중이에요 — 잠시 뒤 다시');return}
     var done=function(){toast('복사했어요 — Scriptable 에 붙여넣기')};
     if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done).catch(function(){fallback(t)})}else fallback(t)};
@@ -635,6 +656,7 @@ function draw(j){
   $('t_t').onclick=function(){api('/me/test',{what:'team'}).then(function(r){toast(r.msg);load()}).catch(function(e){toast(e.message)})};
   if(location.hash==='#teams'){var el=$('teams');if(el)el.scrollIntoView()}
 }
+var RG=${JSON.stringify(RINGS)};
 var WJS='';fetch('/me/widget.js').then(function(r){return r.text()}).then(function(t){WJS=t}).catch(function(){});
 function fallback(t){var ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.top='0';document.body.appendChild(ta);ta.focus();ta.select();try{document.execCommand('copy');toast('복사했어요 — Scriptable 에 붙여넣기')}catch(e){toast('복사 실패 — 길게 눌러 전체 선택 후 복사')}setTimeout(function(){ta.remove()},800)}
 $('rf').onclick=function(){load(true)};
@@ -850,6 +872,9 @@ function teamSec(w, j, n) {
 }
 // ---------- 🎨 그려서 만드는 위젯(큰 위젯·중간 team) — 남색 유리 카드 시안 ----------
 const K = 3; // 그림 배율(픽셀/포인트)
+const CREST = FM.joinPath(FM.documentsDirectory(), "me-widget-crest.png"); // 응원 팀 엠블럼(이 폰에만, 앱 메뉴에서 고름)
+let CRIMG; function crest() { if (CRIMG === undefined) { CRIMG = null; try { if (FM.fileExists(CREST)) CRIMG = Image.fromFile(CREST); } catch (e) {} } return CRIMG; }
+function imgIn(c, im, x, y, w, h) { const k = Math.min(w / im.size.width, h / im.size.height), iw = im.size.width * k, ih = im.size.height * k; c.drawImageInRect(im, R(x + (w - iw) / 2, y + (h - ih) / 2, iw, ih)); }
 const P = {
   bg1: new Color("#050E24"), bg2: new Color("#0B2152"), card: new Color("#0D2148", 0.62), line: new Color("#4C7BE0", 0.42),
   inner: new Color("#0A1A3C", 0.75), innerLine: new Color("#3D66C2", 0.30), txt: Color.white(), sub: new Color("#A9BCE0"), dim: new Color("#6F84AE"),
@@ -920,20 +945,21 @@ const n1 = (x) => Number(x || 0).toLocaleString();
 function studyCard(c, j, x, y, w, h) {
   cardBox(c, x, y, w, h);
   const hk = j.hsk || { lv: 4, total: 509, seen: 0, mast: 0 }, s = j.study || {};
-  head(c, x + 12, y + 12, w - 24, "📖", "중국어 학습", "꾸준한 오늘이 더 큰 기회를 만듭니다.", "HSK " + hk.lv + " 목표");
+  const rg = j.ring || { title: "HSK " + hk.lv, big: String(Math.round((hk.total ? hk.mast / hk.total : 0) * 100)), unit: "%", sub: hk.mast + " / " + hk.total, pct: hk.total ? hk.mast / hk.total : 0 };
+  head(c, x + 12, y + 12, w - 24, "📖", "중국어 학습", "꾸준한 오늘이 더 큰 기회를 만듭니다.", rg.title);
   // 링
-  const pct = hk.total ? hk.mast / hk.total : 0, rr0 = Math.min(40, (h - 60) / 2 - 18), cx = x + 14 + rr0 + 5, cy = y + 52 + rr0 + 6;
+  const pct = Math.max(0, Math.min(1, rg.pct || 0)), rr0 = Math.min(40, (h - 60) / 2 - 18), cx = x + 14 + rr0 + 5, cy = y + 52 + rr0 + 6;
   glow(c, cx, cy, rr0 + 14, "#22D37A", 0.10);
   arcG(c, cx, cy, rr0, 8, 0, 1, new Color("#22417E"), new Color("#22417E"));
   if (pct > 0) { arcG(c, cx, cy, rr0, 12, 0, Math.min(pct, 1), P.green, P.green2, 0.12); arcG(c, cx, cy, rr0, 8, 0, Math.min(pct, 1), new Color("#13B868"), P.green2); }
-  T(c, "HSK " + hk.lv, cx - 30, cy - 25, 60, 8.5, P.sub, "m", "c");
-  const pv = String(Math.round(pct * 100));
-  T(c, pv, cx - 30 - 5, cy - 15, 60, 24, P.txt, "h", "c", 30);
-  T(c, "%", cx + tw(pv, 24) / 2 - 3, cy - 3, 16, 12, P.txt, "b");
-  T(c, n1(hk.mast) + " / " + n1(hk.total), cx - 34, cy + 13, 68, 8, P.sub, "", "c");
+  T(c, rg.title, cx - 32, cy - 25, 64, 8.5, P.sub, "m", "c");
+  const pv = String(rg.big), bs = pv.length > 3 ? 18 : 24, uw = tw(rg.unit, 11), vw = tw(pv, bs) * 0.92;
+  T(c, pv, cx - (vw + uw) / 2 - 4, cy - 15, vw + 8, bs, P.txt, "h", "c", 30);
+  T(c, rg.unit, cx - (vw + uw) / 2 + vw + 1, cy - 2, uw + 6, 11, P.txt, "b");
+  T(c, rg.sub, cx - rr0 + 6, cy + 13, rr0 * 2 - 12, 7.5, P.sub, "", "c");
   // 타일 3개
   const rx = cx + rr0 + 16, rw = x + w - 12 - rx, tg = 5, tWd = (rw - tg * 2) / 3, ty = y + 52;
-  const tiles = [["🎓", "목표", "HSK " + hk.lv, ["#183A86", "#0F2457"]], ["📊", "오늘 학습", (s.today || 0) + "분", ["#0F4A45", "#0A2B33"]], ["🔥", "연속", (s.streak || 0) + "일", ["#4A1E2A", "#2A1424"]]];
+  const tiles = [["📚", "누적 단어", n1(j.words), ["#183A86", "#0F2457"]], ["📊", "오늘 학습", (s.today || 0) + "분", ["#0F4A45", "#0A2B33"]], ["🔥", "연속", (s.streak || 0) + "일", ["#4A1E2A", "#2A1424"]]];
   tiles.forEach((t, i) => {
     const tx = rx + i * (tWd + tg);
     grad(c, tx, ty, tWd, 38, 10, new Color(t[3][0], 0.9), new Color(t[3][1], 0.9)); rr(c, tx, ty, tWd, 38, 10, null, new Color("#FFFFFF", 0.12), 0.6);
@@ -1013,8 +1039,9 @@ function teamCard(c, j, x, y, w, h, nRows) {
   grad(c, x + 1, y + 1, lw, h - 2, 17, new Color("#123C9C", 0.9), new Color("#071636", 0.9));
   for (let i = 0; i < 9; i++) { c.setFillColor(new Color("#FFFFFF", 0.05)); c.fillEllipse(R(x + 6 + i * 9, y + 8 + (i % 3) * 5, 3, 3)); }
   glow(c, x + 1 + lw / 2, y + h / 2 + 4, lw * 0.55, "#3D8BFF", 0.5);
-  T(c, "⚽", x + 1, y + h / 2 - 20, lw, 32, P.txt, "", "c", 42);
-  T(c, "MY TEAM", x + 1, y + h - 22, lw, 8, P.sub, "b", "c");
+  const cr = crest();
+  if (cr) imgIn(c, cr, x + 9, y + 12, lw - 16, h - 24);
+  else { T(c, "⚽", x + 1, y + h / 2 - 20, lw, 32, P.txt, "", "c", 42); T(c, "MY TEAM", x + 1, y + h - 22, lw, 8, P.sub, "b", "c"); }
   const rx = x + lw + 10, rw = x + w - 10 - rx;
   T(c, "좋아하는 팀 일정", rx, y + 10, rw, 13, P.txt, "b");
   const G = (j.games || []).slice(0, nRows);
@@ -1031,9 +1058,12 @@ function teamCard(c, j, x, y, w, h, nRows) {
     const a = g.k === "fb" && !g.home ? g.op : g.me, b = g.k === "fb" && !g.home ? g.me : g.op, mx = rx + 98, mw = rw - 98 - 40;
     const mine = new Color(g.k === "lol" ? "#FF5A6E" : "#6FA8FF"), col = (n) => n === g.me ? mine : P.txt;
     const half = (mw - 16) / 2;
-    T(c, a, mx, ry + rh / 2 - 6, half, 9.5, col(a), "b", "r");
+    const ce = g.k === "fb" && cr, cw2 = ce ? 13 : 0;
+    T(c, a, mx, ry + rh / 2 - 6, half - (a === g.me ? cw2 : 0), 9.5, col(a), "b", "r");
+    if (ce && a === g.me) imgIn(c, cr, mx + half - 12, ry + rh / 2 - 7, 11, 14);
     T(c, "vs", mx + half, ry + rh / 2 - 5, 16, 7.5, P.dim, "", "c");
-    T(c, b, mx + half + 16, ry + rh / 2 - 6, half, 9.5, col(b), "b");
+    if (ce && b === g.me) imgIn(c, cr, mx + half + 17, ry + rh / 2 - 7, 11, 14);
+    T(c, b, mx + half + 16 + (b === g.me ? cw2 : 0), ry + rh / 2 - 6, half - (b === g.me ? cw2 : 0), 9.5, col(b), "b");
     const home = g.k === "fb" ? g.home : true;
     rr(c, rx + rw - 36, ry + rh / 2 - 8, 34, 16, 8, home ? P.blue2 : new Color("#2A3656"), home ? new Color("#5C9BFF", 0.6) : null, 0.7);
     T(c, g.tag, rx + rw - 36, ry + rh / 2 - 5.5, 34, 8, P.txt, "b", "c");
@@ -1050,6 +1080,16 @@ function pro(j, fam, P0) {
   const w = new ListWidget(); w.backgroundImage = c.getImage(); w.url = "https://voice.zhnote.net/me";
   w.refreshAfterDate = new Date(Date.now() + 20 * 60e3); w.setPadding(0, 0, 0, 0);
   return w;
+}
+// 엠블럼: 배경이 투명한 PNG 를 파일 앱에서 고르는 게 가장 깔끔(사진 앱은 투명이 빠질 수 있음)
+async function pickCrest() {
+  const q = new Alert(); q.title = "팀 엠블럼"; q.message = "배경이 투명한 PNG 를 파일 앱에 저장해 두고 '파일에서'를 고르세요."; q.addAction("파일에서"); q.addAction("사진에서"); q.addCancelAction("취소");
+  const r = await q.presentSheet();
+  try {
+    if (r === 0) { const f = await DocumentPicker.openFile(); FM.write(CREST, Data.fromFile(f)); return true; }
+    if (r === 1) { const im = await Photos.fromLibrary(); FM.writeImage(CREST, im); return true; }
+  } catch (e) {}
+  return false;
 }
 function build(j, fam, param) {
   const w = new ListWidget(); w.backgroundColor = C.bg; w.url = "https://voice.zhnote.net/me";
@@ -1115,10 +1155,12 @@ if (config.runsInApp) {
   if (!c) c = await code(true);
   const a = new Alert(); a.title = "나 살피기 위젯";
   const ACT = [["작은 위젯", "small", ""], ["중간 위젯", "medium", ""], ["큰 위젯 · 공부+일정(study)", "large", "study"], ["큰 위젯 · 일정+팀(plan)", "large", "plan"], ["중간 위젯 · 팀(team)", "medium", "team"], ["큰 위젯 · 예전 모양(old)", "large", "old"]];
-  ACT.forEach((x) => a.addAction(x[0] + " 미리보기")); a.addAction("🖼 배경 사진 고르기"); a.addAction("배경 사진 지우기"); a.addAction("초대 코드 다시 넣기"); a.addCancelAction("닫기");
+  ACT.forEach((x) => a.addAction(x[0] + " 미리보기")); a.addAction("🖼 배경 사진 고르기"); a.addAction("배경 사진 지우기"); a.addAction("초대 코드 다시 넣기"); a.addAction("🛡 팀 엠블럼 고르기(파일·사진)"); a.addAction("팀 엠블럼 지우기"); a.addCancelAction("닫기");
   let k = await a.presentSheet(); const N = ACT.length;
   if (k === N) { const ok = await pickBg(); if (ok) k = 2; } // 고르면 바로 큰 위젯 미리보기
   else if (k === N + 1) { if (FM.fileExists(BG)) FM.remove(BG); k = 0; }
+  else if (k === N + 3) { if (await pickCrest()) k = 4; } // 고르면 팀 카드 미리보기
+  else if (k === N + 4) { if (FM.fileExists(CREST)) FM.remove(CREST); k = 4; }
   if (k === N + 2) { c = await code(true); }
   else if (k >= 0 && k < N) {
     const j = c ? await load(c) : { err: "초대 코드 없음" }; const w = build(j, ACT[k][1], ACT[k][2]);
