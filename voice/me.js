@@ -239,7 +239,7 @@ async function fbFetch(prev) {
     if (o.lg) { const yr = new Date(Date.now() + TZ).getUTCFullYear(); const s = await tsdb(`eventsseason.php?id=${o.lg}&s=${yr}`); add(((s && s.events) || []).filter((e) => String(e.idHomeTeam) === o.id || String(e.idAwayTeam) === o.id)); }
     const lo = Date.now() - 30 * 864e5, hi = Date.now() + 60 * 864e5;
     o.ev = [...all.values()].filter((e) => e.t > lo && e.t < hi).sort((a, b) => a.t - b.t);
-    if (!o.ev.length) o.err = "가까운 경기 정보 없음";
+    if (!o.ev.length) { o.err = "가까운 경기 정보 없음"; o.empty = true; }
   } catch (e) { o.err = String(e.message || e).slice(0, 100); if (prev && prev.ev) o.ev = prev.ev; }
   return o;
 }
@@ -265,7 +265,7 @@ async function lolFetch(prev) {
       const ts = e.match.teams, me = ts.find((t) => t.code === "T1"), op = ts.find((t) => t !== me) || {};
       return { id: String(e.match.id), t: Date.parse(e.startTime) || 0, lg: (e.league && e.league.name) || "", bl: e.blockName || "", st: e.state || "", bo: (e.match.strategy && e.match.strategy.count) || 1, op: op.code || op.name || "?", opn: op.name || "", w: me.result ? me.result.gameWins : null, ow: op.result ? op.result.gameWins : null, out: me.result ? me.result.outcome : null };
     }).sort((a, b) => a.t - b.t);
-    if (!o.ev.length) o.err = "가까운 T1 경기 없음(비시즌일 수 있음)";
+    if (!o.ev.length) { o.err = "가까운 T1 경기 없음(비시즌일 수 있음)"; o.empty = true; }
   } catch (e) { o.err = String(e.message || e).slice(0, 100); if (prev && prev.ev) o.ev = prev.ev; }
   return o;
 }
@@ -458,6 +458,8 @@ export async function meApi(env, path, b, h) {
   if (path === "/me/widget") {
     // 📱 아이폰 위젯(Scriptable): 중국어 공부(Supabase 실시간) · 다음 출장(출장 브리핑) · 다음 경기 · 이번 주 경고(캐시)
     const today = cnDay(), now = Date.now();
+    // 팀 일정이 6시간 넘게 묵었거나 한 번도 안 받았으면 여기서 받아 둠(크론과 같은 함수·같은 기준)
+    if (d.cfg.team !== false && (d.cfg.suwon || d.cfg.t1)) { try { if (await teamsFetch(d, false)) await save(env, h, d); } catch (e) {} }
     const sd = await studyDays(code);
     if (sd) for (const [k, v] of Object.entries(sd)) if (k >= cnDay(now - 40 * 864e5)) d.study[k] = { min: v.min, n: v.n };
     const mins = (k) => (d.study[k] && d.study[k].min) || 0;
@@ -492,7 +494,15 @@ export async function meApi(env, path, b, h) {
     gl.sort((a, b) => a.t - b.t);
     const gview = gl.slice(0, 3).map((g) => { const x = new Date(g.t + TZ); return { ...g, d: x.toISOString().slice(0, 10), hm: x.toISOString().slice(11, 16) }; });
     const days7 = []; for (let i = 6; i >= 0; i--) { const k = cnDay(now - i * 864e5); days7.push({ d: k, min: mins(k) }); }
-    return { ok: true, d: today, study: { today: mins(today), goal: d.cfg.gstudy || 30, streak, week, n: sc.todayN, days7 }, hsk: sc.hsk, ring, words: sc.words, chips: sc.chips, trip, plan, games: gview, gerr: [d.cfg.suwon && fb && fb.err ? "⚽ " + fb.err : "", d.cfg.t1 && lol && lol.err ? "🎮 " + lol.err : "", !d.cfg.suwon && !d.cfg.t1 ? "/me 화면에서 팀을 켜 주세요" : ""].filter(Boolean).join(" · "), game: games[0] ? games[0].line : "", note };
+    return { ok: true, d: today, study: { today: mins(today), goal: d.cfg.gstudy || 30, streak, week, n: sc.todayN, days7 }, hsk: sc.hsk, ring, words: sc.words, chips: sc.chips, trip, plan, games: gview, gerr: [d.cfg.suwon && fb && fb.err ? "⚽ " + fb.err : "", d.cfg.t1 && lol && lol.err ? "🎮 " + lol.err : "", !d.cfg.suwon && !d.cfg.t1 ? "/me 화면에서 팀을 켜 주세요" : ""].filter(Boolean).join(" · "), ...(() => {
+      // 경기 상태: ok 있음 / empty 일정 없음 / fail 받기 실패 / off 팀 꺼짐 — 확인 안 된 경기는 만들지 않음
+      const on = [d.cfg.suwon && ["⚽", fb], d.cfg.t1 && ["🎮", lol]].filter(Boolean);
+      if (!on.length) return { gstate: "off", gmsg: "" };
+      if (gview.length) return { gstate: "ok", gmsg: "" };
+      const bad = on.filter(([, t]) => !t || (t.err && !t.empty));
+      if (bad.length === on.length) return { gstate: "fail", gmsg: bad.map(([i, t]) => i + " " + ((t && t.err) || "아직 한 번도 받지 못함")).join(" · ") };
+      return { gstate: "empty", gmsg: on.map(([i, t]) => i + " " + (t && t.empty ? "다음 경기 일정 없음" : (t && t.err) || "")).join(" · ") };
+    })(), ring2: ringOf("call", { tr, sc, today: mins(today), week: 0, goal: d.cfg.gstudy || 30 }), game: games[0] ? games[0].line : "", note };
   }
   if (path === "/me/cfg") {
     const c = d.cfg;
@@ -903,14 +913,17 @@ function grad(c, x, y, w, h, r, a, b) {
   }
 }
 function glow(c, x, y, r, col, a) { const n = 24; for (let i = n; i >= 1; i--) { c.setFillColor(new Color(col, a / n * 0.9)); const rr2 = r * Math.pow(i / n, 0.8); c.fillEllipse(R(x - rr2, y - rr2, rr2 * 2, rr2 * 2)); } }
+// 글자: 넘치면 먼저 82%까지 줄이고, 그래도 넘치면 말줄임(한글은 SF 기준 약 0.93em)
+function tw(t, size, wt) { let n = 0; for (const ch of String(t)) n += /[ᄀ-ᇿ㄰-㆏가-힯]/.test(ch) ? 0.93 : /[　-鿿＀-￯]/.test(ch) ? 1.0 : /[️‍]/.test(ch) ? 0 : /[\uD800-\uDFFF]/.test(ch) ? 0.6 : /[ -⯿]/.test(ch) ? 1.0 : /[A-Z0-9%]/.test(ch) ? 0.62 : /[ .,:·/()\-~]/.test(ch) ? 0.3 : 0.53; return n * size * (wt === "h" ? 1.06 : wt === "b" ? 1.03 : 1); }
+function fit(t, w, size, wt) { if ([...t].length <= 2 || tw(t, size, wt) <= w) return t; let s = ""; for (const ch of t) { if (tw(s + ch + "…", size, wt) > w) break; s += ch; } return s.replace(/\s+$/, "") + "…"; }
 function T(c, t, x, y, w, size, color, weight, align, h) {
-  c.setFont(weight === "b" ? Font.boldSystemFont(size * K) : weight === "h" ? Font.heavySystemFont(size * K) : weight === "m" ? Font.semiboldSystemFont(size * K) : Font.systemFont(size * K));
+  t = String(t == null ? "" : t); let sz = size; const need = tw(t, sz, weight);
+  if (need > w) sz = Math.max(size * 0.82, size * w / need);
+  c.setFont(weight === "b" ? Font.boldSystemFont(sz * K) : weight === "h" ? Font.heavySystemFont(sz * K) : weight === "m" ? Font.semiboldSystemFont(sz * K) : Font.systemFont(sz * K));
   c.setTextColor(color || P.txt);
   if (align === "c") c.setTextAlignedCenter(); else if (align === "r") c.setTextAlignedRight(); else c.setTextAlignedLeft();
-  c.drawTextInRect(fit(String(t), w, size), R(x, y, w, h || size * 1.35));
+  c.drawTextInRect(fit(t, w, sz, weight), R(x, y + (size - sz) * 0.55, w, h || size * 1.4));
 }
-function tw(t, size) { let n = 0; for (const ch of String(t)) n += /[ᄀ-ᇿ　-鿿가-힯＀-￯]/.test(ch) ? 0.98 : /[️‍]/.test(ch) ? 0 : /[A-Z0-9%]/.test(ch) ? 0.62 : /[ -⯿]|[\uD800-\uDFFF]/.test(ch) ? 0.6 : 0.52; return n * size; }
-function fit(t, w, size) { if ([...t].length <= 2 || tw(t, size) <= w) return t; let s = ""; for (const ch of t) { if (tw(s + ch + "…", size) > w) break; s += ch; } return s + "…"; }
 function arcG(c, cx, cy, r, lw, f0, f1, a, b, alpha) {
   const n = Math.max(2, Math.ceil(240 * (f1 - f0)));
   for (let i = 0; i <= n; i++) {
@@ -919,172 +932,240 @@ function arcG(c, cx, cy, r, lw, f0, f1, a, b, alpha) {
     c.fillEllipse(R(cx + r * Math.cos(ang) - lw / 2, cy + r * Math.sin(ang) - lw / 2, lw, lw));
   }
 }
-function iconBox(c, x, y, s, emoji, a, b) {
-  grad(c, x, y, s, s, s * 0.26, a || new Color("#3D8BFF"), b || new Color("#1347C9"));
-  rr(c, x, y, s, s, s * 0.26, null, new Color("#FFFFFF", 0.18), 0.6);
-  T(c, emoji, x, y + s * 0.18, s, s * 0.52, P.txt, "", "c", s * 0.7);
-}
-function pill(c, x, y, w, h, t, size) { rr(c, x, y, w, h, h / 2, new Color("#13285A", 0.85), new Color("#5A82D8", 0.35), 0.7); T(c, t, x, y + (h - size * 1.3) / 2, w, size, P.txt, "m", "c"); }
+// ---------- 정적 그림(배경·카드 유리·네온 테두리·제목) — 한 번 그려 폰에 캐시 ----------
+const BASE_V = "v2b";
 function backdrop(c, sz) {
-  grad(c, 0, 0, sz.width, sz.height, 0, P.bg2, P.bg1);
-  glow(c, sz.width * 0.15, sz.height * 0.1, sz.width * 0.45, "#1E5BFF", 0.35);
-  glow(c, sz.width * 0.9, sz.height * 0.85, sz.width * 0.4, "#0E3CB8", 0.3);
-  if (FM.fileExists(BG)) { const src = Image.fromFile(BG); if (src) { const W = sz.width * K, H = sz.height * K, k = Math.max(W / src.size.width, H / src.size.height); c.drawImageInRect(src, new Rect((W - src.size.width * k) / 2, (H - src.size.height * k) / 2, src.size.width * k, src.size.height * k)); c.setFillColor(new Color("#030A1E", 0.62)); c.fillRect(new Rect(0, 0, W, H)); } }
+  const W = sz.width, H = sz.height;
+  grad(c, 0, 0, W, H, 0, new Color("#0A1C47"), new Color("#030A1C"));
+  glow(c, W * 0.12, H * 0.06, W * 0.55, "#1E5BFF", 0.40);
+  glow(c, W * 0.95, H * 0.55, W * 0.45, "#0B3BC0", 0.28);
+  glow(c, W * 0.3, H * 1.0, W * 0.5, "#0A2E8A", 0.30);
+  if (FM.fileExists(BG)) {
+    const src = Image.fromFile(BG);
+    if (src) {
+      const PW = W * K, PH = H * K, k = Math.max(PW / src.size.width, PH / src.size.height);
+      c.drawImageInRect(src, new Rect((PW - src.size.width * k) / 2, (PH - src.size.height * k) / 2, src.size.width * k, src.size.height * k));
+      // 사진은 살리고 카드 글자 쪽만 조금 어둡게: 전체 30% + 아래로 갈수록 진해지는 남색
+      c.setFillColor(new Color("#030A1E", 0.30)); c.fillRect(new Rect(0, 0, PW, PH));
+      for (let i = 0; i < 24; i++) { c.setFillColor(new Color("#030A1E", 0.018 * i)); c.fillRect(new Rect(0, PH * i / 24, PW, PH / 24 + 1)); }
+    }
+  }
 }
-function cardBox(c, x, y, w, h) { rr(c, x, y, w, h, 18, P.card, P.line, 1); rr(c, x + 1, y + 1, w - 2, h * 0.45, 17, new Color("#FFFFFF", 0.025)); }
-let CMP = false; // 큰 위젯 하나에 세 카드(all) — 머리를 작게
-function head(c, x, y, w, emoji, title, sub, btn) {
-  if (CMP) { iconBox(c, x, y - 2, 22, emoji); T(c, title, x + 30, y + 2, w - 40, 12.5, P.txt, "b"); return; }
-  iconBox(c, x, y, 30, emoji);
-  T(c, title, x + 38, y - 1, w - 130, 15, P.txt, "b");
-  T(c, sub, x + 38, y + 18, w - 120, 8.5, P.sub);
-  if (btn) { const bw = Math.min(84, tw(btn, 8.5) + 22); pill(c, x + w - bw, y + 4, bw, 20, btn + " ›", 8.5); }
+// 유리 카드: 그림자 → 바깥 네온 번짐 → 남색 유리 그라데이션 → 위쪽 광택 → 안쪽 하이라이트 선 → 테두리
+function glass(c, x, y, w, h, r) {
+  r = r || 18;
+  for (let i = 6; i >= 1; i--) rr(c, x - i * 0.3, y + i * 0.9, w + i * 0.6, h + i * 0.6, r + i, new Color("#000000", 0.05));
+  for (let i = 5; i >= 1; i--) rr(c, x - i, y - i, w + i * 2, h + i * 2, r + i, null, new Color("#3E86FF", 0.035 * (6 - i)), 1.4);
+  grad(c, x, y, w, h, r, new Color("#16336F", 0.78), new Color("#0A1736", 0.82));
+  grad(c, x + 1, y + 1, w - 2, Math.min(46, h * 0.38), r - 1, new Color("#FFFFFF", 0.07), new Color("#FFFFFF", 0.0));
+  rr(c, x + 0.8, y + 0.8, w - 1.6, h - 1.6, r - 0.8, null, new Color("#FFFFFF", 0.07), 0.6);
+  rr(c, x, y, w, h, r, null, new Color("#5C95FF", 0.55), 1.1);
+  c.setFillColor(new Color("#9CC2FF", 0.35)); c.fillRect(R(x + r, y + 0.4, w - r * 2, 0.6)); // 윗변 빛
 }
+function iconBox(c, x, y, s, emoji) {
+  glow(c, x + s / 2, y + s / 2, s * 0.95, "#2F7BFF", 0.35);
+  grad(c, x, y, s, s, s * 0.28, new Color("#4A97FF"), new Color("#1442C2"));
+  grad(c, x + 1, y + 1, s - 2, s * 0.45, s * 0.26, new Color("#FFFFFF", 0.28), new Color("#FFFFFF", 0.0));
+  rr(c, x, y, s, s, s * 0.28, null, new Color("#BFD8FF", 0.45), 0.6);
+  T(c, emoji, x, y + s * 0.2, s, s * 0.5, P.txt, "", "c", s * 0.7);
+}
+function dHead(c, x, y, w, emoji, title) { iconBox(c, x, y, 24, emoji); T(c, title, x + 32, y + 3, w - 32, 14.5, P.txt, "b"); }
+function inner(c, x, y, w, h, r, tint) {
+  grad(c, x, y, w, h, r, new Color(tint || "#0E2554", 0.85), new Color("#08142F", 0.85));
+  rr(c, x, y, w, h, r, null, new Color("#4D7FE0", 0.32), 0.7);
+}
+// 화면 배치(카드 칸) — 정적 그림과 데이터 그림이 같은 칸을 씀
+function layout(fam, P0, W, H) {
+  const m = 5, A = H - m * 4, L = [];
+  if (fam === "medium") return [{ k: "team", x: m, y: m, w: W - m * 2, h: H - m * 2, n: 3 }];
+  if (P0 === "study") { const h1 = Math.round((H - m * 3) * 0.66); return [{ k: "study", x: m, y: m, w: W - m * 2, h: h1, big: true }, { k: "plan", x: m, y: m * 2 + h1, w: W - m * 2, h: H - m * 3 - h1, n: 2 }]; }
+  if (P0 === "plan") { const h1 = Math.round((H - m * 3) * 0.52); return [{ k: "plan", x: m, y: m, w: W - m * 2, h: h1, n: 3 }, { k: "team", x: m, y: m * 2 + h1, w: W - m * 2, h: H - m * 3 - h1, n: 3 }]; }
+  const h1 = Math.round(A * 0.455), h2 = Math.round(A * 0.24);
+  return [{ k: "study", x: m, y: m, w: W - m * 2, h: h1 }, { k: "plan", x: m, y: m * 2 + h1, w: W - m * 2, h: h2, n: 1 }, { k: "team", x: m, y: m * 3 + h1 + h2, w: W - m * 2, h: A - h1 - h2, n: 3 }];
+}
+const HEADS = { study: ["📖", "중국어 학습"], plan: ["📅", "다음 일정"], team: ["⚽", ""] };
+function baseImage(fam, P0, sz) {
+  let stamp = "nobg"; try { if (FM.fileExists(BG)) stamp = String(FM.modificationDate(BG).getTime()); } catch (e) {}
+  const key = [BASE_V, fam, P0 || "all", sz.width, sz.height, stamp].join("_").replace(/[^\w.-]/g, "");
+  const f = FM.joinPath(FM.documentsDirectory(), "me-base-" + key + ".png");
+  try { if (FM.fileExists(f)) { const im = Image.fromFile(f); if (im) return im; } } catch (e) {}
+  const c = D(sz); backdrop(c, sz);
+  for (const b of layout(fam, P0, sz.width, sz.height)) {
+    glass(c, b.x, b.y, b.w, b.h);
+    if (b.k !== "team") dHead(c, b.x + 12, b.y + 10, b.w - 120, HEADS[b.k][0], HEADS[b.k][1]);
+    else { const lw = Math.min(78, b.w * 0.23); grad(c, b.x + 1, b.y + 1, lw, b.h - 2, 17, new Color("#1B4FC4", 0.75), new Color("#071636", 0.6)); glow(c, b.x + 1 + lw / 2, b.y + b.h / 2, lw * 0.75, "#3D8BFF", 0.45); }
+  }
+  const im = c.getImage();
+  try { for (const n of FM.listContents(FM.documentsDirectory())) if (/^me-base-/.test(n)) FM.remove(FM.joinPath(FM.documentsDirectory(), n)); FM.writeImage(f, im); } catch (e) {}
+  return im;
+}
+// ---------- 데이터 그림 ----------
 const KDOW = ["일", "월", "화", "수", "목", "금", "토"];
-const kday = (d) => { const p = d.split("-"); return Number(p[1]) + "월 " + Number(p[2]) + "일 (" + KDOW[new Date(d + "T00:00:00Z").getUTCDay()] + ")"; };
+const dow = (d) => KDOW[new Date(d + "T00:00:00Z").getUTCDay()];
+const kday = (d) => { const p = d.split("-"); return Number(p[1]) + "월 " + Number(p[2]) + "일 (" + dow(d) + ")"; };
+const sday = (d) => { const p = d.split("-"); return Number(p[1]) + "/" + Number(p[2]) + " (" + dow(d) + ")"; };
 const n1 = (x) => Number(x || 0).toLocaleString();
+function dayWord(j, d) { const dd = Math.round((Date.parse(d + "T00:00:00Z") - Date.parse(j.d + "T00:00:00Z")) / 864e5); return dd === 0 ? "오늘" : dd === 1 ? "내일" : dd > 1 && dd < 7 ? dd + "일 뒤" : ""; }
+function pill(c, x, y, w, h, t, size, bg, line) { rr(c, x, y, w, h, h / 2, bg || new Color("#13285A", 0.9), line || new Color("#6A93E8", 0.5), 0.7); T(c, t, x + 3, y + (h - size * 1.3) / 2, w - 6, size, P.txt, "b", "c"); }
 
-function studyCard(c, j, x, y, w, h, noChips) {
-  cardBox(c, x, y, w, h);
-  const hk = j.hsk || { lv: 4, total: 509, seen: 0, mast: 0 }, s = j.study || {};
-  const rg = j.ring || { title: "HSK " + hk.lv, big: String(Math.round((hk.total ? hk.mast / hk.total : 0) * 100)), unit: "%", sub: hk.mast + " / " + hk.total, pct: hk.total ? hk.mast / hk.total : 0 };
-  head(c, x + 12, y + 12, w - 24, "📖", "중국어 학습", "꾸준한 오늘이 더 큰 기회를 만듭니다.", rg.title);
-  // 링
-  const pct = Math.max(0, Math.min(1, rg.pct || 0)), oy = CMP ? 34 : 52, rr0 = noChips ? Math.min(42, (h - oy - 16) / 2) : Math.min(40, (h - 60) / 2 - 18), cx = x + 14 + rr0 + 5, cy = y + oy + rr0 + 6;
-  glow(c, cx, cy, rr0 + 14, "#22D37A", 0.10);
-  arcG(c, cx, cy, rr0, 8, 0, 1, new Color("#22417E"), new Color("#22417E"));
-  if (pct > 0) { arcG(c, cx, cy, rr0, 12, 0, Math.min(pct, 1), P.green, P.green2, 0.12); arcG(c, cx, cy, rr0, 8, 0, Math.min(pct, 1), new Color("#13B868"), P.green2); }
-  T(c, rg.title, cx - 32, cy - 25, 64, 8.5, P.sub, "m", "c");
-  const pv = String(rg.big), bs = pv.length > 3 ? 18 : 24, uw = tw(rg.unit, 11), vw = tw(pv, bs) * 0.92;
-  T(c, pv, cx - (vw + uw) / 2 - 4, cy - 15, vw + 8, bs, P.txt, "h", "c", 30);
-  T(c, rg.unit, cx - (vw + uw) / 2 + vw + 1, cy - 2, uw + 6, 11, P.txt, "b");
-  T(c, rg.sub, cx - rr0 + 6, cy + 13, rr0 * 2 - 12, 7.5, P.sub, "", "c");
-  // 타일 3개
-  const rx = cx + rr0 + 16, rw = x + w - 12 - rx, tg = 5, tWd = (rw - tg * 2) / 3, ty = y + oy;
-  const tiles = [["📚", "누적 단어", n1(j.words), ["#183A86", "#0F2457"]], ["📊", "오늘 학습", (s.today || 0) + "분", ["#0F4A45", "#0A2B33"]], ["🔥", "연속", (s.streak || 0) + "일", ["#4A1E2A", "#2A1424"]]];
+function studyCard(c, j, b) {
+  const { x, y, w, h } = b, s = j.study || {}, hk = j.hsk || null, rg = j.ring || null;
+  // 메인 링 = HSK 익힘(데이터 있을 때). 링 설정이 HSK 5 면 HSK 5
+  let main = null;
+  if (rg && rg.k === "hsk5") main = { title: "HSK 5", pct: rg.pct || 0, big: rg.big, unit: rg.unit, sub: rg.sub };
+  else if (hk && hk.total) { const p = hk.mast / hk.total; main = { title: "HSK " + (hk.lv || 4), pct: p, big: String(Math.round(p * 100)), unit: "%", sub: n1(hk.mast) + " / " + n1(hk.total) }; }
+  else if (rg) main = rg;
+  else main = { title: "오늘 공부", pct: s.goal ? Math.min(1, (s.today || 0) / s.goal) : 0, big: String(s.today || 0), unit: "분", sub: "목표 " + (s.goal || 30) + "분" };
+  pill(c, x + w - 76, y + 11, 64, 20, main.title + " 목표", 9.5);
+  // 보조 지표 하나: 링 설정이 HSK·오늘 시간이 아니면 그것, 아니면 통화 점수
+  const sec = rg && !/^(hsk4|hsk5|time)$/.test(rg.k) ? rg : j.ring2 || null;
+  const pct = Math.max(0, Math.min(1, main.pct || 0));
+  const top = y + 38, avail = (b.big ? Math.min(h - 46, 150) : h - 46), rr0 = Math.min(b.big ? 50 : 42, avail / 2 - 5);
+  const cx = x + 16 + rr0 + 5, cy = top + Math.min(avail / 2, rr0 + 6);
+  glow(c, cx, cy, rr0 + 16, "#22D37A", 0.12);
+  arcG(c, cx, cy, rr0, 9, 0, 1, new Color("#1D3B78"), new Color("#1D3B78"));
+  if (pct > 0) { arcG(c, cx, cy, rr0, 14, 0, pct, P.green, P.green2, 0.10); arcG(c, cx, cy, rr0, 9, 0, pct, new Color("#12B866"), new Color("#9BF58C")); }
+  T(c, main.title, cx - rr0 + 6, cy - rr0 * 0.62, rr0 * 2 - 12, 10, P.sub, "m", "c");
+  const pv = String(main.big), bs = rr0 >= 48 ? 30 : 25, uw = tw(main.unit, 12, "b"), vw = tw(pv, bs, "h");
+  T(c, pv, cx - (vw + uw) / 2 - 3, cy - bs * 0.62, vw + 6, bs, P.txt, "h", "c", bs * 1.3);
+  T(c, main.unit, cx - (vw + uw) / 2 + vw + 1, cy - 2, uw + 6, 12, P.txt, "b");
+  T(c, main.sub, cx - rr0 + 6, cy + rr0 * 0.36, rr0 * 2 - 12, 9.5, P.sub, "", "c");
+  // 오른쪽: 타일 2×2
+  const rx = cx + rr0 + 16, rw = x + w - 12 - rx, g = 6, tW = (rw - g) / 2, tH = b.big ? 34 : 28;
+  const tiles = [["⏱", "오늘 학습", (s.today || 0) + "분", "#0F4A45", (s.today || 0) >= (s.goal || 30) ? P.green2 : P.txt],
+    sec ? ["📞", sec.title, sec.big + sec.unit, "#2A2A6A", P.txt] : ["📚", "누적 단어", n1(j.words), "#183A86", P.txt],
+    sec ? ["📚", "누적 단어", n1(j.words), "#183A86", P.txt] : ["🧩", "오늘 문제", (s.n || 0) + "개", "#2A2A6A", P.txt],
+    ["🔥", "연속 학습", (s.streak || 0) + "일", "#4A1E2A", new Color("#FFB86B")]];
   tiles.forEach((t, i) => {
-    const tx = rx + i * (tWd + tg);
-    grad(c, tx, ty, tWd, 38, 10, new Color(t[3][0], 0.9), new Color(t[3][1], 0.9)); rr(c, tx, ty, tWd, 38, 10, null, new Color("#FFFFFF", 0.12), 0.6);
-    T(c, t[0], tx + 3, ty + 11, 16, 11, P.txt, "", "c");
-    T(c, t[1], tx + 20, ty + 7, tWd - 21, 7.5, P.sub);
-    T(c, t[2], tx + 20, ty + 17, tWd - 21, 12.5, P.txt, "b");
+    const tx = rx + (i % 2) * (tW + g), ty = top + Math.floor(i / 2) * (tH + g);
+    inner(c, tx, ty, tW, tH, 10, t[3]);
+    T(c, t[0], tx + 5, ty + tH / 2 - 7, 18, 12, P.txt, "", "c");
+    T(c, t[1], tx + 25, ty + tH / 2 - 12.5, tW - 28, 9.5, P.sub);
+    T(c, t[2], tx + 25, ty + tH / 2 - 0.5, tW - 28, 13, t[4], "b");
   });
-  // 오늘의 단어 줄
-  const ly = ty + 44;
-  rr(c, rx, ly, rw, 18, 9, new Color("#0A1A3C", 0.6));
-  T(c, "💡 오늘의 단어", rx + 6, ly + 3.5, rw / 2, 8.5, P.txt, "m");
-  T(c, (s.n || 0) + "문제 · 주 " + (s.week || 0) + "분 ›", rx + rw / 2, ly + 4, rw / 2 - 8, 7.5, P.sub, "", "r");
-  // 이번 주 막대(링 오른쪽 아래 남는 자리)
-  const by = ly + 24, bh = cy + rr0 - by + 4, d7 = s.days7 || [], goal = s.goal || 30;
-  if (bh > 10 && d7.length) {
-    const bw = (rw - 6 * 4) / 7, mx = Math.max(goal, ...d7.map((q) => q.min || 0), 1);
-    d7.forEach((q, i) => {
-      const hh = Math.max(2, (bh - 9) * Math.min(1, (q.min || 0) / mx)), bx = rx + i * (bw + 4);
-      rr(c, bx, by, bw, bh - 9, 3, new Color("#FFFFFF", 0.06));
-      rr(c, bx, by + bh - 9 - hh, bw, hh, 3, q.min >= goal ? P.green : q.d === j.d ? P.pink : new Color("#4C7BE0", q.min ? 0.9 : 0.25));
-      T(c, KDOW[new Date(q.d + "T00:00:00Z").getUTCDay()], bx - 2, by + bh - 8, bw + 4, 6.5, q.d === j.d ? P.txt : P.dim, "", "c");
+  // 오늘의 단어(최대 2개) — 실제 단어만, 없으면 문구
+  let wy = top + tH * 2 + g + (b.big ? 8 : 5);
+  const ch = (j.chips || []).slice(0, 2), lab = ch.some((q) => q.wrong) ? "💡 오늘의 단어 · 다시 볼 것" : "💡 오늘의 단어";
+  const chipH = b.big ? 34 : 28;
+  if (wy + 13 + chipH <= y + h - 4) {
+    T(c, lab, rx, wy, rw, 9.5, P.sub, "m");
+    wy += 13;
+    if (!ch.length) T(c, "틀린 단어가 생기면 여기에 떠요", rx, wy + chipH / 2 - 7, rw, 10, P.dim);
+    const CC = [["#3A2A12", "#C08A30"], ["#10285E", "#3F7BF0"]];
+    ch.forEach((q, i) => {
+      const qx = rx + i * (tW + g);
+      grad(c, qx, wy, tW, chipH, 9, new Color(CC[i][0], 0.95), new Color("#081530", 0.9)); rr(c, qx, wy, tW, chipH, 9, null, new Color(CC[i][1], 0.8), 0.9);
+      if (b.big) { T(c, q.z, qx + 8, wy + 4, tW - 16, 15, P.txt, "h"); T(c, q.k, qx + 8, wy + 22, tW - 16, 10, P.sub); }
+      else { const zw = Math.min(tw(q.z, 14, "h") + 6, tW * 0.55); T(c, q.z, qx + 7, wy + chipH / 2 - 9, zw, 14, P.txt, "h"); T(c, q.k, qx + 8 + zw, wy + chipH / 2 - 6.5, tW - zw - 13, 10, P.sub); }
     });
   }
-  // 단어 칩 4개(전체 폭)
-  if (noChips) return;
-  const ch = (j.chips || []).slice(0, 4), cyy = y + h - 12 - 40, cw = (w - 24 - 3 * 6) / 4;
-  const CC = [["#3A2A12", "#B07A2A"], ["#10285E", "#2F6BEA"], ["#0F3326", "#2FA36B"], ["#2A1A5E", "#7A4AEA"]];
-  if (!ch.length) T(c, "오답 단어가 생기면 여기에 떠요", x + 12, cyy + 14, w - 24, 9, P.sub, "", "c");
-  ch.forEach((q, i) => {
-    const qx = x + 12 + i * (cw + 6);
-    grad(c, qx, cyy, cw, 40, 10, new Color(CC[i][0], 0.95), new Color("#081530", 0.9)); rr(c, qx, cyy, cw, 40, 10, null, new Color(CC[i][1], 0.75), 0.9);
-    T(c, q.z, qx + 7, cyy + 5, cw - 22, q.z.length > 2 ? 12 : 14, P.txt, "h");
-    T(c, "🔈", qx + cw - 17, cyy + 6, 13, 8, P.sub);
-    c.setFillColor(new Color("#FFFFFF", 0.12)); c.fillRect(R(qx + 7, cyy + 23, cw - 14, 0.5));
-    T(c, q.k, qx + 7, cyy + 26, cw - 12, 8, P.sub);
-  });
+  // 큰 공부 카드: 아래에 이번 주 막대
+  const d7 = s.days7 || [];
+  if (b.big && d7.length) {
+    const by = Math.max(cy + rr0 + 14, wy + chipH + 10), bh = y + h - 10 - by;
+    if (bh >= 30) {
+      T(c, "이번 주 공부 · " + (s.week || 0) + "분", x + 14, by, w - 28, 9.5, P.sub, "m");
+      const gy = by + 15, gh = bh - 26, bw = (w - 28 - 6 * 8) / 7, goal = s.goal || 30, mx = Math.max(goal, ...d7.map((q) => q.min || 0), 1);
+      d7.forEach((q, i) => {
+        const bx = x + 14 + i * (bw + 8), hh = Math.max(2, gh * Math.min(1, (q.min || 0) / mx));
+        rr(c, bx, gy, bw, gh, 4, new Color("#FFFFFF", 0.06));
+        rr(c, bx, gy + gh - hh, bw, hh, 4, q.min >= goal ? P.green : q.d === j.d ? P.pink : new Color("#4C7BE0", q.min ? 0.9 : 0.25));
+        T(c, dow(q.d) + (q.min ? " " + q.min : ""), bx - 4, gy + gh + 1, bw + 8, 9, q.d === j.d ? P.txt : P.sub, "", "c");
+      });
+    }
+  }
 }
-function splitPlace(x) { const m = String(x.title || "").split(/\s*@\s*/); return { title: m[0], place: m[1] || "" }; }
-function planCard(c, j, x, y, w, h, nRows) {
-  cardBox(c, x, y, w, h);
-  head(c, x + 12, y + 12, w - 24, "📅", "다음 일정", "중요한 일정을 놓치지 마세요.", "전체 일정");
-  const L = (j.plan || []).slice(0, nRows), top = y + (CMP ? 32 : 50), avail = y + h - 8 - top;
-  if (!L.length) { T(c, "다가오는 일정 없음", x + 12, top + avail / 2 - 6, w - 24, 10, P.sub, "", "c"); return; }
-  const bigH = CMP ? 0 : Math.min(52, avail - (L.length - 1) * 34), smH = CMP ? Math.min(34, (avail - 4 * (L.length - 1)) / L.length) : L.length > 1 ? Math.min(34, (avail - bigH - 4 * (L.length - 1)) / (L.length - 1)) : 0;
+function splitPlace(it) { const m = String(it.title || "").split(/\s*@\s*/); return { title: m[0], place: m[1] || "" }; }
+function planCard(c, j, b) {
+  const { x, y, w, h } = b, top = y + 37, L = (j.plan || []).slice(0, b.n || 1), avail = y + h - 7 - top;
+  if (L.length > 1 && avail < 86) L.length = 1; // 두 줄이 안 들어가면 가장 가까운 것 하나만 크게
+  if (!L.length) { inner(c, x + 8, top, w - 16, Math.min(avail, 44), 12); T(c, "다가오는 일정이 없어요", x + 20, top + Math.min(avail, 44) / 2 - 8, w - 40, 12, P.sub, "m"); return; }
+  const first = Math.min(L.length > 1 ? 54 : avail, 64), restH = L.length > 1 ? Math.min(40, (avail - first - 4 * (L.length - 1)) / (L.length - 1)) : 0;
   let yy = top;
   L.forEach((it, i) => {
-    const big = !CMP && i === 0, hh = big ? bigH : smH, ix = x + 8, iw = w - 16, sp = splitPlace(it);
-    rr(c, ix, yy, iw, hh, 12, P.inner, P.innerLine, 0.7);
-    const dl = it.d === j.d ? "오늘" : kday(it.d);
-    if (big) {
-      T(c, dl, ix + 10, yy + 7, 70, 8, P.sub);
-      T(c, it.t || "종일", ix + 10, yy + 18, 72, it.t ? 22 : 17, P.txt, "h", "", 30);
-      c.setFillColor(new Color("#FFFFFF", 0.15)); c.fillRect(R(ix + 82, yy + 9, 0.6, hh - 18));
-      glow(c, ix + 106, yy + hh / 2, 20, "#2F7BFF", 0.35);
-      c.setFillColor(P.blue2); c.fillEllipse(R(ix + 92, yy + hh / 2 - 14, 28, 28));
-      T(c, it.icon === "🕘" ? "💼" : it.icon, ix + 92, yy + hh / 2 - 8, 28, 13, P.txt, "", "c");
-      T(c, sp.title, ix + 128, yy + 7, iw - 136, 12, P.txt, "b");
-      T(c, it.sub || (it.t ? "" : "하루 종일"), ix + 128, yy + 22, iw - 136, 8.5, P.sub);
-      if (sp.place) T(c, "📍 " + sp.place, ix + 128, yy + 35, iw - 136, 8, P.sub);
+    const big = i === 0, hh = big ? first : restH, ix = x + 8, iw = w - 16, sp = splitPlace(it), dw = dayWord(j, it.d);
+    if (hh < 22) return;
+    inner(c, ix, yy, iw, hh, 12, big ? "#123070" : null);
+    const tcol = big ? 94 : 80, ts = big ? (hh >= 50 ? 22 : 18) : 14, ls = big ? 9.5 : 9, y0 = yy + (hh - (ls * 1.25 + ts * 1.15)) / 2, yT = y0 + ls * 1.25;
+    if (it.t) {
+      T(c, (dw ? dw + " · " : "") + sday(it.d), ix + 10, y0, tcol - 14, ls, P.sub);
+      T(c, it.t, ix + 10, yT, tcol - 14, ts, P.txt, "h", "", ts * 1.4);
     } else {
-      T(c, dl, ix + 10, yy + hh / 2 - 11, 74, 7.5, P.sub);
-      T(c, it.t || "종일", ix + 10, yy + hh / 2 - 1, 74, 11, P.txt, "b");
-      c.setFillColor(new Color("#FFFFFF", 0.12)); c.fillRect(R(ix + 82, yy + 7, 0.6, hh - 14));
-      c.setFillColor(new Color("#1A2E5C")); c.fillEllipse(R(ix + 92, yy + hh / 2 - 11, 22, 22));
-      T(c, it.icon === "🕘" ? "📄" : it.icon, ix + 92, yy + hh / 2 - 6, 22, 10, P.txt, "", "c");
-      const pw = sp.place ? Math.min(90, tw(sp.place, 8) + 18) : 0;
-      T(c, sp.title, ix + 122, yy + hh / 2 - 11, iw - 130 - pw, 10, P.txt, "b");
-      T(c, it.sub || "", ix + 122, yy + hh / 2 + 1, iw - 130 - pw, 8, P.sub);
-      if (pw) T(c, "📍 " + sp.place, ix + iw - pw - 8, yy + hh / 2 - 5, pw, 8, P.sub, "", "r");
+      T(c, dw || dow(it.d) + "요일", ix + 10, y0, tcol - 14, ls, P.sub);
+      const p = it.d.split("-"), ds = Number(p[1]) + "/" + Number(p[2]), dW = Math.min(52, tw(ds, ts, "h") + 4);
+      T(c, ds, ix + 10, yT, dW + 4, ts, P.txt, "h", "", ts * 1.4);
+      if (big) pill(c, ix + 12 + dW, yT + ts * 0.25, 28, 14, "종일", 8.5, new Color("#1450D8"), new Color("#7FA8FF", 0.6));
+    }
+    c.setFillColor(new Color("#FFFFFF", 0.14)); c.fillRect(R(ix + tcol, yy + 9, 0.7, hh - 18));
+    const icx = ix + tcol + 10, ic = it.icon === "🕘" ? "💼" : it.icon, cs = big ? 30 : 22;
+    if (big) glow(c, icx + cs / 2, yy + hh / 2, cs * 0.9, "#2F7BFF", 0.4);
+    c.setFillColor(big ? P.blue2 : new Color("#1A2E5C")); c.fillEllipse(R(icx, yy + hh / 2 - cs / 2, cs, cs));
+    T(c, ic, icx, yy + hh / 2 - cs * 0.27, cs, cs * 0.45, P.txt, "", "c");
+    const mx = icx + cs + 9, mw = ix + iw - 10 - mx;
+    // 우선순위: 제목 > 장소 > 상세(기간·편명)
+    const l2 = [sp.place ? "📍 " + sp.place : "", it.sub || ""].filter(Boolean);
+    if (big) {
+      T(c, sp.title, mx, yy + (l2.length ? hh / 2 - 15 : hh / 2 - 9), mw, 13.5, P.txt, "b");
+      if (l2[0]) T(c, l2[0], mx, yy + hh / 2 + 2, mw, 10, P.sub);
+      if (l2[1] && hh >= 58) T(c, l2[1], mx, yy + hh / 2 + 16, mw, 9.5, P.dim);
+    } else {
+      T(c, sp.title, mx, yy + (l2.length ? hh / 2 - 13 : hh / 2 - 8), mw, 11.5, P.txt, "b");
+      if (l2[0]) T(c, l2[0], mx, yy + hh / 2 + 1, mw, 9.5, P.sub);
     }
     yy += hh + 4;
   });
 }
-function teamCard(c, j, x, y, w, h, nRows) {
-  cardBox(c, x, y, w, h);
-  // 왼쪽: 경기장 느낌(팀 로고는 넣지 않음 — 공 + 빛)
-  const lw = Math.min(70, w * 0.21);
-  grad(c, x + 1, y + 1, lw, h - 2, 17, new Color("#123C9C", 0.9), new Color("#071636", 0.9));
-  for (let i = 0; i < 9; i++) { c.setFillColor(new Color("#FFFFFF", 0.05)); c.fillEllipse(R(x + 6 + i * 9, y + 8 + (i % 3) * 5, 3, 3)); }
-  glow(c, x + 1 + lw / 2, y + h / 2 + 4, lw * 0.55, "#3D8BFF", 0.5);
-  const cr = crest();
-  if (cr) imgIn(c, cr, x + 9, y + 12, lw - 16, h - 24);
-  else { T(c, "⚽", x + 1, y + h / 2 - 20, lw, 32, P.txt, "", "c", 42); T(c, "MY TEAM", x + 1, y + h - 22, lw, 8, P.sub, "b", "c"); }
-  const rx = x + lw + 10, rw = x + w - 10 - rx;
-  T(c, "좋아하는 팀 일정", rx, y + (CMP ? 7 : 10), rw * 0.55, CMP ? 12 : 13, P.txt, "b");
-  const G = (j.games || []).slice(0, nRows);
-  const msg = G.length ? "수원 삼성 · T1 다음 경기를 응원합니다." : (j.gerr || "예정된 경기 없음");
-  if (CMP) { if (!G.length) T(c, msg, rx, y + 30, rw, 8.5, P.sub); } else T(c, msg, rx, y + 27, rw, 8, P.sub);
-  const top = y + (CMP ? 26 : 42), rh = Math.min(30, (y + h - 8 - top - 3 * (nRows - 1)) / nRows);
+function teamCard(c, j, b) {
+  const { x, y, w, h } = b, lw = Math.min(78, w * 0.23), cr = crest(), G = (j.games || []).slice(0, b.n || 3);
+  if (cr) imgIn(c, cr, x + 9, y + 10, lw - 16, h - 20);
+  else { T(c, "⚽", x + 1, y + h / 2 - 20, lw, 32, P.txt, "", "c", 42); T(c, "MY TEAM", x + 1, y + h - 22, lw, 9, P.sub, "b", "c"); }
+  const rx = x + lw + 12, rw = x + w - 10 - rx;
+  T(c, "좋아하는 팀 일정", rx, y + 9, rw * 0.62, 14, P.txt, "b");
+  const st = j.gstate || (G.length ? "ok" : j.gerr ? "fail" : "empty");
+  if (!G.length) {
+    // 경기 없음 / 연결 실패 / 팀 꺼짐 — 서로 다른 화면
+    const by = y + 34, bh = y + h - 8 - by;
+    inner(c, rx - 2, by, rw + 2, bh, 12, st === "fail" ? "#3A1520" : null);
+    const M = st === "fail" ? ["⚠️ 경기 정보를 못 불러왔어요", j.gmsg || j.gerr || "잠시 뒤 다시 시도해요", "다음 새로고침 때 다시 받아요"]
+      : st === "off" ? ["팀 알림이 꺼져 있어요", "voice.zhnote.net/me 에서 팀을 켜 주세요", ""]
+      : ["📭 예정된 경기가 없어요", j.gmsg || "시즌이 끝났거나 일정이 아직 안 나왔어요", "일정이 나오면 여기에 바로 떠요"];
+    T(c, M[0], rx + 10, by + 10, rw - 18, 12.5, st === "fail" ? new Color("#FF9AA8") : P.txt, "b");
+    T(c, M[1], rx + 10, by + 29, rw - 18, 10, P.sub, "", "", 28);
+    if (M[2] && bh > 62) T(c, M[2], rx + 10, by + bh - 20, rw - 18, 9.5, P.dim);
+    return;
+  }
+  const top = y + 33, avail = y + h - 7 - top, rows = avail >= 92 ? 3 : avail >= 52 ? 2 : 1; G.splice(rows);
+  const firstH = G.length > 1 ? Math.min(36, Math.max(28, avail * 0.42)) : Math.min(40, avail), restH = G.length > 1 ? Math.min(28, (avail - firstH - 4 * (G.length - 1)) / (G.length - 1)) : 0;
+  let ry = top;
   G.forEach((g, i) => {
-    const ry = top + i * (rh + 3);
-    rr(c, rx - 2, ry, rw + 2, rh, 9, P.inner, P.innerLine, 0.6);
-    const p = g.d.split("-");
-    T(c, Number(p[1]) + "/" + Number(p[2]) + " (" + KDOW[new Date(g.d + "T00:00:00Z").getUTCDay()] + ")", rx + 5, ry + rh / 2 - 5.5, 46, 8, P.sub);
-    T(c, g.hm, rx + 48, ry + rh / 2 - 6.5, 32, 10, P.txt, "b");
-    const ic = g.k === "lol" ? "🎮" : g.home ? "🏠" : "✈️";
-    T(c, ic, rx + 80, ry + rh / 2 - 6, 14, 9, P.txt, "", "c");
-    const a = g.k === "fb" && !g.home ? g.op : g.me, b = g.k === "fb" && !g.home ? g.me : g.op, mx = rx + 98, mw = rw - 98 - 40;
-    const mine = new Color(g.k === "lol" ? "#FF5A6E" : "#6FA8FF"), col = (n) => n === g.me ? mine : P.txt;
-    const half = (mw - 16) / 2;
-    const ce = g.k === "fb" && cr, cw2 = ce ? 13 : 0;
-    T(c, a, mx, ry + rh / 2 - 6, half - (a === g.me ? cw2 : 0), 9.5, col(a), "b", "r");
-    if (ce && a === g.me) imgIn(c, cr, mx + half - 12, ry + rh / 2 - 7, 11, 14);
-    T(c, "vs", mx + half, ry + rh / 2 - 5, 16, 7.5, P.dim, "", "c");
-    if (ce && b === g.me) imgIn(c, cr, mx + half + 17, ry + rh / 2 - 7, 11, 14);
-    T(c, b, mx + half + 16 + (b === g.me ? cw2 : 0), ry + rh / 2 - 6, half - (b === g.me ? cw2 : 0), 9.5, col(b), "b");
-    const home = g.k === "fb" ? g.home : true;
-    rr(c, rx + rw - 36, ry + rh / 2 - 8, 34, 16, 8, home ? P.blue2 : new Color("#2A3656"), home ? new Color("#5C9BFF", 0.6) : null, 0.7);
-    T(c, g.tag, rx + rw - 36, ry + rh / 2 - 5.5, 34, 8, P.txt, "b", "c");
+    const big = i === 0, rh = big ? firstH : restH;
+    if (rh < 18) return;
+    inner(c, rx - 2, ry, rw + 2, rh, 10, big ? "#123070" : null);
+    const dw = dayWord(j, g.d), dl = big && dw ? dw : sday(g.d);
+    T(c, dl, rx + 6, ry + rh / 2 - (big ? 12 : 6), 52, big ? 10 : 9.5, big ? P.txt : P.sub, big ? "b" : "");
+    if (big) T(c, sday(g.d), rx + 6, ry + rh / 2 + 1, 52, 8.5, P.sub);
+    T(c, g.hm, rx + 56, ry + rh / 2 - (big ? 8 : 6.5), 40, big ? 13 : 11, P.txt, "h");
+    const tag = g.k === "lol" ? (g.tag || "LoL") : g.home ? "홈" : "원정", home = g.k === "fb" ? g.home : true;
+    const pw = Math.max(30, Math.min(48, tw(tag, 9, "b") + 14));
+    pill(c, rx + rw - pw - 2, ry + rh / 2 - 8, pw, 16, tag, 9, home ? P.blue2 : new Color("#2A3656"), home ? new Color("#7FA8FF", 0.7) : new Color("#8A97B8", 0.5));
+    const a = g.k === "fb" && !g.home ? g.op : g.me, bb = g.k === "fb" && !g.home ? g.me : g.op, mx = rx + 98, mw = rw - 98 - pw - 8;
+    const mine = new Color(g.k === "lol" ? "#FF6B7E" : "#7FB2FF"), col = (n) => n === g.me ? mine : P.txt, ms = big ? 12.5 : 10.5;
+    const ce = g.k === "fb" && cr, half = (mw - 18) / 2, cw2 = ce ? ms + 3 : 0;
+    T(c, a, mx, ry + rh / 2 - ms * 0.65, half - (ce && a === g.me ? cw2 : 0), ms, col(a), "b", "r");
+    if (ce && a === g.me) imgIn(c, cr, mx + half - ms - 1, ry + rh / 2 - ms * 0.6, ms, ms * 1.25);
+    T(c, "vs", mx + half, ry + rh / 2 - 5, 18, 8.5, P.dim, "", "c");
+    if (ce && bb === g.me) imgIn(c, cr, mx + half + 19, ry + rh / 2 - ms * 0.6, ms, ms * 1.25);
+    T(c, bb, mx + half + 18 + (ce && bb === g.me ? cw2 : 0), ry + rh / 2 - ms * 0.65, half - (ce && bb === g.me ? cw2 : 0), ms, col(bb), "b");
+    ry += rh + 4;
   });
 }
-// 큰 위젯: study(기본) = 공부 + 일정 / plan = 일정 + 팀 · 중간 위젯: team·plan = 팀
+// 큰 위젯: 비움·all = 공부+일정+팀 / study = 공부(크게)+일정 / plan = 일정+팀 · 중간 위젯 plan·team = 팀
 function pro(j, fam, P0) {
-  const sz = wsize(fam), c = D(sz); backdrop(c, sz);
-  const W = sz.width, H = sz.height, m = 4;
-  CMP = false;
-  if (fam !== "medium" && (!P0 || P0 === "all")) {
-    CMP = true; const A = H - m * 4, h1 = Math.round(A * 0.42), h2 = Math.round(A * 0.23);
-    studyCard(c, j, m, m, W - m * 2, h1, true); planCard(c, j, m, m * 2 + h1, W - m * 2, h2, 1); teamCard(c, j, m, m * 3 + h1 + h2, W - m * 2, A - h1 - h2, 3);
-  } else if (fam === "medium") teamCard(c, j, m, m, W - m * 2, H - m * 2, 3);
-  else if (P0 === "plan") { const h1 = Math.round((H - m * 3) * 0.55); planCard(c, j, m, m, W - m * 2, h1, 3); teamCard(c, j, m, m * 2 + h1, W - m * 2, H - m * 3 - h1, 3); }
-  else { const h1 = Math.round((H - m * 3) * 0.57); studyCard(c, j, m, m, W - m * 2, h1); planCard(c, j, m, m * 2 + h1, W - m * 2, H - m * 3 - h1, 2); }
-  if (j.stale) T(c, "⚠︎ 저장본", W - 60, H - 12, 52, 7, P.dim, "", "r");
+  const sz = wsize(fam), c = D(sz);
+  if (P0 === "all") P0 = "";
+  c.drawImageInRect(baseImage(fam, P0, sz), new Rect(0, 0, sz.width * K, sz.height * K));
+  for (const b of layout(fam, P0, sz.width, sz.height)) { if (b.k === "study") studyCard(c, j, b); else if (b.k === "plan") planCard(c, j, b); else teamCard(c, j, b); }
+  if (j.stale) T(c, "⚠︎ 저장본", sz.width - 64, sz.height - 13, 56, 8, P.dim, "", "r");
   const w = new ListWidget(); w.backgroundImage = c.getImage(); w.url = "https://voice.zhnote.net/me";
   w.refreshAfterDate = new Date(Date.now() + 20 * 60e3); w.setPadding(0, 0, 0, 0);
   return w;
