@@ -1515,7 +1515,9 @@ function bgPhotoN(fam) {
   c.setFillColor(new Color("#0A1430")); c.fillRect(new Rect(0, 0, W, H));
   // 사진은 높이에 맞춰 오른쪽에 붙임(타워처럼 세로로 긴 피사체가 오른쪽 위에 서 있게), 왼쪽 45% 는 남색으로 덮고 → 오른쪽으로 갈수록 사진이 드러남
   const k = Math.max(W / src.size.width, H / src.size.height), w = src.size.width * k, h = src.size.height * k;
-  c.drawImageInRect(src, new Rect(W - w, 0, w, h)); // 위에 맞춤(타워 꼭대기가 잘리지 않게)
+  // 사진의 가로 중심(타워가 보통 사진 가운데)이 위젯의 70% 지점에 오게 — 큰 위젯은 높이에 맞추면 사진이 넓어져 오른쪽 정렬만으로는 타워가 왼쪽 덮개 밑에 숨음(2026-10-30 캡처)
+  const fx = Math.max(W - w, Math.min(0, W * 0.70 - w / 2));
+  c.drawImageInRect(src, new Rect(fx, 0, w, h)); // 위에 맞춤(타워 꼭대기가 잘리지 않게)
   const N = 48, x0 = W * 0.24, x1 = W * 0.72; // 0.30 까지 완전 덮음 → 0.78 에서 22% 만
   c.setFillColor(new Color("#0A1430")); c.fillRect(new Rect(0, 0, x0, H));
   const dw = (x1 - x0) / N;
