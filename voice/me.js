@@ -474,7 +474,7 @@ export async function meApi(env, path, b, h) {
     gl.sort((a, b) => a.t - b.t);
     const gview = gl.slice(0, 3).map((g) => { const x = new Date(g.t + TZ); return { ...g, d: x.toISOString().slice(0, 10), hm: x.toISOString().slice(11, 16) }; });
     const days7 = []; for (let i = 6; i >= 0; i--) { const k = cnDay(now - i * 864e5); days7.push({ d: k, min: mins(k) }); }
-    return { ok: true, d: today, study: { today: mins(today), goal: d.cfg.gstudy || 30, streak, week, n: sc.todayN, days7 }, hsk: sc.hsk, words: sc.words, chips: sc.chips, trip, plan, games: gview, game: games[0] ? games[0].line : "", note };
+    return { ok: true, d: today, study: { today: mins(today), goal: d.cfg.gstudy || 30, streak, week, n: sc.todayN, days7 }, hsk: sc.hsk, words: sc.words, chips: sc.chips, trip, plan, games: gview, gerr: [d.cfg.suwon && fb && fb.err ? "⚽ " + fb.err : "", d.cfg.t1 && lol && lol.err ? "🎮 " + lol.err : "", !d.cfg.suwon && !d.cfg.t1 ? "/me 화면에서 팀을 켜 주세요" : ""].filter(Boolean).join(" · "), game: games[0] ? games[0].line : "", note };
   }
   if (path === "/me/cfg") {
     const c = d.cfg;
@@ -848,13 +848,217 @@ function teamSec(w, j, n) {
   });
   return c;
 }
+// ---------- 🎨 그려서 만드는 위젯(큰 위젯·중간 team) — 남색 유리 카드 시안 ----------
+const K = 3; // 그림 배율(픽셀/포인트)
+const P = {
+  bg1: new Color("#050E24"), bg2: new Color("#0B2152"), card: new Color("#0D2148", 0.62), line: new Color("#4C7BE0", 0.42),
+  inner: new Color("#0A1A3C", 0.75), innerLine: new Color("#3D66C2", 0.30), txt: Color.white(), sub: new Color("#A9BCE0"), dim: new Color("#6F84AE"),
+  blue: new Color("#2F7BFF"), blue2: new Color("#1450D8"), green: new Color("#22D37A"), green2: new Color("#8AF27A"), pink: new Color("#FF4D7A")
+};
+function wsize(fam) {
+  const sw = Device.screenSize().width;
+  const t = sw >= 428 ? [364, 170, 382] : sw >= 390 ? [338, 158, 354] : sw >= 375 ? [321, 148, 324] : [292, 141, 311];
+  return fam === "medium" ? new Size(t[0], t[1]) : new Size(t[0], t[2]);
+}
+function mix(a, b, f) { return new Color("#" + [a.red, a.green, a.blue].map((v, i) => Math.round((v + ([b.red, b.green, b.blue][i] - v) * f) * 255).toString(16).padStart(2, "0")).join(""), a.alpha + (b.alpha - a.alpha) * f); }
+function D(sz) { const c = new DrawContext(); c.size = new Size(sz.width * K, sz.height * K); c.opaque = true; c.respectScreenScale = false; return c; }
+function R(x, y, w, h) { return new Rect(x * K, y * K, w * K, h * K); }
+function rr(c, x, y, w, h, r, fill, stroke, lw) {
+  const p = new Path(); p.addRoundedRect(R(x, y, w, h), r * K, r * K);
+  if (fill) { c.addPath(p); c.setFillColor(fill); c.fillPath(); }
+  if (stroke) { c.addPath(p); c.setStrokeColor(stroke); c.setLineWidth((lw || 1) * K); c.strokePath(); }
+}
+// 세로 그라데이션 둥근 사각(얇은 띠를 겹쳐 그림)
+function grad(c, x, y, w, h, r, a, b) {
+  const n = Math.max(8, Math.round(h * 1.5));
+  for (let i = 0; i < n; i++) {
+    const yy = y + h * i / n, hh = h / n + 0.4, inset = Math.max(0, r - Math.min(yy - y, y + h - yy - hh));
+    const ins = inset > 0 ? r - Math.sqrt(Math.max(0, r * r - (r - Math.min(yy - y + hh / 2, y + h - yy - hh / 2)) ** 2)) : 0;
+    c.setFillColor(mix(a, b, i / n)); c.fillRect(R(x + ins, yy, w - ins * 2, hh));
+  }
+}
+function glow(c, x, y, r, col, a) { const n = 24; for (let i = n; i >= 1; i--) { c.setFillColor(new Color(col, a / n * 0.9)); const rr2 = r * Math.pow(i / n, 0.8); c.fillEllipse(R(x - rr2, y - rr2, rr2 * 2, rr2 * 2)); } }
+function T(c, t, x, y, w, size, color, weight, align, h) {
+  c.setFont(weight === "b" ? Font.boldSystemFont(size * K) : weight === "h" ? Font.heavySystemFont(size * K) : weight === "m" ? Font.semiboldSystemFont(size * K) : Font.systemFont(size * K));
+  c.setTextColor(color || P.txt);
+  if (align === "c") c.setTextAlignedCenter(); else if (align === "r") c.setTextAlignedRight(); else c.setTextAlignedLeft();
+  c.drawTextInRect(fit(String(t), w, size), R(x, y, w, h || size * 1.35));
+}
+function tw(t, size) { let n = 0; for (const ch of String(t)) n += /[ᄀ-ᇿ　-鿿가-힯＀-￯]/.test(ch) ? 0.98 : /[️‍]/.test(ch) ? 0 : /[A-Z0-9%]/.test(ch) ? 0.62 : /[ -⯿]|[\uD800-\uDFFF]/.test(ch) ? 0.6 : 0.52; return n * size; }
+function fit(t, w, size) { if ([...t].length <= 2 || tw(t, size) <= w) return t; let s = ""; for (const ch of t) { if (tw(s + ch + "…", size) > w) break; s += ch; } return s + "…"; }
+function arcG(c, cx, cy, r, lw, f0, f1, a, b, alpha) {
+  const n = Math.max(2, Math.ceil(240 * (f1 - f0)));
+  for (let i = 0; i <= n; i++) {
+    const f = f0 + (f1 - f0) * i / n, ang = -Math.PI / 2 + 2 * Math.PI * f, col = mix(a, b, (f - f0) / Math.max(0.001, f1 - f0));
+    c.setFillColor(alpha != null ? new Color("#" + col.hex, alpha) : col);
+    c.fillEllipse(R(cx + r * Math.cos(ang) - lw / 2, cy + r * Math.sin(ang) - lw / 2, lw, lw));
+  }
+}
+function iconBox(c, x, y, s, emoji, a, b) {
+  grad(c, x, y, s, s, s * 0.26, a || new Color("#3D8BFF"), b || new Color("#1347C9"));
+  rr(c, x, y, s, s, s * 0.26, null, new Color("#FFFFFF", 0.18), 0.6);
+  T(c, emoji, x, y + s * 0.18, s, s * 0.52, P.txt, "", "c", s * 0.7);
+}
+function pill(c, x, y, w, h, t, size) { rr(c, x, y, w, h, h / 2, new Color("#13285A", 0.85), new Color("#5A82D8", 0.35), 0.7); T(c, t, x, y + (h - size * 1.3) / 2, w, size, P.txt, "m", "c"); }
+function backdrop(c, sz) {
+  grad(c, 0, 0, sz.width, sz.height, 0, P.bg2, P.bg1);
+  glow(c, sz.width * 0.15, sz.height * 0.1, sz.width * 0.45, "#1E5BFF", 0.35);
+  glow(c, sz.width * 0.9, sz.height * 0.85, sz.width * 0.4, "#0E3CB8", 0.3);
+  if (FM.fileExists(BG)) { const src = Image.fromFile(BG); if (src) { const W = sz.width * K, H = sz.height * K, k = Math.max(W / src.size.width, H / src.size.height); c.drawImageInRect(src, new Rect((W - src.size.width * k) / 2, (H - src.size.height * k) / 2, src.size.width * k, src.size.height * k)); c.setFillColor(new Color("#030A1E", 0.62)); c.fillRect(new Rect(0, 0, W, H)); } }
+}
+function cardBox(c, x, y, w, h) { rr(c, x, y, w, h, 18, P.card, P.line, 1); rr(c, x + 1, y + 1, w - 2, h * 0.45, 17, new Color("#FFFFFF", 0.025)); }
+function head(c, x, y, w, emoji, title, sub, btn) {
+  iconBox(c, x, y, 30, emoji);
+  T(c, title, x + 38, y - 1, w - 130, 15, P.txt, "b");
+  T(c, sub, x + 38, y + 18, w - 120, 8.5, P.sub);
+  if (btn) { const bw = Math.min(84, tw(btn, 8.5) + 22); pill(c, x + w - bw, y + 4, bw, 20, btn + " ›", 8.5); }
+}
+const KDOW = ["일", "월", "화", "수", "목", "금", "토"];
+const kday = (d) => { const p = d.split("-"); return Number(p[1]) + "월 " + Number(p[2]) + "일 (" + KDOW[new Date(d + "T00:00:00Z").getUTCDay()] + ")"; };
+const n1 = (x) => Number(x || 0).toLocaleString();
+
+function studyCard(c, j, x, y, w, h) {
+  cardBox(c, x, y, w, h);
+  const hk = j.hsk || { lv: 4, total: 509, seen: 0, mast: 0 }, s = j.study || {};
+  head(c, x + 12, y + 12, w - 24, "📖", "중국어 학습", "꾸준한 오늘이 더 큰 기회를 만듭니다.", "HSK " + hk.lv + " 목표");
+  // 링
+  const pct = hk.total ? hk.mast / hk.total : 0, rr0 = Math.min(40, (h - 60) / 2 - 18), cx = x + 14 + rr0 + 5, cy = y + 52 + rr0 + 6;
+  glow(c, cx, cy, rr0 + 14, "#22D37A", 0.10);
+  arcG(c, cx, cy, rr0, 8, 0, 1, new Color("#22417E"), new Color("#22417E"));
+  if (pct > 0) { arcG(c, cx, cy, rr0, 12, 0, Math.min(pct, 1), P.green, P.green2, 0.12); arcG(c, cx, cy, rr0, 8, 0, Math.min(pct, 1), new Color("#13B868"), P.green2); }
+  T(c, "HSK " + hk.lv, cx - 30, cy - 25, 60, 8.5, P.sub, "m", "c");
+  const pv = String(Math.round(pct * 100));
+  T(c, pv, cx - 30 - 5, cy - 15, 60, 24, P.txt, "h", "c", 30);
+  T(c, "%", cx + tw(pv, 24) / 2 - 3, cy - 3, 16, 12, P.txt, "b");
+  T(c, n1(hk.mast) + " / " + n1(hk.total), cx - 34, cy + 13, 68, 8, P.sub, "", "c");
+  // 타일 3개
+  const rx = cx + rr0 + 16, rw = x + w - 12 - rx, tg = 5, tWd = (rw - tg * 2) / 3, ty = y + 52;
+  const tiles = [["🎓", "목표", "HSK " + hk.lv, ["#183A86", "#0F2457"]], ["📊", "오늘 학습", (s.today || 0) + "분", ["#0F4A45", "#0A2B33"]], ["🔥", "연속", (s.streak || 0) + "일", ["#4A1E2A", "#2A1424"]]];
+  tiles.forEach((t, i) => {
+    const tx = rx + i * (tWd + tg);
+    grad(c, tx, ty, tWd, 38, 10, new Color(t[3][0], 0.9), new Color(t[3][1], 0.9)); rr(c, tx, ty, tWd, 38, 10, null, new Color("#FFFFFF", 0.12), 0.6);
+    T(c, t[0], tx + 3, ty + 11, 16, 11, P.txt, "", "c");
+    T(c, t[1], tx + 20, ty + 7, tWd - 21, 7.5, P.sub);
+    T(c, t[2], tx + 20, ty + 17, tWd - 21, 12.5, P.txt, "b");
+  });
+  // 오늘의 단어 줄
+  const ly = ty + 44;
+  rr(c, rx, ly, rw, 18, 9, new Color("#0A1A3C", 0.6));
+  T(c, "💡 오늘의 단어", rx + 6, ly + 3.5, rw / 2, 8.5, P.txt, "m");
+  T(c, (s.n || 0) + "문제 · 주 " + (s.week || 0) + "분 ›", rx + rw / 2, ly + 4, rw / 2 - 8, 7.5, P.sub, "", "r");
+  // 이번 주 막대(링 오른쪽 아래 남는 자리)
+  const by = ly + 24, bh = cy + rr0 - by + 4, d7 = s.days7 || [], goal = s.goal || 30;
+  if (bh > 10 && d7.length) {
+    const bw = (rw - 6 * 4) / 7, mx = Math.max(goal, ...d7.map((q) => q.min || 0), 1);
+    d7.forEach((q, i) => {
+      const hh = Math.max(2, (bh - 9) * Math.min(1, (q.min || 0) / mx)), bx = rx + i * (bw + 4);
+      rr(c, bx, by, bw, bh - 9, 3, new Color("#FFFFFF", 0.06));
+      rr(c, bx, by + bh - 9 - hh, bw, hh, 3, q.min >= goal ? P.green : q.d === j.d ? P.pink : new Color("#4C7BE0", q.min ? 0.9 : 0.25));
+      T(c, KDOW[new Date(q.d + "T00:00:00Z").getUTCDay()], bx - 2, by + bh - 8, bw + 4, 6.5, q.d === j.d ? P.txt : P.dim, "", "c");
+    });
+  }
+  // 단어 칩 4개(전체 폭)
+  const ch = (j.chips || []).slice(0, 4), cyy = y + h - 12 - 40, cw = (w - 24 - 3 * 6) / 4;
+  const CC = [["#3A2A12", "#B07A2A"], ["#10285E", "#2F6BEA"], ["#0F3326", "#2FA36B"], ["#2A1A5E", "#7A4AEA"]];
+  if (!ch.length) T(c, "오답 단어가 생기면 여기에 떠요", x + 12, cyy + 14, w - 24, 9, P.sub, "", "c");
+  ch.forEach((q, i) => {
+    const qx = x + 12 + i * (cw + 6);
+    grad(c, qx, cyy, cw, 40, 10, new Color(CC[i][0], 0.95), new Color("#081530", 0.9)); rr(c, qx, cyy, cw, 40, 10, null, new Color(CC[i][1], 0.75), 0.9);
+    T(c, q.z, qx + 7, cyy + 5, cw - 22, q.z.length > 2 ? 12 : 14, P.txt, "h");
+    T(c, "🔈", qx + cw - 17, cyy + 6, 13, 8, P.sub);
+    c.setFillColor(new Color("#FFFFFF", 0.12)); c.fillRect(R(qx + 7, cyy + 23, cw - 14, 0.5));
+    T(c, q.k, qx + 7, cyy + 26, cw - 12, 8, P.sub);
+  });
+}
+function splitPlace(x) { const m = String(x.title || "").split(/\s*@\s*/); return { title: m[0], place: m[1] || "" }; }
+function planCard(c, j, x, y, w, h, nRows) {
+  cardBox(c, x, y, w, h);
+  head(c, x + 12, y + 12, w - 24, "📅", "다음 일정", "중요한 일정을 놓치지 마세요.", "전체 일정");
+  const L = (j.plan || []).slice(0, nRows), top = y + 50, avail = y + h - 8 - top;
+  if (!L.length) { T(c, "다가오는 일정 없음", x + 12, top + avail / 2 - 6, w - 24, 10, P.sub, "", "c"); return; }
+  const bigH = Math.min(52, avail - (L.length - 1) * 34), smH = L.length > 1 ? Math.min(34, (avail - bigH - 4 * (L.length - 1)) / (L.length - 1)) : 0;
+  let yy = top;
+  L.forEach((it, i) => {
+    const big = i === 0, hh = big ? bigH : smH, ix = x + 8, iw = w - 16, sp = splitPlace(it);
+    rr(c, ix, yy, iw, hh, 12, P.inner, P.innerLine, 0.7);
+    const dl = it.d === j.d ? "오늘" : kday(it.d);
+    if (big) {
+      T(c, dl, ix + 10, yy + 7, 70, 8, P.sub);
+      T(c, it.t || "종일", ix + 10, yy + 18, 72, it.t ? 22 : 17, P.txt, "h", "", 30);
+      c.setFillColor(new Color("#FFFFFF", 0.15)); c.fillRect(R(ix + 82, yy + 9, 0.6, hh - 18));
+      glow(c, ix + 106, yy + hh / 2, 20, "#2F7BFF", 0.35);
+      c.setFillColor(P.blue2); c.fillEllipse(R(ix + 92, yy + hh / 2 - 14, 28, 28));
+      T(c, it.icon === "🕘" ? "💼" : it.icon, ix + 92, yy + hh / 2 - 8, 28, 13, P.txt, "", "c");
+      T(c, sp.title, ix + 128, yy + 7, iw - 136, 12, P.txt, "b");
+      T(c, it.sub || (it.t ? "" : "하루 종일"), ix + 128, yy + 22, iw - 136, 8.5, P.sub);
+      if (sp.place) T(c, "📍 " + sp.place, ix + 128, yy + 35, iw - 136, 8, P.sub);
+    } else {
+      T(c, dl, ix + 10, yy + hh / 2 - 11, 74, 7.5, P.sub);
+      T(c, it.t || "종일", ix + 10, yy + hh / 2 - 1, 74, 11, P.txt, "b");
+      c.setFillColor(new Color("#FFFFFF", 0.12)); c.fillRect(R(ix + 82, yy + 7, 0.6, hh - 14));
+      c.setFillColor(new Color("#1A2E5C")); c.fillEllipse(R(ix + 92, yy + hh / 2 - 11, 22, 22));
+      T(c, it.icon === "🕘" ? "📄" : it.icon, ix + 92, yy + hh / 2 - 6, 22, 10, P.txt, "", "c");
+      const pw = sp.place ? Math.min(90, tw(sp.place, 8) + 18) : 0;
+      T(c, sp.title, ix + 122, yy + hh / 2 - 11, iw - 130 - pw, 10, P.txt, "b");
+      T(c, it.sub || "", ix + 122, yy + hh / 2 + 1, iw - 130 - pw, 8, P.sub);
+      if (pw) T(c, "📍 " + sp.place, ix + iw - pw - 8, yy + hh / 2 - 5, pw, 8, P.sub, "", "r");
+    }
+    yy += hh + 4;
+  });
+}
+function teamCard(c, j, x, y, w, h, nRows) {
+  cardBox(c, x, y, w, h);
+  // 왼쪽: 경기장 느낌(팀 로고는 넣지 않음 — 공 + 빛)
+  const lw = Math.min(70, w * 0.21);
+  grad(c, x + 1, y + 1, lw, h - 2, 17, new Color("#123C9C", 0.9), new Color("#071636", 0.9));
+  for (let i = 0; i < 9; i++) { c.setFillColor(new Color("#FFFFFF", 0.05)); c.fillEllipse(R(x + 6 + i * 9, y + 8 + (i % 3) * 5, 3, 3)); }
+  glow(c, x + 1 + lw / 2, y + h / 2 + 4, lw * 0.55, "#3D8BFF", 0.5);
+  T(c, "⚽", x + 1, y + h / 2 - 20, lw, 32, P.txt, "", "c", 42);
+  T(c, "MY TEAM", x + 1, y + h - 22, lw, 8, P.sub, "b", "c");
+  const rx = x + lw + 10, rw = x + w - 10 - rx;
+  T(c, "좋아하는 팀 일정", rx, y + 10, rw, 13, P.txt, "b");
+  const G = (j.games || []).slice(0, nRows);
+  T(c, G.length ? "수원 삼성 · T1 다음 경기를 응원합니다." : (j.gerr || "예정된 경기 없음"), rx, y + 27, rw, 8, P.sub);
+  const top = y + 42, rh = Math.min(30, (y + h - 8 - top - 3 * (nRows - 1)) / nRows);
+  G.forEach((g, i) => {
+    const ry = top + i * (rh + 3);
+    rr(c, rx - 2, ry, rw + 2, rh, 9, P.inner, P.innerLine, 0.6);
+    const p = g.d.split("-");
+    T(c, Number(p[1]) + "/" + Number(p[2]) + " (" + KDOW[new Date(g.d + "T00:00:00Z").getUTCDay()] + ")", rx + 5, ry + rh / 2 - 5.5, 46, 8, P.sub);
+    T(c, g.hm, rx + 48, ry + rh / 2 - 6.5, 32, 10, P.txt, "b");
+    const ic = g.k === "lol" ? "🎮" : g.home ? "🏠" : "✈️";
+    T(c, ic, rx + 80, ry + rh / 2 - 6, 14, 9, P.txt, "", "c");
+    const a = g.k === "fb" && !g.home ? g.op : g.me, b = g.k === "fb" && !g.home ? g.me : g.op, mx = rx + 98, mw = rw - 98 - 40;
+    const mine = new Color(g.k === "lol" ? "#FF5A6E" : "#6FA8FF"), col = (n) => n === g.me ? mine : P.txt;
+    const half = (mw - 16) / 2;
+    T(c, a, mx, ry + rh / 2 - 6, half, 9.5, col(a), "b", "r");
+    T(c, "vs", mx + half, ry + rh / 2 - 5, 16, 7.5, P.dim, "", "c");
+    T(c, b, mx + half + 16, ry + rh / 2 - 6, half, 9.5, col(b), "b");
+    const home = g.k === "fb" ? g.home : true;
+    rr(c, rx + rw - 36, ry + rh / 2 - 8, 34, 16, 8, home ? P.blue2 : new Color("#2A3656"), home ? new Color("#5C9BFF", 0.6) : null, 0.7);
+    T(c, g.tag, rx + rw - 36, ry + rh / 2 - 5.5, 34, 8, P.txt, "b", "c");
+  });
+}
+// 큰 위젯: study(기본) = 공부 + 일정 / plan = 일정 + 팀 · 중간 위젯: team·plan = 팀
+function pro(j, fam, P0) {
+  const sz = wsize(fam), c = D(sz); backdrop(c, sz);
+  const W = sz.width, H = sz.height, m = 4;
+  if (fam === "medium") teamCard(c, j, m, m, W - m * 2, H - m * 2, 3);
+  else if (P0 === "plan") { const h1 = Math.round((H - m * 3) * 0.55); planCard(c, j, m, m, W - m * 2, h1, 3); teamCard(c, j, m, m * 2 + h1, W - m * 2, H - m * 3 - h1, 3); }
+  else { const h1 = Math.round((H - m * 3) * 0.57); studyCard(c, j, m, m, W - m * 2, h1); planCard(c, j, m, m * 2 + h1, W - m * 2, H - m * 3 - h1, 2); }
+  if (j.stale) T(c, "⚠︎ 저장본", W - 60, H - 12, 52, 7, P.dim, "", "r");
+  const w = new ListWidget(); w.backgroundImage = c.getImage(); w.url = "https://voice.zhnote.net/me";
+  w.refreshAfterDate = new Date(Date.now() + 20 * 60e3); w.setPadding(0, 0, 0, 0);
+  return w;
+}
 function build(j, fam, param) {
   const w = new ListWidget(); w.backgroundColor = C.bg; w.url = "https://voice.zhnote.net/me";
   const bg = bgImage(fam); HASBG = !!bg; if (bg) w.backgroundImage = bg;
   w.refreshAfterDate = new Date(Date.now() + 20 * 60e3);
   if (j.err) { w.setPadding(14, 14, 14, 14); txt(w, "나 살피기\n" + j.err + "\n\n앱에서 한 번 실행해 주세요", 13, C.sub, 6); return w; }
   const P = String(param || "").trim().toLowerCase();
-  // 큰 위젯: study(공부 카드 크게) / plan(일정·팀) / 비우면 셋 다
+  // 그려서 만드는 화면(남색 유리 카드). 예전 글자 위젯은 매개변수 끝에 "old"
+  if (!/old/.test(P) && (fam === "large" || fam === "extraLarge" || (fam === "medium" && (P === "plan" || P === "team")))) { try { return pro(j, fam === "medium" ? "medium" : "large", P); } catch (e) { console.error(e); } }
   if (fam === "large" || fam === "extraLarge") {
     w.setPadding(8, 8, 8, 8);
     if (P === "study") { studySec(w, j, true); }
@@ -910,7 +1114,7 @@ let c = await code(false);
 if (config.runsInApp) {
   if (!c) c = await code(true);
   const a = new Alert(); a.title = "나 살피기 위젯";
-  const ACT = [["작은 위젯", "small", ""], ["중간 위젯", "medium", ""], ["큰 위젯 · 전부", "large", ""], ["큰 위젯 · 공부(study)", "large", "study"], ["큰 위젯 · 일정·팀(plan)", "large", "plan"], ["중간 위젯 · 일정·팀(plan)", "medium", "plan"]];
+  const ACT = [["작은 위젯", "small", ""], ["중간 위젯", "medium", ""], ["큰 위젯 · 공부+일정(study)", "large", "study"], ["큰 위젯 · 일정+팀(plan)", "large", "plan"], ["중간 위젯 · 팀(team)", "medium", "team"], ["큰 위젯 · 예전 모양(old)", "large", "old"]];
   ACT.forEach((x) => a.addAction(x[0] + " 미리보기")); a.addAction("🖼 배경 사진 고르기"); a.addAction("배경 사진 지우기"); a.addAction("초대 코드 다시 넣기"); a.addCancelAction("닫기");
   let k = await a.presentSheet(); const N = ACT.length;
   if (k === N) { const ok = await pickBg(); if (ok) k = 2; } // 고르면 바로 큰 위젯 미리보기
