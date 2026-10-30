@@ -1077,8 +1077,7 @@ function studyCard(c, j, b) {
 }
 function splitPlace(it) { const m = String(it.title || "").split(/\s*@\s*/); return { title: m[0], place: m[1] || "" }; }
 function planCard(c, j, b) {
-  const { x, y, w, h } = b, top = y + 37, L = (j.plan || []).slice(0, b.n || 1), avail = y + h - 7 - top;
-  if (L.length > 1 && avail < 86) L.length = 1; // 두 줄이 안 들어가면 가장 가까운 것 하나만 크게
+  const { x, y, w, h } = b, L = (j.plan || []).slice(0, b.n || 1), top = y + 37, avail = y + h - 7 - top;
   if (!L.length) { inner(c, x + 8, top, w - 16, Math.min(avail, 44), 12); T(c, "다가오는 일정이 없어요", x + 20, top + Math.min(avail, 44) / 2 - 8, w - 40, 12, P.sub, "m"); return; }
   const first = Math.min(L.length > 1 ? 54 : avail, 64), restH = L.length > 1 ? Math.min(40, (avail - first - 4 * (L.length - 1)) / (L.length - 1)) : 0;
   let yy = top;
@@ -1159,10 +1158,88 @@ function teamCard(c, j, b) {
     ry += rh + 4;
   });
 }
+// ---------- 🖼 이미지 배경 하이브리드(2026-10-30 소유자 ZIP: widget_large_background.png 1092×1146 + 좌표표) ----------
+// 배경 PNG 에 카드·테두리·헤더·레이블·엠블럼·링 트랙이 다 들어 있음 → 여기서는 값 글자와 진척 호만 그림. 딤 없음.
+// 파일은 폰 Scriptable 문서 폴더(공개 저장소에 구단 엠블럼을 넣지 않음) — 앱 메뉴 '🖼 위젯 배경 그림 고르기'. 없으면 그려서 만드는 화면으로.
+const IMGBG = FM.joinPath(FM.documentsDirectory(), "widget_large_background.png");
+const SLOT = { hsk_badge: [296, 21, 47, 13], hsk_level: [37, 87, 57, 15], hsk_percent: [27, 104, 76, 34], hsk_mastery: [37, 130, 56, 12],
+  today_minutes: [139, 71, 85, 17], total_words: [250, 71, 91, 17], speaking_score: [139, 116, 85, 17], study_streak: [250, 116, 91, 17],
+  chinese_word_1: [133, 158, 94, 13], chinese_word_2: [245, 158, 96, 13],
+  next_date: [22, 233, 76, 12], next_time: [22, 245, 76, 12], next_title: [121, 232, 221, 15], next_subtitle: [121, 247, 221, 10],
+  game_row_1: [118, 321, 225, 14], game_row_2: [118, 347, 225, 14], no_games_message: [115, 328, 224, 29] };
+const RING = { cx: 65, cy: 111, r: 40, w: 8, color: "#28E9C7" };
+const IC = { txt: new Color("#F1F7FF"), sub: new Color("#A8BDDF"), acc: new Color("#28E9C7"), warn: new Color("#FFB86B"), bad: new Color("#FF9AA8"), mine: new Color("#7FB2FF") };
+function bgImage() { try { if (FM.fileExists(IMGBG)) return Image.fromFile(IMGBG); } catch (e) {} return null; }
+// 칸 안에 글자: 높이에 맞춰 크기를 정하고, 폭이 넘치면 줄였다가 말줄임
+function S(c, key, t, size, color, weight, align) {
+  const [x, y, w, h] = SLOT[key]; t = String(t == null ? "" : t); if (!t) return;
+  let sz = size || Math.min(h * 0.86, 30); const need = tw(t, sz, weight);
+  if (need > w) sz = Math.max(sz * 0.78, sz * w / need);
+  c.setFont(weight === "b" ? Font.boldSystemFont(sz * K) : weight === "h" ? Font.heavySystemFont(sz * K) : weight === "m" ? Font.semiboldSystemFont(sz * K) : Font.systemFont(sz * K));
+  c.setTextColor(color || IC.txt);
+  if (align === "c") c.setTextAlignedCenter(); else if (align === "r") c.setTextAlignedRight(); else c.setTextAlignedLeft();
+  const lh = sz * 1.3, yy = y + Math.max(0, (h - lh) / 2) - sz * 0.08; // 칸 세로 가운데
+  c.drawTextInRect(fit(t, w, sz, weight), R(x, yy, w, Math.max(h, lh)));
+}
+function proImg(j, bg) {
+  const c = new DrawContext(); c.size = new Size(bg.size.width, bg.size.height); c.opaque = false; c.respectScreenScale = false;
+  c.drawImageInRect(bg, new Rect(0, 0, bg.size.width, bg.size.height));
+  const s = j.study || {}, hk = j.hsk && j.hsk.total ? j.hsk : null, rg = j.ring || null;
+  // 링: HSK 익힘(설정이 HSK 5 면 그것) — 트랙은 배경에 있음, 호만
+  let title = "HSK 4", pct = 0, big = "0%", sub = "";
+  if (rg && rg.k === "hsk5") { title = "HSK 5"; pct = rg.pct || 0; big = rg.big + rg.unit; sub = rg.sub; }
+  else if (hk) { title = "HSK " + (hk.lv || 4); pct = hk.mast / hk.total; big = Math.round(pct * 100) + "%"; sub = n1(hk.mast) + " / " + n1(hk.total); }
+  else if (rg) { title = rg.title; pct = rg.pct || 0; big = rg.big + rg.unit; sub = rg.sub; }
+  pct = Math.max(0, Math.min(1, pct));
+  if (pct > 0) { arcG(c, RING.cx, RING.cy, RING.r, RING.w + 4, 0, pct, new Color(RING.color), new Color(RING.color), 0.18); arcG(c, RING.cx, RING.cy, RING.r, RING.w, 0, pct, new Color("#19C9A9"), new Color("#6FF6DD")); }
+  S(c, "hsk_badge", title, 10, IC.txt, "b", "c");
+  S(c, "hsk_level", title, 11, IC.sub, "m", "c");
+  S(c, "hsk_percent", big, big.length > 3 ? 24 : 28, IC.txt, "h", "c");
+  S(c, "hsk_mastery", sub, 9, IC.sub, "", "c");
+  // 타일 값
+  const goal = s.goal || 30, today = s.today || 0;
+  S(c, "today_minutes", today + "분" + (goal ? " / " + goal : ""), 14, today >= goal ? IC.acc : IC.txt, "b");
+  S(c, "total_words", n1(j.words) + "개", 14, IC.txt, "b");
+  const sp = j.ring2 && j.ring2.k === "call" ? j.ring2 : rg && rg.k === "call" ? rg : null;
+  S(c, "speaking_score", sp ? (sp.big + sp.unit + (sp.sub ? "" : "")) : "기록 없음", 14, sp && Number(sp.big) > 0 ? IC.txt : IC.sub, "b");
+  S(c, "study_streak", (s.streak || 0) + "일", 14, (s.streak || 0) > 0 ? IC.warn : IC.txt, "b");
+  // 오늘의 단어 2개(실제 단어만)
+  const ch = (j.chips || []).slice(0, 2);
+  if (ch[0]) S(c, "chinese_word_1", ch[0].z + " · " + ch[0].k, 11, IC.txt, "b"); else S(c, "chinese_word_1", "틀린 단어 없음", 10, IC.sub);
+  if (ch[1]) S(c, "chinese_word_2", ch[1].z + " · " + ch[1].k, 11, IC.txt, "b");
+  // 다음 일정
+  const it = (j.plan || [])[0];
+  if (it) {
+    const sp2 = splitPlace(it), dw = dayWord(j, it.d), p = it.d.split("-");
+    S(c, "next_date", (dw ? dw + " · " : "") + Number(p[1]) + "/" + Number(p[2]) + " (" + dow(it.d) + ")", 9.5, IC.sub);
+    S(c, "next_time", it.t || "종일", it.t ? 13 : 11, IC.txt, "h");
+    S(c, "next_title", sp2.title, 13, IC.txt, "b");
+    S(c, "next_subtitle", [sp2.place ? "📍 " + sp2.place : "", it.sub || ""].filter(Boolean).join(" · ") || (it.t ? "" : "하루 종일"), 9.5, IC.sub);
+  } else { S(c, "next_title", "다가오는 일정이 없어요", 12, IC.sub, "m"); }
+  // 수원 경기: 확인된 경기만. 없으면 '일정 없음'과 '받기 실패'를 구분해 한 문장
+  const G = (j.games || []).filter((g) => g.k === "fb").slice(0, 2), st = j.gstate || (G.length ? "ok" : "fail");
+  if (G.length) {
+    G.forEach((g, i) => {
+      const dw = dayWord(j, g.d), a = g.home ? g.me : g.op, b = g.home ? g.op : g.me;
+      S(c, i ? "game_row_2" : "game_row_1", (dw ? dw + " " : "") + sday(g.d) + " " + g.hm + "  " + a + " vs " + b + "  · " + (g.home ? "홈" : "원정"), 11, IC.txt, i ? "m" : "b");
+    });
+  } else {
+    const m = st === "fail" ? "⚠️ 경기 정보를 못 불러왔어요" : st === "off" ? "팀 알림이 꺼져 있어요(/me)" : "📭 확인된 다음 경기가 없어요";
+    S(c, "no_games_message", m, 11.5, st === "fail" ? IC.bad : IC.sub, "m");
+  }
+  if (j.stale) T(c, "⚠︎ 저장본", 364 - 64, 382 - 13, 56, 8, IC.sub, "", "r");
+  const w = new ListWidget(); w.backgroundImage = c.getImage(); w.url = "https://voice.zhnote.net/me";
+  w.refreshAfterDate = new Date(Date.now() + 20 * 60e3); w.setPadding(0, 0, 0, 0);
+  return w;
+}
+async function pickBgImg() {
+  try { const f = await DocumentPicker.openFile(); FM.write(IMGBG, Data.fromFile(f)); return true; } catch (e) { return false; }
+}
 // 큰 위젯: 비움·all = 공부+일정+팀 / study = 공부(크게)+일정 / plan = 일정+팀 · 중간 위젯 plan·team = 팀
 function pro(j, fam, P0) {
-  const sz = wsize(fam), c = D(sz);
   if (P0 === "all") P0 = "";
+  if (fam !== "medium" && !P0) { const bg = bgImage(); if (bg) return proImg(j, bg); } // 배경 그림이 있으면 이미지 하이브리드
+  const sz = wsize(fam), c = D(sz);
   c.drawImageInRect(baseImage(fam, P0, sz), new Rect(0, 0, sz.width * K, sz.height * K));
   for (const b of layout(fam, P0, sz.width, sz.height)) { if (b.k === "study") studyCard(c, j, b); else if (b.k === "plan") planCard(c, j, b); else teamCard(c, j, b); }
   if (j.stale) T(c, "⚠︎ 저장본", sz.width - 64, sz.height - 13, 56, 8, P.dim, "", "r");
@@ -1244,12 +1321,14 @@ if (config.runsInApp) {
   if (!c) c = await code(true);
   const a = new Alert(); a.title = "나 살피기 위젯";
   const ACT = [["작은 위젯", "small", ""], ["중간 위젯", "medium", ""], ["큰 위젯 · 전부(비우기·all)", "large", "all"], ["큰 위젯 · 공부+일정(study)", "large", "study"], ["큰 위젯 · 일정+팀(plan)", "large", "plan"], ["중간 위젯 · 팀(team)", "medium", "team"], ["큰 위젯 · 예전 모양(old)", "large", "old"]];
-  ACT.forEach((x) => a.addAction(x[0] + " 미리보기")); a.addAction("🖼 배경 사진 고르기"); a.addAction("배경 사진 지우기"); a.addAction("초대 코드 다시 넣기"); a.addAction("🛡 팀 엠블럼 고르기(파일·사진)"); a.addAction("팀 엠블럼 지우기"); a.addCancelAction("닫기");
+  ACT.forEach((x) => a.addAction(x[0] + " 미리보기")); a.addAction("🖼 배경 사진 고르기"); a.addAction("배경 사진 지우기"); a.addAction("초대 코드 다시 넣기"); a.addAction("🛡 팀 엠블럼 고르기(파일·사진)"); a.addAction("팀 엠블럼 지우기"); a.addAction("🖼 위젯 배경 그림 고르기(파일, 큰 위젯)"); a.addAction("위젯 배경 그림 지우기"); a.addCancelAction("닫기");
   let k = await a.presentSheet(); const N = ACT.length;
   if (k === N) { const ok = await pickBg(); if (ok) k = 2; } // 고르면 바로 큰 위젯 미리보기
   else if (k === N + 1) { if (FM.fileExists(BG)) FM.remove(BG); k = 0; }
   else if (k === N + 3) { if (await pickCrest()) k = 4; } // 고르면 팀 카드 미리보기
   else if (k === N + 4) { if (FM.fileExists(CREST)) FM.remove(CREST); k = 4; }
+  else if (k === N + 5) { if (await pickBgImg()) k = 2; } // 고르면 큰 위젯(전부) 미리보기
+  else if (k === N + 6) { if (FM.fileExists(IMGBG)) FM.remove(IMGBG); k = 2; }
   if (k === N + 2) { c = await code(true); }
   else if (k >= 0 && k < N) {
     const j = c ? await load(c) : { err: "초대 코드 없음" }; const w = build(j, ACT[k][1], ACT[k][2]);
