@@ -13,6 +13,7 @@
 //  GET /shorts · POST /shorts/* · GET /shorts/file · GET /shorts/yt/cb   🎬 숏츠 공방 (shorts.js, 주인 전용)
 //  GET /cine   🎞 사진 → 시네마틱 영상 (cine.js, POST /shorts/cine/*)
 //  GET /toon   🎨 공감툰 — 그림+자막+효과음 (toon.js, AI 제안은 POST /shorts/toon/idea)
+//  GET /shoot  📋 촬영 모드 — 컷 리스트 보며 체크·빈칸 채우기 (shoot.js, POST /shorts/shoot/*)
 //  GET /edit   🎥 편집실 — 내가 찍은 클립으로 숏츠 (edit.js, 계획은 POST /shorts/plan)
 //  GET  /  ·  GET /agent      박비서(음성 비서) 화면 · 그 WebSocket — 서버가 도구 호출을 실행 (agent.js)
 // 시크릿: DASHSCOPE_API_KEY, DASHSCOPE_WS_HOST, ALLOWED_CODES
@@ -38,6 +39,7 @@ import { shortsApi, shortsSave, shortsFile, ytCallback, legalPage, SHORTS_HTML, 
 import { EDIT_HTML } from "./edit.js";
 import { TOON_HTML } from "./toon.js";
 import { CINE_HTML } from "./cine.js";
+import { SHOOT_HTML } from "./shoot.js";
 import { W3_HTML } from "./wan3.js";
 import { autoApi, autoCron, AUTO_HTML } from "./auto.js";
 import { briefApi, briefCron, briefMorning, briefGet, studyCron, BRIEF_HTML } from "./brief.js";
@@ -157,6 +159,7 @@ export default {
       if (url.pathname === "/toon" && req.method === "GET") return new Response(TOON_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/auto" && req.method === "GET") return new Response(AUTO_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/story" && req.method === "GET") return new Response(W3_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
+      if (url.pathname === "/shoot" && req.method === "GET") return new Response(SHOOT_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/cine" && req.method === "GET") return new Response(CINE_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/shorts" && req.method === "GET") return new Response(SHORTS_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/shorts/file" && (req.method === "GET" || req.method === "HEAD")) return await shortsFile(req, env, url);

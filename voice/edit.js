@@ -68,6 +68,7 @@ function api(p,b,tries){b=b||{};b.code=CODE;tries=tries==null?2:tries;
 function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
 function fmt(s){return (Math.round(s*10)/10).toFixed(1);}
 var QID=(location.search.match(/[?&]id=([^&]+)/)||[])[1]||'';
+var SHOOT=null;if(/[?&]shoot=/.test(location.search)){try{SHOOT=JSON.parse(localStorage.getItem('ed-shoot')||'null');}catch(e){}}
 var QTOPIC='';try{QTOPIC=decodeURIComponent((location.search.match(/[?&]topic=([^&]+)/)||[])[1]||'');}catch(e){}
 
 // ---------- 1) 클립 고르기 ----------
@@ -77,6 +78,7 @@ function start(){
   var h='';
   if(!QID)h+='<div class="chips" style="margin:2px 0 10px"><button class="chip'+(MODE==='clip'?' on':'')+'" data-mode="clip">🎬 클립 먼저</button><button class="chip'+(MODE==='script'?' on':'')+'" data-mode="script">📝 대본 먼저</button></div>';
   if(QID)h+='<div class="card"><h2>이어서 편집</h2><p class="note">원본 영상·사진은 폰에만 있어서 서버엔 없어요. 이 초안에 썼던 <b>영상을 같은 순서로</b>, 그다음 <b>사진을 같은 순서로</b> 다시 골라 주세요.</p></div>';
+  if(SHOOT&&MODE==='script'&&!QID)h+='<div class="card" style="border-color:var(--sky)"><h2>📋 촬영 계획에서 왔어요</h2><p class="note" style="margin:0">'+esc(SHOOT.title||'')+' — 대본이 들어가 있고, 줄마다 찍은 컷 설명을 🧩 자동 배치에 같이 보내요. 찍은 영상을 <b>찍은 순서대로</b> 고르면 더 잘 맞아요. <a href="/shoot?open='+encodeURIComponent(SHOOT.id||'')+'">← 촬영 모드</a></p></div>';
   if(MODE==='script'&&!QID)h+='<div class="card"><h2>📝 대본</h2><p class="note" style="margin:0 0 6px">한 줄이 한 장면이에요. 줄마다 내레이션이 되고, 그 길이만큼 화면이 잡혀요. 미디어에서 맞는 걸 AI가 끼워 넣고, 못 찾으면 ⬚ 빈칸으로 남겨요.</p><textarea id="lines" rows="7" placeholder="예)\n광저우 편의점 도시락이 2,800원이라고요?\n한국 편의점이면 5천 원은 넘죠\n…"></textarea><div class="mini" style="margin-top:6px"><input type="text" id="ltopic" placeholder="주제 (AI 대본용)" style="flex:1;min-width:120px"><button id="aiLines">✍️ AI 대본</button></div><p class="note" id="lnote" style="margin:4px 0 0"></p></div>';
   h+='<div class="card"><label class="pick"><input type="file" id="files" accept="video/*" multiple><b>📂 영상 클립 고르기</b>여러 개 한 번에 · 5~15초짜리가 좋아요<br>원본은 서버로 올라가지 않아요</label>'+(MODE==='script'||QID?'<label class="pick" style="margin-top:8px"><input type="file" id="photos" accept="image/*" multiple><b>🖼 사진 고르기</b>가격표·영수증·캡처·그림 — 장면 하나에 한 장</label>':'')+'<div class="clips" id="clips"></div></div>';
   if(MODE==='script'&&!QID){
@@ -90,7 +92,7 @@ function start(){
       +'<p class="lbl">길이</p><div class="chips">'+[15,20,30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div><p class="note" id="secNote"></p>'
       +'</div>'+rhyCard()+'<div class="dock"><button class="big" id="planBtn" disabled>🤖 AI 편집 계획 받기</button><div class="prog" id="pp"></div><div class="err" id="pe"></div></div>';
   }else h+='<div class="dock"><button class="big" id="resumeBtn" disabled>이 클립으로 편집 이어가기</button><div class="err" id="pe"></div></div>';
-  $('main').innerHTML=h;if(QTOPIC&&$('topic'))$('topic').value=QTOPIC;if(QTOPIC&&$('ltopic'))$('ltopic').value=QTOPIC;
+  $('main').innerHTML=h;if(QTOPIC&&$('topic'))$('topic').value=QTOPIC;if(SHOOT&&$('topic')&&!$('topic').value)$('topic').value=SHOOT.topic||'';if(QTOPIC&&$('ltopic'))$('ltopic').value=QTOPIC;
   $('files').onchange=function(){addFiles(this.files);this.value='';};
   if($('photos'))$('photos').onchange=function(){addPhotos(this.files);this.value='';};
   document.querySelectorAll('[data-mode]').forEach(function(b){b.onclick=function(){MODE=b.getAttribute('data-mode');try{localStorage.setItem('ed-mode',MODE);}catch(e){}if(CLIPS.length){toast('고른 미디어는 그대로 두고 화면만 바꿔요');}start();renderClips();};});
@@ -255,7 +257,7 @@ async function assemble(){
   // 미디어 풀 40개 상한: 사진은 다 남기고 컷을 고르게 솎음
   if(media.length>40){var ph=media.filter(function(m){return m.kind==='photo';}),cu=media.filter(function(m){return m.kind==='cut';}),room=Math.max(0,40-ph.length),st=cu.length/room,keep=[];for(var j=0;j<room;j++)keep.push(cu[Math.floor(j*st)]);media=keep.concat(ph);}
   pp.innerHTML='<span class="spin">🧩</span> AI가 줄마다 미디어를 끼워 넣는 중… ('+L.length+'줄 · 미디어 '+media.length+'개, 20~40초)';
-  var r=await api('/shorts/assemble',{topic:($('topic')&&$('topic').value||'').trim(),lines:L,sec:SEC,angle:ANG,series:SER==='price'?'price':'',clips:CLIPS.filter(function(c){return c.kind!=='blank';}).map(function(c){return {dur:c.dur,name:c.name,kind:c.kind};}),media:media});
+  var r=await api('/shorts/assemble',{topic:($('topic')&&$('topic').value||'').trim(),lines:L,sec:SEC,angle:ANG,series:SER==='price'?'price':'',clips:CLIPS.filter(function(c){return c.kind!=='blank';}).map(function(c){return {dur:c.dur,name:c.name,kind:c.kind};}),media:media,shots:SHOOT&&SHOOT.shots&&SHOOT.shots.length===L.length?SHOOT.shots:undefined});
   if(!r.ok){pp.textContent='';pe.textContent=r.detail||r.error||'실패';b.disabled=false;return;}
   D=r.draft;NARR={};editor();if(r.blanks)toast('⬚ 빈칸 '+r.blanks+'개 — 구간의 클립 선택에서 사진이나 컷을 골라 채우세요');
 }

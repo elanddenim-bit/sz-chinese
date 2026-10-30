@@ -134,6 +134,7 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
   if (path === "/shorts/rewrite") return rewrite(env, b, h);
   if (path === "/shorts/assemble") return assemble(env, b, h);
   if (path === "/shorts/lines") return lines(env, b, h);
+  if (path.startsWith("/shorts/shoot/")) return shoot(env, path, b, h);
   if (path === "/shorts/asr") return asr(env, b, h);
   if (path === "/shorts/update") return update(env, b, h);
   if (path === "/shorts/asset") return asset(env, b, h, synth);
@@ -483,12 +484,15 @@ async function assemble(env, b, h) {
   const topic = String(b.topic || "").slice(0, 200);
   const ser = SERIES[b.series] || null;
   const rate = (await krw(env)) || 190;
+  // 📋 촬영 모드에서 넘어온 컷 설명(줄마다 무엇을 찍었나) — 미디어 고르기 힌트
+  const shots = Array.isArray(b.shots) && b.shots.length === L.length ? b.shots.map((x) => String(x || "").slice(0, 80)) : null;
   let out = { scenes: [] };
   if (media.length) {
     const content = [];
     media.forEach((m, i) => { content.push({ type: "text", text: "[미디어 " + (i + 1) + " · " + (m.kind === "photo" ? "📷 사진" : "🎬 영상 " + (m.clip + 1) + "번 " + m.s.toFixed(1) + "~" + m.e.toFixed(1) + "초") + "]" }); content.push({ type: "image_url", image_url: { url: m.img } }); });
     content.push({ type: "text", text: "위는 내가 가진 미디어 풀(내 영상에서 자동으로 잘라낸 컷의 대표 장면, 내 사진)이다. 아래는 한국어 유튜브 숏츠 대본 — 한 줄이 한 장면이고 그 줄의 내레이션이다.\n" +
-      L.map((t, i) => (i + 1) + ". " + t).join("\n") + "\n\n" + (topic ? "영상 주제: " + topic + ". " : "") +
+      L.map((t, i) => (i + 1) + ". " + t + (shots && shots[i] ? "  (촬영 계획: " + shots[i] + ")" : "")).join("\n") + "\n\n" + (topic ? "영상 주제: " + topic + ". " : "") +
+      (shots ? "나는 촬영 계획대로 대체로 줄 순서에 맞춰 찍었다 — 줄마다 촬영 계획에 맞는 장면을 우선 고르고, 영상 번호·시각 순서도 참고하라. " : "") +
       "줄마다 가장 잘 맞는 미디어 번호 하나를 고르라(내용·사물·장소·숫자가 보이는 것 우선, 같은 미디어를 여러 줄에 쓰는 건 피하되 꼭 맞으면 허용). 억지로 끼우지 말고 정말 맞는 게 없으면 0(빈칸). " +
       "줄마다 cap(화면 큰 글씨, 한국어 12자 이내 — 숫자·대비·핵심어, 내레이션 반복 금지, 필요 없으면 빈칸)을 쓴다. 가격이 보이면 원화(1위안≈" + rate + "원)로. " + TONE_RULES + " " +
       "title(한국어 40자 이내, 숫자·비교·물음표 중 하나), description(2~3줄), tags(8개 이내, # 없이). JSON만: {\"title\":\"\",\"description\":\"\",\"tags\":[],\"scenes\":[{\"line\":1,\"media\":3,\"cap\":\"\"}]} — scenes 는 줄 수(" + L.length + "개)와 같고 line 순서대로." });
@@ -531,6 +535,55 @@ function rhythmRule(r, sec) {
   const f1 = (x) => x.toFixed(1), name = String(r.name || "레퍼런스").slice(0, 16);
   const text = "컷 리듬 — 내가 고른 레퍼런스 숏츠 '" + name + "'에서 잰 실제 컷 길이: 첫 컷 " + f1(sh[0]) + "초, 평균 " + f1(avg) + "초, 중앙값 " + f1(med) + "초, 10초당 컷 " + f1(10 / avg) + "개, " + trend + ". 구간 길이를 이 박자에 맞춰라 — 목표 순서(초): " + seq.join(", ") + " (구간 약 " + seq.length + "개). 순서를 똑같이 할 필요는 없지만 첫 구간 길이와 평균 구간 길이는 ±30% 안. 구간이 짧아 내레이션이 다 안 들어가면 한 문장을 여러 구간에 걸쳐 말한다 — 그 문장을 시작 구간 say 에 쓰고 이어지는 구간 say 는 빈칸(앞 내레이션이 다음 컷 위로 이어진다). 내레이션 총량은 전체 길이 1초당 4글자 이내. 컷이 짧아도 같은 순간을 반복하지 말고 같은 클립의 다른 순간을 잘라 쓴다. 구간 길이·내레이션 배분은 이 컷 리듬 규칙이 위 규칙보다 우선.";
   return { text, n: seq.length, avg, first: sh[0], name };
+}
+// 📋 촬영 모드 — 촬영 계획(대본 한 줄 = 컷 하나)을 KV 문서 하나에. 폰이 localStorage 를 먼저 쓰고 여기로 동기화(upd 큰 쪽)
+const shootKey = (h) => "shorts:shoot:" + h;
+function cleanPlan(p) {
+  const t = (x, n) => String(x == null ? "" : x).slice(0, n);
+  const items = (Array.isArray(p.items) ? p.items : []).slice(0, 30).map((it) => {
+    const fill = {};
+    if (it && it.fill && typeof it.fill === "object") Object.keys(it.fill).slice(0, 12).forEach((k) => { if (/^\d+$/.test(k)) fill[k] = t(it.fill[k], 40); });
+    return { say: t(it && it.say, 160), what: t(it && it.what, 80), how: t(it && it.how, 60), done: Math.max(0, Number(it && it.done) || 0), memo: t(it && it.memo, 200), fill };
+  });
+  return { id: t(p.id, 40), title: t(p.title, 60), topic: t(p.topic, 200), series: p.series === "price" ? "price" : "", tips: (Array.isArray(p.tips) ? p.tips : []).slice(0, 6).map((x) => t(x, 160)),
+    made: Number(p.made) || Date.now(), upd: Number(p.upd) || Date.now(), cur: Math.max(0, Math.round(Number(p.cur) || 0)), items };
+}
+async function shoot(env, path, b, h) {
+  const doc = (await env.KV.get(shootKey(h), "json")) || { plans: [], gone: [] };
+  doc.gone = doc.gone || [];
+  const put = async () => { doc.plans.sort((a, c) => c.upd - a.upd); doc.plans = doc.plans.slice(0, 20); doc.gone = doc.gone.slice(-60); await env.KV.put(shootKey(h), JSON.stringify(doc)); };
+  if (path === "/shorts/shoot/list") return { ok: true, plans: doc.plans, gone: doc.gone };
+  if (path === "/shorts/shoot/save") {
+    if (!b.plan || !b.plan.id) throw serr("계획이 비었어요.");
+    const p = cleanPlan(b.plan), i = doc.plans.findIndex((x) => x.id === p.id);
+    if (doc.gone.includes(p.id)) return { ok: true, gone: true };
+    if (i >= 0) { if (doc.plans[i].upd > p.upd) return { ok: true, plan: doc.plans[i], stale: true }; doc.plans[i] = p; } else doc.plans.push(p);
+    await put(); return { ok: true };
+  }
+  if (path === "/shorts/shoot/del") {
+    const id = String(b.id || ""); doc.plans = doc.plans.filter((x) => x.id !== id); if (id && !doc.gone.includes(id)) doc.gone.push(id);
+    await put(); return { ok: true };
+  }
+  if (path === "/shorts/shoot/ai") {
+    const day = "shorts:shootai:" + cnDay() + ":" + h, used = Number(await env.KV.get(day)) || 0;
+    if (used >= 20) throw serr("AI 컷 리스트는 하루 20번까지예요.", 429);
+    const topic = String(b.topic || "").trim().slice(0, 300);
+    const L = (Array.isArray(b.lines) ? b.lines : []).map((x) => String(x || "").trim()).filter(Boolean).slice(0, 20);
+    if (!topic && !L.length) throw serr("주제나 대본을 적어 주세요.");
+    const sec = [30, 45, 60].includes(Number(b.sec)) ? Number(b.sec) : 45, n = Math.round(sec / 4);
+    const rate = (await krw(env)) || 190;
+    const out = await qwen(env, [{ role: "user", content: "한국어 유튜브 숏츠 촬영 계획(샷 리스트)을 만들어라. 채널: 광저우에 사는 한국인 직장인, 얼굴은 안 나온다(뒷모습·손·내 시점만). 카메라는 DJI 포켓(짐벌) 또는 폰, 혼자 찍는다. " + (topic ? "주제: " + topic + ". " : "") +
+      (L.length ? "아래 대본 줄마다 컷 하나씩 만들고, 대본은 고치지 말고 그대로 say 에 옮겨라(" + L.length + "개):\n" + L.map((x, i) => (i + 1) + ". " + x).join("\n") + "\n"
+        : "약 " + sec + "초, 정확히 " + n + "줄 대본도 함께 써라(한 줄 = 한 컷의 내레이션, 10~28자, 소리 내어 읽는 말이라 기호 없이, 1줄은 훅, 마지막 줄은 댓글 질문). 현장에서 확인해야 하는 가격·개수·이름은 지어내지 말고 [__] 또는 [예시 단어] 꼴의 빈칸으로 둔다. 가격은 위안과 원화(1위안≈" + rate + "원)를 같이 말하게. " + KR_RULES + " " + TONE_RULES + " ") +
+      "컷마다 what(무엇을 찍나 — 현장에서 바로 알아듣게 30자 이내), how(샷 크기·각도·카메라 움직임, 예 '와이드·로우앵글·고정', 짐벌이면 트래킹 가능). " + CAM_RULES + " 가게·상가 안에서는 상인·손님 얼굴 정면 금지, 가격표·손·물건 위주. tips 는 그 장소에서 찍을 때 챙길 것 3개 이내. " +
+      'JSON만: {"title":"","items":[{"say":"","what":"","how":""}],"tips":[""]}' }]);
+    await env.KV.put(day, String(used + 1), { expirationTtl: 2 * 86400 });
+    let items = (Array.isArray(out.items) ? out.items : []).map((x) => ({ say: String(x.say || "").slice(0, 160), what: String(x.what || "").slice(0, 80), how: String(x.how || "").slice(0, 60) }));
+    if (L.length) items = L.map((say, i) => ({ say, what: (items[i] && items[i].what) || "", how: (items[i] && items[i].how) || "" }));
+    if (!items.length) throw serr("컷 리스트를 만들지 못했어요.");
+    return { ok: true, title: String(out.title || topic || "촬영 계획").slice(0, 60), items, tips: (Array.isArray(out.tips) ? out.tips : []).slice(0, 4).map((x) => String(x).slice(0, 160)) };
+  }
+  throw serr("알 수 없는 요청", 404);
 }
 // 📝 대본 줄만 빨리(초안 저장 없음) — 대본 모드 '✍️ AI 대본' 버튼
 async function lines(env, b, h) {
@@ -1874,7 +1927,7 @@ function home(){
       +'<p class="lbl">길이</p><div class="chips">'+[30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div>'
       +'<button class="big" id="scriptBtn">✍️ 대본 쓰기</button><div class="err" id="e1"></div></div>';
     P.make='<a class="big" href="/edit" style="text-align:center;text-decoration:none;background:var(--red);margin:0">🎥 내가 찍은 영상으로 만들기 (편집실)</a>'
-      +'<div class="tools"><a href="/auto" style="background:#1F7A4D"><b>🤖</b>자동 채널</a><a href="/story" style="background:#B3541E"><b>🎬</b>장면 공장</a><a href="/cine" style="background:#6B4FA0"><b>🎞</b>사진 → 영상</a><a href="/toon" style="background:#1F7A4D"><b>🎨</b>공감툰</a><button id="avOpen" style="background:var(--ink)"><b>🗣</b>캐릭터·내 목소리</button></div>'
+      +'<div class="tools"><a href="/shoot" style="background:var(--sky)"><b>📋</b>촬영 모드</a><a href="/auto" style="background:#1F7A4D"><b>🤖</b>자동 채널</a><a href="/story" style="background:#B3541E"><b>🎬</b>장면 공장</a><a href="/cine" style="background:#6B4FA0"><b>🎞</b>사진 → 영상</a><a href="/toon" style="background:#1F7A4D"><b>🎨</b>공감툰</a><button id="avOpen" style="background:var(--ink)"><b>🗣</b>캐릭터·내 목소리</button></div>'
       +'<details class="mus"><summary>🎵 무료 배경음악 받는 곳</summary><a href="https://studio.youtube.com/channel/UC/music" target="_blank" rel="noopener"><b>유튜브 오디오 보관함</b><small>가장 안전 — 유튜브 공식, 저작권 신고 걱정 없음. \'저작자 표시 필요\' 표시 곡만 설명란에 출처</small></a><p class="note">⚠️ \'무료\' 사이트 곡(Pixabay·FMA 등)은 Content ID 신고가 붙어 수익이 남에게 가는 일이 실제로 있었어요(2026-10). 유튜브 오디오 보관함 곡만 쓰세요. 아이폰: 받은 곡은 \'파일\' 앱에 저장돼요 → 편집실 \'폰에 있는 음악 고르기\'에서 선택. 유튜브는 VPN이 필요할 수 있어요.</p></details>'+h;h='';
     X.yt='<div class="card" id="ytCard"><h2>유튜브 연결</h2><div id="ytBox" class="note">확인 중…</div></div>';
     X.wk='<div class="card" id="wkCard"><h2>🗓 이번 주말 찍을 숏츠 <button class="chip" id="wkRe" style="float:right;font-size:12px;padding:3px 9px">다시 만들기</button></h2><textarea id="wkMemo" rows="2" placeholder="이번 주 일정 (예: 화 광저우→제남 출장, 수~목 제남→닝보, 월·금 광저우)" style="width:100%;box-sizing:border-box;margin:4px 0 6px;border:1px solid var(--line);border-radius:10px;padding:8px;font:inherit;background:var(--card);color:var(--ink)"></textarea><div id="wkBox" class="note">불러오는 중…</div></div>';
