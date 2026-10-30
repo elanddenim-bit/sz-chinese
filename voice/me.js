@@ -71,7 +71,7 @@ function putHealth(d, day, v) {
 // ---------- GitHub 커밋 ----------
 async function ghFetch(env, d, force) {
   const g = d.gh || {};
-  if (!force && g.at && Date.now() - g.at < 3 * 3600e3) return g;
+  if (!force && g.at && Date.now() - g.at < (g.err ? 10 * 60e3 : 3 * 3600e3)) return g; // 실패했으면 10분 뒤 다시
   const H = { "user-agent": "sz-voice-me", accept: "application/vnd.github+json" };
   if (env.GITHUB_TOKEN) H.authorization = "Bearer " + env.GITHUB_TOKEN;
   const org = env.GH_ORG || "elanddenim-bit";
@@ -110,7 +110,7 @@ async function ghFetch(env, d, force) {
     const cut = cnDay(since);
     for (const k of Object.keys(out.days)) if (k >= cut) delete out.days[k];
     Object.assign(out.days, fresh);
-  } catch (e) { out.err = String(e.message || e).slice(0, 120); if (g.at) { out.at = g.at; } }
+  } catch (e) { out.err = String(e.message || e).slice(0, 120); }
   d.gh = out;
   return out;
 }
