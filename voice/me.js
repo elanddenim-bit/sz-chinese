@@ -473,7 +473,8 @@ export async function meApi(env, path, b, h) {
     if (d.cfg.t1 && lol) for (const e of (lol.ev || []).filter((x) => !lolDone(x) && x.t > now - 3 * 3600e3).slice(0, 3)) gl.push({ t: e.t, k: "lol", me: "T1", op: e.op, tag: e.lg || "LoL", bo: e.bo || 0 });
     gl.sort((a, b) => a.t - b.t);
     const gview = gl.slice(0, 3).map((g) => { const x = new Date(g.t + TZ); return { ...g, d: x.toISOString().slice(0, 10), hm: x.toISOString().slice(11, 16) }; });
-    return { ok: true, d: today, study: { today: mins(today), goal: d.cfg.gstudy || 30, streak, week, n: sc.todayN }, hsk: sc.hsk, words: sc.words, chips: sc.chips, trip, plan, games: gview, game: games[0] ? games[0].line : "", note };
+    const days7 = []; for (let i = 6; i >= 0; i--) { const k = cnDay(now - i * 864e5); days7.push({ d: k, min: mins(k) }); }
+    return { ok: true, d: today, study: { today: mins(today), goal: d.cfg.gstudy || 30, streak, week, n: sc.todayN, days7 }, hsk: sc.hsk, words: sc.words, chips: sc.chips, trip, plan, games: gview, game: games[0] ? games[0].line : "", note };
   }
   if (path === "/me/cfg") {
     const c = d.cfg;
@@ -770,11 +771,11 @@ function studySec(w, j, big) {
   tile("오늘 문제", (s.n || 0) + "개"); tiles.addSpacer(5);
   tile("누적 단어", n0(j.words)); tiles.addSpacer(5);
   tile("연속", s.streak ? "🔥" + s.streak + "일" : "0일", C.warn);
-  const ch = (j.chips || []).slice(0, big ? 4 : 2);
+  const ch = (j.chips || []).slice(0, big ? 6 : 2);
   if (ch.length) {
     c.addSpacer(big ? 10 : 7);
     txt(c, ch.some((x) => x.wrong) ? "다시 볼 단어" : "거의 익힌 단어", 10, C.sub); c.addSpacer(4);
-    const rows = big ? [ch.slice(0, 2), ch.slice(2, 4)] : [ch];
+    const rows = big ? [ch.slice(0, 2), ch.slice(2, 4), ch.slice(4, 6)] : [ch];
     for (const row of rows) {
       if (!row.length) continue;
       const r = c.addStack(); r.layoutHorizontally();
@@ -787,7 +788,34 @@ function studySec(w, j, big) {
       c.addSpacer(5);
     }
   }
+  if (big && s.days7 && s.days7.length) {
+    c.addSpacer(6);
+    const hr = c.addStack(); txt(hr, "이번 주 공부", 10, C.sub); hr.addSpacer(); txt(hr, "주 " + (s.week || 0) + "분", 10, C.sub);
+    c.addSpacer(4);
+    const im2 = c.addImage(weekBars(s.days7, s.goal || 30, j.d)); im2.imageSize = new Size(286, 62);
+  }
+  if (big) c.addSpacer(); // 카드가 위젯 아래까지 차도록
   return c;
+}
+// 7일 막대: 목표 채운 날 초록, 오늘 분홍, 점선 = 목표
+function weekBars(days, goal, today) {
+  const W = 572, H = 124, ctx = new DrawContext(); ctx.size = new Size(W, H); ctx.opaque = false; ctx.respectScreenScale = false;
+  const top = 18, base = H - 26, bw = 44, gap = (W - bw * 7) / 6;
+  const mx = Math.max(goal * 1.2, ...days.map((x) => x.min || 0), 1);
+  const DOW = ["일", "월", "화", "수", "목", "금", "토"];
+  const gy = base - (base - top) * goal / mx;
+  ctx.setFillColor(new Color("#FFFFFF", 0.25));
+  for (let x = 0; x < W; x += 14) ctx.fillRect(new Rect(x, gy - 1, 7, 2));
+  days.forEach((x, i) => {
+    const X = i * (bw + gap), h = Math.max(4, (base - top) * (x.min || 0) / mx);
+    const p = new Path(); p.addRoundedRect(new Rect(X, base - h, bw, h), 8, 8); ctx.addPath(p);
+    ctx.setFillColor(x.min >= goal ? C.ok : x.d === today ? C.ring : new Color("#FFFFFF", x.min ? 0.45 : 0.12)); ctx.fillPath();
+    ctx.setTextAlignedCenter(); ctx.setFont(Font.semiboldRoundedSystemFont(20));
+    ctx.setTextColor(x.d === today ? C.txt : C.sub);
+    ctx.drawTextInRect(DOW[new Date(x.d + "T00:00:00Z").getUTCDay()], new Rect(X - 6, base + 2, bw + 12, 24));
+    if (x.min) { ctx.setFont(Font.boldRoundedSystemFont(18)); ctx.setTextColor(C.txt); ctx.drawTextInRect(String(x.min), new Rect(X - 10, Math.max(0, base - h - 22), bw + 20, 22)); }
+  });
+  return ctx.getImage();
 }
 function planSec(w, j, n) {
   const c = card(w); head(c, "다음 일정");
@@ -829,7 +857,7 @@ function build(j, fam, param) {
   // 큰 위젯: study(공부 카드 크게) / plan(일정·팀) / 비우면 셋 다
   if (fam === "large" || fam === "extraLarge") {
     w.setPadding(8, 8, 8, 8);
-    if (P === "study") { studySec(w, j, true); w.addSpacer(); }
+    if (P === "study") { studySec(w, j, true); }
     else if (P === "plan") { planSec(w, j, 4); w.addSpacer(8); teamSec(w, j, 3); w.addSpacer(); }
     else { studySec(w, j, false); w.addSpacer(6); planSec(w, j, 2); w.addSpacer(6); teamSec(w, j, 2); w.addSpacer(); }
     if (j.stale) { const f = w.addText("⚠︎ 저장본"); f.font = Font.systemFont(9); f.textColor = C.sub; }
