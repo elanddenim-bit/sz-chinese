@@ -423,7 +423,7 @@ table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:
 .tm b{display:block;margin-bottom:4px}.tm div{font-size:14px;padding:3px 0}.tm .e{color:var(--ink2);font-size:13px}.tm+.tm{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
 label{display:block;font-size:13px;color:var(--ink2);margin:10px 0 4px}
 input,select{width:100%;font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
-.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}.two>*{min-width:0}input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;display:block;min-height:46px;text-align:left}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}.two>*{min-width:0}input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;max-width:100%;display:block;min-height:46px;text-align:left}input[type=date]::-webkit-date-and-time-value{text-align:left}
 .btn{display:block;width:100%;margin-top:12px;background:var(--sky);color:#fff;border:0;border-radius:12px;padding:13px;font:inherit;font-weight:700}
 .btn.s{background:transparent;color:var(--sky);border:1px solid var(--sky)}
 .sw{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--line)}.sw:first-child{border-top:0}.sw input{width:auto;transform:scale(1.3)}
@@ -477,7 +477,7 @@ function draw(j){
   h+='<p class="hint">시각은 중국 시각 · '+ago(t.at)+' 받음 · 경기 날 아침 '+j.cfg.mh+'시에 오늘 경기, 끝나면 결과를 아이폰으로 보내요.</p></div>';
   // 건강 기록
   h+='<h2>건강 기록</h2><div class="card"><div class="k">마지막으로 받은 때: '+ago(j.healthAt)+'</div>';
-  h+='<div class="two"><div><label for="hd">날짜</label><input id="hd" type="date" value="'+j.today+'"></div><div><label for="hs">잔 시간(시간)</label><input id="hs" inputmode="decimal" placeholder="예: 6.5"></div></div><label for="hp">걸음</label><input id="hp" inputmode="numeric" placeholder="예: 7200"><button class="btn s" id="hsave">직접 넣기</button>';
+  h+='<label for="hd">날짜</label><input id="hd" type="date" value="'+j.today+'"><div class="two"><div><label for="hs">잔 시간(시간)</label><input id="hs" inputmode="decimal" placeholder="예: 6.5"></div><div><label for="hp">걸음</label><input id="hp" inputmode="numeric" placeholder="예: 7200"></div></div><button class="btn s" id="hsave">직접 넣기</button>';
   h+='<details style="margin-top:14px"><summary>아이폰 단축어 연결 (매일 밤 자동)</summary><ol>';
   h+='<li>단축어 앱 → 자동화 → <b>특정 시간</b> 매일 22:30 → <b>즉시 실행</b></li>';
   h+='<li><b>건강 샘플 찾기</b>: 걸음, 시작일 <b>오늘</b> → <b>통계 계산</b> 합계 → 변수 이름 <code>걸음</code></li>';
