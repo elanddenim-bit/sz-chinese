@@ -78,13 +78,18 @@ async function ghFetch(env, d, force) {
   const since = Date.now() - 15 * 864e5;
   const out = { at: Date.now(), days: g.days || {}, repos: 0, priv: !!env.GITHUB_TOKEN, err: "" };
   try {
-    const r = await fetch(`https://api.github.com/orgs/${org}/repos?per_page=100&sort=pushed${env.GITHUB_TOKEN ? "&type=all" : ""}`, { headers: H });
-    if (!r.ok) throw new Error("저장소 목록 " + r.status + (r.status === 403 ? " (요청 한도)" : ""));
-    const repos = (await r.json()).filter((x) => Date.parse(x.pushed_at) > since).map((x) => x.name).slice(0, 18);
+    // elanddenim-bit 은 조직이 아니라 개인 계정 → /orgs 는 404. 토큰이 있으면 /user/repos(비공개 포함), 없으면 /users/<이름>/repos(공개만)
+    const urls = env.GITHUB_TOKEN
+      ? ["https://api.github.com/user/repos?per_page=100&sort=pushed&affiliation=owner,organization_member", `https://api.github.com/users/${org}/repos?per_page=100&sort=pushed&type=owner`]
+      : [`https://api.github.com/users/${org}/repos?per_page=100&sort=pushed&type=owner`, `https://api.github.com/orgs/${org}/repos?per_page=100&sort=pushed`];
+    let list = null, st = 0;
+    for (const u of urls) { const r = await fetch(u, { headers: H }); st = r.status; if (r.ok) { list = await r.json(); break; } }
+    if (!list) throw new Error("저장소 목록 " + st + (st === 401 ? " (토큰이 틀렸거나 만료)" : st === 403 ? " (요청 한도)" : ""));
+    const repos = list.filter((x) => Date.parse(x.pushed_at) > since).map((x) => x.full_name).slice(0, 18);
     out.repos = repos.length;
     const fresh = {};
     for (const name of repos) {
-      const cr = await fetch(`https://api.github.com/repos/${org}/${name}/commits?per_page=100&since=${new Date(since).toISOString()}`, { headers: H });
+      const cr = await fetch(`https://api.github.com/repos/${name}/commits?per_page=100&since=${new Date(since).toISOString()}`, { headers: H });
       if (!cr.ok) continue;
       for (const c of await cr.json()) {
         const who = ((c.author && c.author.login) || (c.commit.author && c.commit.author.name) || "").toLowerCase();
