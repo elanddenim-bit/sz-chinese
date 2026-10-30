@@ -932,7 +932,9 @@ function backdrop(c, sz) {
   if (FM.fileExists(BG)) { const src = Image.fromFile(BG); if (src) { const W = sz.width * K, H = sz.height * K, k = Math.max(W / src.size.width, H / src.size.height); c.drawImageInRect(src, new Rect((W - src.size.width * k) / 2, (H - src.size.height * k) / 2, src.size.width * k, src.size.height * k)); c.setFillColor(new Color("#030A1E", 0.62)); c.fillRect(new Rect(0, 0, W, H)); } }
 }
 function cardBox(c, x, y, w, h) { rr(c, x, y, w, h, 18, P.card, P.line, 1); rr(c, x + 1, y + 1, w - 2, h * 0.45, 17, new Color("#FFFFFF", 0.025)); }
+let CMP = false; // 큰 위젯 하나에 세 카드(all) — 머리를 작게
 function head(c, x, y, w, emoji, title, sub, btn) {
+  if (CMP) { iconBox(c, x, y - 2, 22, emoji); T(c, title, x + 30, y + 2, w - 40, 12.5, P.txt, "b"); return; }
   iconBox(c, x, y, 30, emoji);
   T(c, title, x + 38, y - 1, w - 130, 15, P.txt, "b");
   T(c, sub, x + 38, y + 18, w - 120, 8.5, P.sub);
@@ -942,13 +944,13 @@ const KDOW = ["일", "월", "화", "수", "목", "금", "토"];
 const kday = (d) => { const p = d.split("-"); return Number(p[1]) + "월 " + Number(p[2]) + "일 (" + KDOW[new Date(d + "T00:00:00Z").getUTCDay()] + ")"; };
 const n1 = (x) => Number(x || 0).toLocaleString();
 
-function studyCard(c, j, x, y, w, h) {
+function studyCard(c, j, x, y, w, h, noChips) {
   cardBox(c, x, y, w, h);
   const hk = j.hsk || { lv: 4, total: 509, seen: 0, mast: 0 }, s = j.study || {};
   const rg = j.ring || { title: "HSK " + hk.lv, big: String(Math.round((hk.total ? hk.mast / hk.total : 0) * 100)), unit: "%", sub: hk.mast + " / " + hk.total, pct: hk.total ? hk.mast / hk.total : 0 };
   head(c, x + 12, y + 12, w - 24, "📖", "중국어 학습", "꾸준한 오늘이 더 큰 기회를 만듭니다.", rg.title);
   // 링
-  const pct = Math.max(0, Math.min(1, rg.pct || 0)), rr0 = Math.min(40, (h - 60) / 2 - 18), cx = x + 14 + rr0 + 5, cy = y + 52 + rr0 + 6;
+  const pct = Math.max(0, Math.min(1, rg.pct || 0)), oy = CMP ? 34 : 52, rr0 = noChips ? Math.min(42, (h - oy - 16) / 2) : Math.min(40, (h - 60) / 2 - 18), cx = x + 14 + rr0 + 5, cy = y + oy + rr0 + 6;
   glow(c, cx, cy, rr0 + 14, "#22D37A", 0.10);
   arcG(c, cx, cy, rr0, 8, 0, 1, new Color("#22417E"), new Color("#22417E"));
   if (pct > 0) { arcG(c, cx, cy, rr0, 12, 0, Math.min(pct, 1), P.green, P.green2, 0.12); arcG(c, cx, cy, rr0, 8, 0, Math.min(pct, 1), new Color("#13B868"), P.green2); }
@@ -958,7 +960,7 @@ function studyCard(c, j, x, y, w, h) {
   T(c, rg.unit, cx - (vw + uw) / 2 + vw + 1, cy - 2, uw + 6, 11, P.txt, "b");
   T(c, rg.sub, cx - rr0 + 6, cy + 13, rr0 * 2 - 12, 7.5, P.sub, "", "c");
   // 타일 3개
-  const rx = cx + rr0 + 16, rw = x + w - 12 - rx, tg = 5, tWd = (rw - tg * 2) / 3, ty = y + 52;
+  const rx = cx + rr0 + 16, rw = x + w - 12 - rx, tg = 5, tWd = (rw - tg * 2) / 3, ty = y + oy;
   const tiles = [["📚", "누적 단어", n1(j.words), ["#183A86", "#0F2457"]], ["📊", "오늘 학습", (s.today || 0) + "분", ["#0F4A45", "#0A2B33"]], ["🔥", "연속", (s.streak || 0) + "일", ["#4A1E2A", "#2A1424"]]];
   tiles.forEach((t, i) => {
     const tx = rx + i * (tWd + tg);
@@ -984,6 +986,7 @@ function studyCard(c, j, x, y, w, h) {
     });
   }
   // 단어 칩 4개(전체 폭)
+  if (noChips) return;
   const ch = (j.chips || []).slice(0, 4), cyy = y + h - 12 - 40, cw = (w - 24 - 3 * 6) / 4;
   const CC = [["#3A2A12", "#B07A2A"], ["#10285E", "#2F6BEA"], ["#0F3326", "#2FA36B"], ["#2A1A5E", "#7A4AEA"]];
   if (!ch.length) T(c, "오답 단어가 생기면 여기에 떠요", x + 12, cyy + 14, w - 24, 9, P.sub, "", "c");
@@ -1000,12 +1003,12 @@ function splitPlace(x) { const m = String(x.title || "").split(/\s*@\s*/); retur
 function planCard(c, j, x, y, w, h, nRows) {
   cardBox(c, x, y, w, h);
   head(c, x + 12, y + 12, w - 24, "📅", "다음 일정", "중요한 일정을 놓치지 마세요.", "전체 일정");
-  const L = (j.plan || []).slice(0, nRows), top = y + 50, avail = y + h - 8 - top;
+  const L = (j.plan || []).slice(0, nRows), top = y + (CMP ? 32 : 50), avail = y + h - 8 - top;
   if (!L.length) { T(c, "다가오는 일정 없음", x + 12, top + avail / 2 - 6, w - 24, 10, P.sub, "", "c"); return; }
-  const bigH = Math.min(52, avail - (L.length - 1) * 34), smH = L.length > 1 ? Math.min(34, (avail - bigH - 4 * (L.length - 1)) / (L.length - 1)) : 0;
+  const bigH = CMP ? 0 : Math.min(52, avail - (L.length - 1) * 34), smH = CMP ? Math.min(34, (avail - 4 * (L.length - 1)) / L.length) : L.length > 1 ? Math.min(34, (avail - bigH - 4 * (L.length - 1)) / (L.length - 1)) : 0;
   let yy = top;
   L.forEach((it, i) => {
-    const big = i === 0, hh = big ? bigH : smH, ix = x + 8, iw = w - 16, sp = splitPlace(it);
+    const big = !CMP && i === 0, hh = big ? bigH : smH, ix = x + 8, iw = w - 16, sp = splitPlace(it);
     rr(c, ix, yy, iw, hh, 12, P.inner, P.innerLine, 0.7);
     const dl = it.d === j.d ? "오늘" : kday(it.d);
     if (big) {
@@ -1043,10 +1046,11 @@ function teamCard(c, j, x, y, w, h, nRows) {
   if (cr) imgIn(c, cr, x + 9, y + 12, lw - 16, h - 24);
   else { T(c, "⚽", x + 1, y + h / 2 - 20, lw, 32, P.txt, "", "c", 42); T(c, "MY TEAM", x + 1, y + h - 22, lw, 8, P.sub, "b", "c"); }
   const rx = x + lw + 10, rw = x + w - 10 - rx;
-  T(c, "좋아하는 팀 일정", rx, y + 10, rw, 13, P.txt, "b");
+  T(c, "좋아하는 팀 일정", rx, y + (CMP ? 7 : 10), rw * 0.55, CMP ? 12 : 13, P.txt, "b");
   const G = (j.games || []).slice(0, nRows);
-  T(c, G.length ? "수원 삼성 · T1 다음 경기를 응원합니다." : (j.gerr || "예정된 경기 없음"), rx, y + 27, rw, 8, P.sub);
-  const top = y + 42, rh = Math.min(30, (y + h - 8 - top - 3 * (nRows - 1)) / nRows);
+  const msg = G.length ? "수원 삼성 · T1 다음 경기를 응원합니다." : (j.gerr || "예정된 경기 없음");
+  if (CMP) { if (!G.length) T(c, msg, rx, y + 30, rw, 8.5, P.sub); } else T(c, msg, rx, y + 27, rw, 8, P.sub);
+  const top = y + (CMP ? 26 : 42), rh = Math.min(30, (y + h - 8 - top - 3 * (nRows - 1)) / nRows);
   G.forEach((g, i) => {
     const ry = top + i * (rh + 3);
     rr(c, rx - 2, ry, rw + 2, rh, 9, P.inner, P.innerLine, 0.6);
@@ -1073,7 +1077,11 @@ function teamCard(c, j, x, y, w, h, nRows) {
 function pro(j, fam, P0) {
   const sz = wsize(fam), c = D(sz); backdrop(c, sz);
   const W = sz.width, H = sz.height, m = 4;
-  if (fam === "medium") teamCard(c, j, m, m, W - m * 2, H - m * 2, 3);
+  CMP = false;
+  if (fam !== "medium" && (!P0 || P0 === "all")) {
+    CMP = true; const A = H - m * 4, h1 = Math.round(A * 0.42), h2 = Math.round(A * 0.23);
+    studyCard(c, j, m, m, W - m * 2, h1, true); planCard(c, j, m, m * 2 + h1, W - m * 2, h2, 1); teamCard(c, j, m, m * 3 + h1 + h2, W - m * 2, A - h1 - h2, 3);
+  } else if (fam === "medium") teamCard(c, j, m, m, W - m * 2, H - m * 2, 3);
   else if (P0 === "plan") { const h1 = Math.round((H - m * 3) * 0.55); planCard(c, j, m, m, W - m * 2, h1, 3); teamCard(c, j, m, m * 2 + h1, W - m * 2, H - m * 3 - h1, 3); }
   else { const h1 = Math.round((H - m * 3) * 0.57); studyCard(c, j, m, m, W - m * 2, h1); planCard(c, j, m, m * 2 + h1, W - m * 2, H - m * 3 - h1, 2); }
   if (j.stale) T(c, "⚠︎ 저장본", W - 60, H - 12, 52, 7, P.dim, "", "r");
@@ -1154,7 +1162,7 @@ let c = await code(false);
 if (config.runsInApp) {
   if (!c) c = await code(true);
   const a = new Alert(); a.title = "나 살피기 위젯";
-  const ACT = [["작은 위젯", "small", ""], ["중간 위젯", "medium", ""], ["큰 위젯 · 공부+일정(study)", "large", "study"], ["큰 위젯 · 일정+팀(plan)", "large", "plan"], ["중간 위젯 · 팀(team)", "medium", "team"], ["큰 위젯 · 예전 모양(old)", "large", "old"]];
+  const ACT = [["작은 위젯", "small", ""], ["중간 위젯", "medium", ""], ["큰 위젯 · 전부(비우기·all)", "large", "all"], ["큰 위젯 · 공부+일정(study)", "large", "study"], ["큰 위젯 · 일정+팀(plan)", "large", "plan"], ["중간 위젯 · 팀(team)", "medium", "team"], ["큰 위젯 · 예전 모양(old)", "large", "old"]];
   ACT.forEach((x) => a.addAction(x[0] + " 미리보기")); a.addAction("🖼 배경 사진 고르기"); a.addAction("배경 사진 지우기"); a.addAction("초대 코드 다시 넣기"); a.addAction("🛡 팀 엠블럼 고르기(파일·사진)"); a.addAction("팀 엠블럼 지우기"); a.addCancelAction("닫기");
   let k = await a.presentSheet(); const N = ACT.length;
   if (k === N) { const ok = await pickBg(); if (ok) k = 2; } // 고르면 바로 큰 위젯 미리보기
