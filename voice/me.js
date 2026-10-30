@@ -24,7 +24,7 @@ const cnDay = (t = Date.now()) => new Date(t + TZ).toISOString().slice(0, 10);
 const cnHour = (t) => new Date(t + TZ).getUTCHours();
 const merr = (message, status = 400) => Object.assign(new Error(message), { code: "me", status });
 const KEY = (h) => "me:" + h;
-const DEF = { on: true, wday: 0, hour: 19, team: true, mh: 9, suwon: true, t1: true };
+const DEF = { on: true, wday: 0, hour: 19, team: true, mh: 9, suwon: true, t1: true, gst: 8000, gex: 30, gsl: 420 }; // 위젯 목표: 걸음·운동 분·수면 분
 const SKIP_IDLE = new Set(["daily", "me", "spain"]); // 공개·남이 쓰는 앱, 이 화면 자신은 '안 쓴 도구'에서 뺌
 const WD = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -364,8 +364,25 @@ export async function meApi(env, path, b, h) {
     const t = d.health[cnDay()] || {};
     return { ok: true, saved: n, msg: n ? `받았어요 · 오늘 ${t.sl ? hm(t.sl) : "수면 없음"} · ${t.st != null ? t.st.toLocaleString() + "보" : "걸음 없음"} · ${t.ex != null ? "운동 " + t.ex + "분" : "운동 없음"}` : "숫자가 없어요(steps·sleep)" };
   }
+  if (path === "/me/widget") {
+    // 🟢 아이폰 위젯(Scriptable)용 — 가볍게: KV 문서 하나만 읽음(GitHub·사용량 목록 안 부름)
+    const today = cnDay(), t = d.health[today] || {}, y = d.health[cnDay(Date.now() - 864e5)] || {};
+    const g = (d.gh && d.gh.days && d.gh.days[today]) || {};
+    const fb = d.teams.fb, lol = d.teams.lol, now = Date.now();
+    const nextOf = (ev, done, line) => { const e = (ev || []).find((x) => !done(x) && x.t > now - 3 * 3600e3); return e ? line(e) : ""; };
+    return {
+      ok: true, d: today, at: t.at || 0,
+      steps: t.st ?? null, ex: t.ex ?? null, sleep: t.sl ?? y.sl ?? null, sleepDay: t.sl != null ? today : y.sl != null ? cnDay(now - 864e5) : null,
+      goal: { steps: d.cfg.gst, ex: d.cfg.gex, sleep: d.cfg.gsl },
+      commits: g.n || 0, study: d.study[today] ? d.study[today].min : 0,
+      next: [d.cfg.suwon && fb ? nextOf(fb.ev, fbDone, (e) => fbLine(e, fb.id)) : "", d.cfg.t1 && lol ? nextOf(lol.ev, lolDone, lolLine) : ""].filter(Boolean),
+    };
+  }
   if (path === "/me/cfg") {
     const c = d.cfg;
+    if (b.gst !== undefined && Number(b.gst) >= 1000 && Number(b.gst) <= 50000) c.gst = Math.round(Number(b.gst));
+    if (b.gex !== undefined && Number(b.gex) >= 5 && Number(b.gex) <= 300) c.gex = Math.round(Number(b.gex));
+    if (b.gsl !== undefined && Number(b.gsl) >= 240 && Number(b.gsl) <= 600) c.gsl = Math.round(Number(b.gsl));
     for (const k of ["on", "team", "suwon", "t1"]) if (typeof b[k] === "boolean") c[k] = b[k];
     if (b.wday !== undefined && Number(b.wday) >= 0 && Number(b.wday) <= 6) c.wday = Number(b.wday);
     if (b.hour !== undefined && Number(b.hour) >= 6 && Number(b.hour) <= 23) c.hour = Number(b.hour);
@@ -456,7 +473,7 @@ function diff(a,b,unit,better){if(a==null||b==null)return '';var d=a-b;if(!d)ret
 function askCode(){$('m').innerHTML='<div class="card"><b>초대 코드</b><p class="hint">박비서와 같은 코드예요. 이 기기에 한 번만 넣으면 돼요.</p><input id="cd" autocomplete="off"><button class="btn" id="go">열기</button></div>';$('go').onclick=function(){CODE=$('cd').value.trim();try{localStorage.setItem('pb-code',CODE)}catch(e){}load()}}
 function load(fresh){if(!CODE)return askCode();api('/me/state',{fresh:!!fresh}).then(draw).catch(function(e){$('m').innerHTML='<div class="card">'+esc(e.message)+'</div>';if(/not_allowed/.test(e.message))askCode()})}
 function draw(j){
-  S=j;var w=j.week,p=j.prev,h='';
+  S=j;var w=j.week,p=j.prev,h='',c0=j.cfg;
   h+='<h2>이번 주 · '+w.from.slice(5).replace('-','/')+' ~ '+w.to.slice(5).replace('-','/')+'</h2><div class="card">';
   h+=j.notes.map(function(n){return '<div class="note"><i class="dot '+n.lv+'"></i><span>'+esc(n.t)+'</span></div>'}).join('');
   h+='</div><div class="card"><div class="grid">';
@@ -491,6 +508,12 @@ function draw(j){
   h+='<li><b>건강 샘플 찾기</b>: 수면 분석, 시작일 <b>지난 1일</b>, 값 <b>수면 중</b>(코어·깊은·REM 모두) → <b>건강 샘플 세부사항 가져오기</b> 지속 시간 → <b>통계 계산</b> 합계 → 변수 <code>수면</code></li>';
   h+='<li><b>URL 콘텐츠 가져오기</b>: <code>https://voice.zhnote.net/me/health</code> · 방법 POST · 본문 JSON — <code>code</code>(초대 코드), <code>steps</code>=걸음, <code>sleep</code>=수면, <code>ex</code>=운동하기 시간 합계(분)</li>';
   h+='</ol><p class="hint">수면 단위는 시간·분·초 어떤 것이든 서버가 알아서 맞춰요. 한 번 실행해 보고 위 \'마지막으로 받은 때\'가 바뀌면 연결된 거예요.</p></details></div>';
+  // 위젯
+  h+='<h2>📱 아이폰 위젯</h2><div class="card"><p style="margin:0 0 6px">피트니스 위젯처럼 오늘 걸음·운동·수면 링 3개. 중간 크기는 커밋·중국어·다음 경기도.</p><ol>';
+  h+='<li>아래 버튼으로 스크립트를 복사</li><li><b>Scriptable</b> 앱 → 오른쪽 위 <b>+</b> → 붙여넣기 → 이름 <code>나 살피기</code></li><li>그 스크립트를 한 번 실행 → 초대 코드 입력 → 미리보기 확인</li><li>홈 화면 길게 누르기 → 편집 → 위젯 추가 → Scriptable(작게 또는 중간) → 위젯을 눌러 Script 를 <b>나 살피기</b>로</li></ol>';
+  h+='<div class="two"><div><label for="g_st">걸음 목표</label><select id="g_st">'+[5000,6000,8000,10000,12000].map(function(x){return '<option'+(x===c0.gst?' selected':'')+'>'+x+'</option>'}).join('')+'</select></div><div><label for="g_ex">운동 목표(분)</label><select id="g_ex">'+[15,20,30,45,60].map(function(x){return '<option'+(x===c0.gex?' selected':'')+'>'+x+'</option>'}).join('')+'</select></div></div>';
+  h+='<label for="g_sl">수면 목표</label><select id="g_sl">'+[360,390,420,450,480].map(function(x){return '<option value="'+x+'"'+(x===c0.gsl?' selected':'')+'>'+hm(x)+'</option>'}).join('')+'</select>';
+  h+='<button class="btn" id="wcopy">위젯 스크립트 복사</button><p class="hint">스크립트에는 초대 코드가 들어 있지 않아요(폰 안에만 저장). 수면은 밤 단축어가 보내기 전까지 어제 기록으로 보여요.</p></div>';
   // 설정
   var c=j.cfg;h+='<h2>알림 설정</h2><div class="card">';
   if(!j.bark)h+='<p class="hint" style="color:var(--red)">Bark 주소가 없어요 — 출장 브리핑 화면에서 먼저 넣어 주세요.</p>';
@@ -506,11 +529,116 @@ function draw(j){
   $('c_on').onchange=function(){cfg({on:this.checked})};$('c_team').onchange=function(){cfg({team:this.checked})};
   $('c_su').onchange=function(){cfg({suwon:this.checked})};$('c_t1').onchange=function(){cfg({t1:this.checked})};
   $('c_wd').onchange=function(){cfg({wday:Number(this.value)})};$('c_h').onchange=function(){cfg({hour:Number(this.value)})};$('c_mh').onchange=function(){cfg({mh:Number(this.value)})};
+  $('g_st').onchange=function(){cfg({gst:Number(this.value)})};$('g_ex').onchange=function(){cfg({gex:Number(this.value)})};$('g_sl').onchange=function(){cfg({gsl:Number(this.value)})};
+  $('wcopy').onclick=function(){var t=WJS;if(!t){toast('스크립트를 받는 중이에요 — 잠시 뒤 다시');return}
+    var done=function(){toast('복사했어요 — Scriptable 에 붙여넣기')};
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done).catch(function(){fallback(t)})}else fallback(t)};
   $('t_w').onclick=function(){api('/me/test',{what:'week'}).then(function(r){toast(r.msg)}).catch(function(e){toast(e.message)})};
   $('t_t').onclick=function(){api('/me/test',{what:'team'}).then(function(r){toast(r.msg);load()}).catch(function(e){toast(e.message)})};
   if(location.hash==='#teams'){var el=$('teams');if(el)el.scrollIntoView()}
 }
+var WJS='';fetch('/me/widget.js').then(function(r){return r.text()}).then(function(t){WJS=t}).catch(function(){});
+function fallback(t){var ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.top='0';document.body.appendChild(ta);ta.focus();ta.select();try{document.execCommand('copy');toast('복사했어요 — Scriptable 에 붙여넣기')}catch(e){toast('복사 실패 — 길게 눌러 전체 선택 후 복사')}setTimeout(function(){ta.remove()},800)}
 $('rf').onclick=function(){load(true)};
 try{navigator.sendBeacon('/u',JSON.stringify({app:'me',c:{open:1}}))}catch(e){}
 load();
 </script></body></html>`;
+
+// ---------- 📱 아이폰 위젯(Scriptable) 스크립트 — GET /me/widget.js, 화면의 '위젯 스크립트 복사' 버튼이 이걸 복사 ----------
+// 피트니스 위젯처럼 어두운 바탕 + 링 3개(걸음·운동·수면) + 숫자 3줄. 중간 크기는 오른쪽에 커밋·중국어·다음 경기.
+// 초대 코드는 스크립트에 안 넣고 Scriptable Keychain('pb-code')에 — 앱에서 처음 실행할 때 한 번 물음.
+export const WIDGET_JS = String.raw`// 나 살피기 위젯 — voice.zhnote.net/me (Scriptable)
+// 앱 안에서 한 번 실행하면 초대 코드를 묻고, 위젯 미리보기를 보여 줍니다.
+const API = "https://voice.zhnote.net/me/widget";
+const CACHE = FileManager.local().joinPath(FileManager.local().documentsDirectory(), "me-widget.json");
+const C = { bg: new Color("#1C1C1E"), red: new Color("#FA114F"), redBg: new Color("#3A0A16"), grn: new Color("#A6FF00"), grnBg: new Color("#26360A"), cyn: new Color("#00E5F0"), cynBg: new Color("#08363A"), sub: new Color("#8E8E93"), txt: Color.white() };
+
+async function code(ask) {
+  if (!ask && Keychain.contains("pb-code")) return Keychain.get("pb-code");
+  if (!config.runsInApp) return null;
+  const a = new Alert(); a.title = "초대 코드"; a.message = "박비서와 같은 코드예요. 이 폰에만 저장돼요.";
+  a.addSecureTextField("초대 코드", ""); a.addAction("저장"); a.addCancelAction("취소");
+  if ((await a.presentAlert()) === -1) return null;
+  const c = a.textFieldValue(0).trim(); if (c) Keychain.set("pb-code", c); return c || null;
+}
+async function load(c) {
+  const fm = FileManager.local();
+  try {
+    const r = new Request(API); r.method = "POST"; r.headers = { "content-type": "application/json" };
+    r.body = JSON.stringify({ code: c }); r.timeoutInterval = 15;
+    const j = await r.loadJSON();
+    if (j && j.ok) { fm.writeString(CACHE, JSON.stringify(j)); return j; }
+    if (j && j.error) return { err: j.detail || j.error };
+  } catch (e) {}
+  if (fm.fileExists(CACHE)) { const j = JSON.parse(fm.readString(CACHE)); j.stale = true; return j; }
+  return { err: "연결 안 됨" };
+}
+function arc(ctx, cx, cy, r, w, frac, color) {
+  const n = Math.max(2, Math.ceil(160 * frac));
+  ctx.setFillColor(color);
+  for (let i = 0; i <= n; i++) {
+    const a = -Math.PI / 2 + 2 * Math.PI * frac * (i / n);
+    ctx.fillEllipse(new Rect(cx + r * Math.cos(a) - w / 2, cy + r * Math.sin(a) - w / 2, w, w));
+  }
+}
+function rings(vals) {
+  const S = 200, ctx = new DrawContext(); ctx.size = new Size(S, S); ctx.opaque = false; ctx.respectScreenScale = true;
+  const w = 24, rs = [86, 60, 34], cols = [[C.red, C.redBg], [C.grn, C.grnBg], [C.cyn, C.cynBg]];
+  vals.forEach(function (v, i) {
+    arc(ctx, S / 2, S / 2, rs[i], w, 1, cols[i][1]);
+    const f = Math.max(0, v || 0);
+    if (f > 0) arc(ctx, S / 2, S / 2, rs[i], w, Math.min(f, 1), cols[i][0]);
+    if (f > 1) arc(ctx, S / 2, S / 2, rs[i], w, Math.min(f - 1, 1), cols[i][0]); // 목표 넘으면 한 바퀴 더(겹쳐 진하게)
+  });
+  return ctx.getImage();
+}
+const fmt = (n) => n == null ? "—" : Math.round(n).toLocaleString();
+const hrs = (m) => m == null ? "—" : (Math.round(m / 6) / 10).toString();
+function line(st, big, unit, color, size) {
+  const s = st.addStack(); s.centerAlignContent();
+  const t = s.addText(big); t.font = Font.boldRoundedSystemFont(size); t.textColor = color; t.lineLimit = 1; t.minimumScaleFactor = 0.5;
+  const u = s.addText(unit); u.font = Font.boldRoundedSystemFont(Math.round(size * 0.62)); u.textColor = color; u.lineLimit = 1;
+}
+function build(j, fam) {
+  const w = new ListWidget(); w.backgroundColor = C.bg; w.url = "https://voice.zhnote.net/me";
+  w.refreshAfterDate = new Date(Date.now() + 20 * 60e3);
+  if (j.err) { w.setPadding(14, 14, 14, 14); const t = w.addText("나 살피기\n" + j.err + "\n\n앱에서 한 번 실행해 주세요"); t.font = Font.mediumSystemFont(13); t.textColor = C.sub; return w; }
+  const g = j.goal || { steps: 8000, ex: 30, sleep: 420 };
+  const vals = [j.steps == null ? 0 : j.steps / g.steps, j.ex == null ? 0 : j.ex / g.ex, j.sleep == null ? 0 : j.sleep / g.sleep];
+  const big = fam === "medium" ? 24 : 21;
+  w.setPadding(14, 16, 12, 14);
+  const row = w.addStack(); row.layoutHorizontally();
+  const left = row.addStack(); left.layoutVertically();
+  const im = left.addImage(rings(vals)); im.imageSize = fam === "medium" ? new Size(56, 56) : new Size(50, 50);
+  left.addSpacer(6);
+  line(left, fmt(j.steps) + "/" + fmt(g.steps), "걸음", C.red, big);
+  line(left, fmt(j.ex) + "/" + g.ex, "분", C.grn, big);
+  line(left, hrs(j.sleep) + "/" + hrs(g.sleep), "시간", C.cyn, big);
+  if (fam === "medium") {
+    row.addSpacer();
+    const r = row.addStack(); r.layoutVertically(); r.size = new Size(130, 0);
+    const add = (txt, col, sz) => { const t = r.addText(txt); t.font = Font.semiboldRoundedSystemFont(sz || 13); t.textColor = col || C.txt; t.lineLimit = 2; t.minimumScaleFactor = 0.7; r.addSpacer(4); };
+    add("💻 커밋 " + (j.commits || 0) + "건");
+    add("🀄 중국어 " + (j.study || 0) + "분");
+    (j.next || []).slice(0, 2).forEach((x) => add(x, C.sub, 12));
+    r.addSpacer();
+  }
+  w.addSpacer();
+  const f = w.addText((j.stale ? "⚠︎ 저장본 · " : "") + (j.sleepDay && j.sleepDay !== j.d ? "수면은 어제 기록 · " : "") + (j.at ? new Date(j.at).toTimeString().slice(0, 5) + " 받음" : "오늘 기록 없음"));
+  f.font = Font.systemFont(9); f.textColor = C.sub; f.lineLimit = 1;
+  return w;
+}
+
+let c = await code(false);
+if (config.runsInApp) {
+  const a = new Alert(); a.title = "나 살피기 위젯"; a.addAction("작은 위젯 미리보기"); a.addAction("중간 위젯 미리보기"); a.addAction("초대 코드 다시 넣기"); a.addCancelAction("닫기");
+  if (!c) c = await code(true);
+  const k = await a.presentSheet();
+  if (k === 2) { c = await code(true); }
+  else if (k === 0 || k === 1) { const j = c ? await load(c) : { err: "초대 코드 없음" }; const w = build(j, k === 1 ? "medium" : "small"); if (k === 1) await w.presentMedium(); else await w.presentSmall(); }
+} else {
+  const j = c ? await load(c) : { err: "초대 코드 없음" };
+  Script.setWidget(build(j, config.widgetFamily || "small"));
+}
+Script.complete();
+`;

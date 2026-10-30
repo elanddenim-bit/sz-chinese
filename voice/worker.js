@@ -49,7 +49,7 @@ import { liveRelay, LIVE_HTML } from "./live.js";
 import { memoirApi, memoirGet, memoirPrompt, memoirCron, MEMOIR_HTML } from "./memoir.js";
 import { guestApi, GUEST_HTML } from "./guest.js";
 import { vpnApi, vpnCron, VPN_HTML } from "./vpn.js";
-import { meApi, meCron, ME_HTML } from "./me.js";
+import { meApi, meCron, ME_HTML, WIDGET_JS } from "./me.js";
 import ICON180 from "./icon-180.png";
 import ICON192 from "./icon-192.png";
 import ICON512 from "./icon-512.png";
@@ -188,6 +188,7 @@ export default {
       if (url.pathname === "/todo/ics" && req.method === "GET") return todoIcs(url);
       if (url.pathname === "/tv" && req.method === "GET") return new Response(TV_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
       if (url.pathname === "/guest" && req.method === "GET") return new Response(GUEST_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } }); // 🤝 출장자 지원(지사원 팀 코드)
+      if (url.pathname === "/me/widget.js" && req.method === "GET") return new Response(WIDGET_JS, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-cache" } }); // 📱 Scriptable 위젯 스크립트(코드 없음)
       if (url.pathname === "/me" && req.method === "GET") return new Response(ME_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } }); // 🪞 나 살피기
       if (url.pathname === "/vpn" && req.method === "GET") return new Response(VPN_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } }); // 📶 VPN 용량
       if (url.pathname === "/hub" && req.method === "GET") return new Response(HUB_HTML, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" } });
