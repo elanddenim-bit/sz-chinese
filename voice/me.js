@@ -530,7 +530,7 @@ function draw(j){
   h+='</ol><p class="hint">수면 단위는 시간·분·초 어떤 것이든 서버가 알아서 맞춰요. 한 번 실행해 보고 위 \'마지막으로 받은 때\'가 바뀌면 연결된 거예요.</p></details></div>';
   // 위젯
   h+='<h2>📱 아이폰 위젯</h2><div class="card"><p style="margin:0 0 6px">오늘 중국어 공부(링·연속 일수) · 다음 출장과 나갈 시각 · 다음 경기 · 이번 주 경고 한 줄.</p><ol>';
-  h+='<li>아래 버튼으로 스크립트를 복사</li><li><b>Scriptable</b> 앱 → 오른쪽 위 <b>+</b> → 붙여넣기 → 이름 <code>나 살피기</code> (이미 있으면 내용을 통째로 바꿔 붙여넣기)</li><li>그 스크립트를 한 번 실행 → 초대 코드 입력 → 미리보기 확인</li><li>홈 화면 길게 누르기 → 편집 → 위젯 추가 → Scriptable(작게 또는 중간) → 위젯을 눌러 Script 를 <b>나 살피기</b>로</li></ol>';
+  h+='<li>아래 버튼으로 스크립트를 복사</li><li><b>Scriptable</b> 앱 → 오른쪽 위 <b>+</b> → 붙여넣기 → 이름 <code>나 살피기</code> (이미 있으면 내용을 통째로 바꿔 붙여넣기)</li><li>그 스크립트를 한 번 실행 → 초대 코드 입력 → 미리보기 확인 (메뉴의 <b>🖼 배경 사진 고르기</b>로 앨범 사진을 배경에 — 글씨가 보이게 어둡게 덮어요)</li><li>홈 화면 길게 누르기 → 편집 → 위젯 추가 → Scriptable(작게 또는 중간) → 위젯을 눌러 Script 를 <b>나 살피기</b>로</li></ol>';
   h+='<label for="g_cn">중국어 하루 목표</label><select id="g_cn">'+[15,20,30,45,60].map(function(x){return '<option value="'+x+'"'+(x===(c0.gstudy||30)?' selected':'')+'>'+x+'분</option>'}).join('')+'</select>';
   h+='<button class="btn" id="wcopy">위젯 스크립트 복사</button><p class="hint">스크립트에는 초대 코드가 들어 있지 않아요(폰 안에만 저장). 경고 한 줄은 이 화면을 열 때와 매일 아침 6시에 새로 계산해요.</p></div>';
   // 설정
@@ -570,7 +570,10 @@ load();
 export const WIDGET_JS = String.raw`// 나 살피기 위젯 — voice.zhnote.net/me (Scriptable)
 // 앱 안에서 한 번 실행하면 초대 코드를 묻고, 위젯 미리보기를 보여 줍니다.
 const API = "https://voice.zhnote.net/me/widget";
-const CACHE = FileManager.local().joinPath(FileManager.local().documentsDirectory(), "me-widget2.json");
+const FM = FileManager.local();
+const CACHE = FM.joinPath(FM.documentsDirectory(), "me-widget2.json");
+const BG = FM.joinPath(FM.documentsDirectory(), "me-widget-bg.jpg"); // 앨범에서 고른 배경(이 폰에만)
+const DIM = 0.5; // 배경 사진 위에 덮는 검정 농도(글씨 잘 보이게)
 const C = { bg: new Color("#1C1C1E"), ring: new Color("#FF375F"), ringBg: new Color("#3A0A16"), ok: new Color("#A6FF00"), sub: new Color("#8E8E93"), txt: Color.white(), warn: new Color("#FFB340"), red: new Color("#FF5A5F"), sky: new Color("#5AC8FA") };
 
 async function code(ask) {
@@ -582,7 +585,7 @@ async function code(ask) {
   const c = a.textFieldValue(0).trim(); if (c) Keychain.set("pb-code", c); return c || null;
 }
 async function load(c) {
-  const fm = FileManager.local();
+  const fm = FM;
   try {
     const r = new Request(API); r.method = "POST"; r.headers = { "content-type": "application/json" };
     r.body = JSON.stringify({ code: c }); r.timeoutInterval = 15;
@@ -618,12 +621,38 @@ function tripLines(t) {
   const b = [t.no, t.leave ? "나갈 시각 " + t.leave : ""].filter(Boolean).join(" · ");
   return [a, b];
 }
+let HASBG = false;
 function txt(st, s, size, color, lines, weight) {
   const t = st.addText(s); t.font = weight === "b" ? Font.boldRoundedSystemFont(size) : Font.semiboldRoundedSystemFont(size);
-  t.textColor = color || C.txt; t.lineLimit = lines || 1; t.minimumScaleFactor = 0.6; return t;
+  t.textColor = color || C.txt; t.lineLimit = lines || 1; t.minimumScaleFactor = 0.6;
+  if (HASBG) { t.shadowColor = new Color("#000000", 0.8); t.shadowRadius = 3; t.shadowOffset = new Point(0, 1); }
+  return t;
+}
+// 배경: 위젯 비율로 가운데를 잘라 채우고 검정을 덮음
+function bgImage(fam) {
+  if (!FM.fileExists(BG)) return null;
+  const src = Image.fromFile(BG); if (!src) return null;
+  const W = fam === "medium" ? 720 : 340, H = 340;
+  const ctx = new DrawContext(); ctx.size = new Size(W, H); ctx.opaque = true; ctx.respectScreenScale = false;
+  const k = Math.max(W / src.size.width, H / src.size.height), w = src.size.width * k, h = src.size.height * k;
+  ctx.drawImageInRect(src, new Rect((W - w) / 2, (H - h) / 2, w, h));
+  ctx.setFillColor(new Color("#000000", DIM)); ctx.fillRect(new Rect(0, 0, W, H));
+  return ctx.getImage();
+}
+async function pickBg() {
+  try {
+    const img = await Photos.fromLibrary();
+    // 너무 크면 줄여서 저장(위젯 메모리 한도)
+    const k = Math.min(1, 1200 / Math.max(img.size.width, img.size.height));
+    const ctx = new DrawContext(); ctx.size = new Size(Math.round(img.size.width * k), Math.round(img.size.height * k)); ctx.opaque = true; ctx.respectScreenScale = false;
+    ctx.drawImageInRect(img, new Rect(0, 0, ctx.size.width, ctx.size.height));
+    FM.writeImage(BG, ctx.getImage());
+    return true;
+  } catch (e) { return false; }
 }
 function build(j, fam) {
   const w = new ListWidget(); w.backgroundColor = C.bg; w.url = "https://voice.zhnote.net/me";
+  const bg = bgImage(fam); HASBG = !!bg; if (bg) w.backgroundImage = bg;
   w.refreshAfterDate = new Date(Date.now() + 20 * 60e3);
   if (j.err) { w.setPadding(14, 14, 14, 14); txt(w, "나 살피기\n" + j.err + "\n\n앱에서 한 번 실행해 주세요", 13, C.sub, 6); return w; }
   const s = j.study || { today: 0, goal: 30, streak: 0, week: 0 };
@@ -665,9 +694,11 @@ function build(j, fam) {
 let c = await code(false);
 if (config.runsInApp) {
   if (!c) c = await code(true);
-  const a = new Alert(); a.title = "나 살피기 위젯"; a.addAction("작은 위젯 미리보기"); a.addAction("중간 위젯 미리보기"); a.addAction("초대 코드 다시 넣기"); a.addCancelAction("닫기");
-  const k = await a.presentSheet();
-  if (k === 2) { c = await code(true); }
+  const a = new Alert(); a.title = "나 살피기 위젯"; a.addAction("작은 위젯 미리보기"); a.addAction("중간 위젯 미리보기"); a.addAction("🖼 배경 사진 고르기"); a.addAction("배경 사진 지우기"); a.addAction("초대 코드 다시 넣기"); a.addCancelAction("닫기");
+  let k = await a.presentSheet();
+  if (k === 2) { const ok = await pickBg(); if (ok) k = 1; } // 고르면 바로 중간 크기 미리보기
+  else if (k === 3) { if (FM.fileExists(BG)) FM.remove(BG); k = 0; }
+  if (k === 4) { c = await code(true); }
   else if (k === 0 || k === 1) { const j = c ? await load(c) : { err: "초대 코드 없음" }; const w = build(j, k === 1 ? "medium" : "small"); if (k === 1) await w.presentMedium(); else await w.presentSmall(); }
 } else {
   const j = c ? await load(c) : { err: "초대 코드 없음" };
