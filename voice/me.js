@@ -1401,7 +1401,7 @@ function NT(st, s, size, color, weight, lines) {
   t.textColor = color || NC.txt; t.lineLimit = lines || 1; t.minimumScaleFactor = 0.72; return t;
 }
 let PHOTO = false; // 배경 사진이 깔려 있으면 카드를 살짝 비쳐 보이게
-function NCard(parent, pad, h) { const c = parent.addStack(); c.layoutVertically(); c.backgroundColor = PHOTO ? new Color("#0C1A3A", 0.5) : NC.card; c.cornerRadius = 16; c.borderWidth = 1; c.borderColor = NC.line; c.setPadding(pad, 12, pad, 12); if (h) c.size = new Size(0, h); return c; }
+function NCard(parent, pad, h) { const c = parent.addStack(); c.layoutVertically(); c.backgroundColor = PHOTO ? new Color("#0C1A3A", 0.34) : NC.card; c.cornerRadius = 16; c.borderWidth = 1; c.borderColor = NC.line; c.setPadding(pad, 12, pad, 12); if (h) c.size = new Size(0, h); return c; }
 function NBox(parent, bg, line, r, px, py) { const b = parent.addStack(); b.backgroundColor = bg; b.cornerRadius = r; if (line) { b.borderWidth = 1; b.borderColor = line; } b.setPadding(py, px, py, px); b.centerAlignContent(); return b; }
 function NHead(c, emoji, title, right, rightBox) {
   const h = c.addStack(); h.centerAlignContent();
@@ -1431,10 +1431,10 @@ function NRing(parent, S, pct, big, sub, bigSize) {
   rs.addSpacer(); return rs;
 }
 function NTile(row, w, label, value, k, valCol, Q) {
-  const t = row.addStack(); t.layoutVertically(); t.size = new Size(w, 0); t.backgroundColor = new Color(TILE[k][0], PHOTO ? 0.72 : 1); t.cornerRadius = 11; t.borderWidth = 1; t.borderColor = new Color(TILE[k][1], 0.8); t.setPadding(Q.tp, 9, Q.tp, 9);
+  const t = row.addStack(); t.layoutVertically(); t.size = new Size(w, 0); t.backgroundColor = new Color(TILE[k][0], PHOTO ? 0.5 : 1); t.cornerRadius = 11; t.borderWidth = 1; t.borderColor = new Color(TILE[k][1], 0.8); t.setPadding(Q.tp, 9, Q.tp, 9);
   NT(t, label, 11.5, new Color(TILE[k][1]), "m"); t.addSpacer(1); NT(t, value, Q.tv, valCol || NC.txt, "b"); return t;
 }
-function NChip(row, w, text, k) { const b = row.addStack(); b.size = new Size(w, 0); b.backgroundColor = k === "y" ? new Color("#2E2410") : NC.chip; b.cornerRadius = 9; b.borderWidth = 1; b.borderColor = k === "y" ? new Color("#D9A441", 0.7) : NC.chipLine; b.setPadding(4, 8, 4, 8); b.centerAlignContent(); NT(b, text, 12, NC.txt, "b"); b.addSpacer(); return b; }
+function NChip(row, w, text, k) { const b = row.addStack(); b.size = new Size(w, 0); b.backgroundColor = k === "y" ? new Color("#2E2410", PHOTO ? 0.6 : 1) : new Color("#13285A", PHOTO ? 0.5 : 1); b.cornerRadius = 9; b.borderWidth = 1; b.borderColor = k === "y" ? new Color("#D9A441", 0.7) : NC.chipLine; b.setPadding(4, 8, 4, 8); b.centerAlignContent(); NT(b, text, 12, NC.txt, "b"); b.addSpacer(); return b; }
 function NStudy(w, j, W, big, Q) {
   const c = NCard(w, Q.pad), s = j.study || {}, hr = hskRing(j), goal = s.goal || 30, today = s.today || 0, sp = speakScore(j), ch = (j.chips || []).slice(0, big ? 4 : 2);
   NHead(c, "📖", "중국어 학습", hr.title, true); c.addSpacer(Q.g);
@@ -1456,7 +1456,7 @@ function NStudy(w, j, W, big, Q) {
   return c;
 }
 function NPlanRow(c, j, it, first) {
-  const row = c.addStack(); row.centerAlignContent(); row.backgroundColor = new Color("#0B1A3A", PHOTO ? 0.55 : 0.9); row.cornerRadius = 12; row.borderWidth = 1; row.borderColor = NC.line; row.setPadding(first ? 7 : 5, 10, first ? 7 : 5, 10);
+  const row = c.addStack(); row.centerAlignContent(); row.backgroundColor = new Color("#0B1A3A", PHOTO ? 0.42 : 0.9); row.cornerRadius = 12; row.borderWidth = 1; row.borderColor = NC.line; row.setPadding(first ? 7 : 5, 10, first ? 7 : 5, 10);
   const sp2 = splitPlace(it), p = it.d.split("-"), dw = dayWord(j, it.d);
   const L = row.addStack(); L.size = new Size(92, 0); L.centerAlignContent(); NT(L, Number(p[1]) + "/" + Number(p[2]) + " · " + (it.t || "종일"), first ? 14 : 13, NC.txt, "b"); L.addSpacer();
   const bar = row.addStack(); bar.size = new Size(1, first ? 30 : 22); bar.backgroundColor = NC.line; row.addSpacer(10);
@@ -1473,7 +1473,7 @@ function NPlan(w, j, n, Q, lite) {
   return c;
 }
 function NGameRow(c, j, g, first) {
-  const row = c.addStack(); row.centerAlignContent(); row.backgroundColor = new Color(first ? "#112C66" : "#0B1A3A", PHOTO ? 0.6 : 0.92); row.cornerRadius = 10; row.borderWidth = 1; row.borderColor = NC.line; row.setPadding(5, 8, 5, 8);
+  const row = c.addStack(); row.centerAlignContent(); row.backgroundColor = new Color(first ? "#112C66" : "#0B1A3A", PHOTO ? 0.45 : 0.92); row.cornerRadius = 10; row.borderWidth = 1; row.borderColor = NC.line; row.setPadding(5, 8, 5, 8);
   const bar = row.addStack(); bar.size = new Size(3, 16); bar.cornerRadius = 1.5; bar.backgroundColor = g.k === "lol" ? NC.lol : NC.acc; row.addSpacer(8);
   const dw = dayWord(j, g.d), mine = g.k === "lol" ? NC.lol : NC.mine;
   if (g.done) { // 최근 결과: 날짜 · 수원 3-2 승 · vs 상대
@@ -1515,12 +1515,12 @@ function bgPhotoN(fam) {
   c.setFillColor(new Color("#0A1430")); c.fillRect(new Rect(0, 0, W, H));
   // 사진은 높이에 맞춰 오른쪽에 붙임(타워처럼 세로로 긴 피사체가 오른쪽 위에 서 있게), 왼쪽 45% 는 남색으로 덮고 → 오른쪽으로 갈수록 사진이 드러남
   const k = Math.max(W / src.size.width, H / src.size.height), w = src.size.width * k, h = src.size.height * k;
-  c.drawImageInRect(src, new Rect(W - w, (H - h) / 2, w, h));
-  const N = 48, x0 = W * 0.30, x1 = W * 0.78; // 0.30 까지 완전 덮음 → 0.78 에서 22% 만
+  c.drawImageInRect(src, new Rect(W - w, 0, w, h)); // 위에 맞춤(타워 꼭대기가 잘리지 않게)
+  const N = 48, x0 = W * 0.24, x1 = W * 0.72; // 0.30 까지 완전 덮음 → 0.78 에서 22% 만
   c.setFillColor(new Color("#0A1430")); c.fillRect(new Rect(0, 0, x0, H));
   const dw = (x1 - x0) / N;
-  for (let i = 0; i < N; i++) { const t = (i + 0.5) / N; c.setFillColor(new Color("#0A1430", 1 - (1 - 0.22) * t * t * (3 - 2 * t))); c.fillRect(new Rect(x0 + dw * i, 0, dw + 1, H)); } // 띠마다 따로(겹치지 않게) 1 → 0.22
-  c.setFillColor(new Color("#0A1430", 0.22)); c.fillRect(new Rect(x1, 0, W - x1, H));
+  for (let i = 0; i < N; i++) { const t = (i + 0.5) / N; c.setFillColor(new Color("#0A1430", 1 - (1 - 0.16) * t * t * (3 - 2 * t))); c.fillRect(new Rect(x0 + dw * i, 0, dw + 1, H)); } // 띠마다 따로(겹치지 않게) 1 → 0.22
+  c.setFillColor(new Color("#0A1430", 0.16)); c.fillRect(new Rect(x1, 0, W - x1, H));
   for (let i = 0; i < 16; i++) { c.setFillColor(new Color("#0A1430", 0.045)); c.fillRect(new Rect(0, H * (0.42 + i * 0.036), W, H)); } // 아래쪽은 점점 어둡게
   return c.getImage();
 }
