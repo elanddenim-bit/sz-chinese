@@ -60,9 +60,11 @@ function sleepMin(v) {
 function putHealth(d, day, v) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
   const cur = d.health[day] || {};
-  const st = Number(v.steps), sl = sleepMin(v.sleep);
+  const sv = v.steps !== undefined ? v.steps : v.step;
+  const st = Number(sv), sl = sleepMin(v.sleep), ex = Number(v.ex !== undefined ? v.ex : v.exercise);
   let ok = false;
-  if (isFinite(st) && st >= 0 && st < 200000 && v.steps !== undefined && v.steps !== "") { cur.st = Math.round(st); ok = true; }
+  if (isFinite(st) && st >= 0 && st < 200000 && sv !== undefined && sv !== "") { cur.st = Math.round(st); ok = true; }
+  if (isFinite(ex) && ex >= 0 && (v.ex !== undefined || v.exercise !== undefined)) { const m = ex > 1440 ? ex / 60 : ex; if (m < 1440) { cur.ex = Math.round(m); ok = true; } } // 운동 분(초로 오면 분으로)
   if (sl != null) { cur.sl = sl; ok = true; }
   if (ok) { cur.at = Date.now(); d.health[day] = cur; }
   return ok;
@@ -144,6 +146,7 @@ const avg = (a) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
 function weekOf(d, use, days) {
   const sl = days.map((x) => d.health[x] && d.health[x].sl).filter((v) => v > 0);
   const st = days.map((x) => d.health[x] && d.health[x].st).filter((v) => v >= 0 && v != null);
+  const ex = days.map((x) => d.health[x] && d.health[x].ex).filter((v) => v >= 0 && v != null);
   const gd = (d.gh && d.gh.days) || {};
   let commits = 0, lateDays = 0, adds = 0, latest = 0;
   for (const x of days) { const g = gd[x]; if (!g) continue; commits += g.n; adds += g.add; if (g.late) lateDays++; if (g.last > latest) latest = g.last; }
@@ -155,6 +158,7 @@ function weekOf(d, use, days) {
     from: days[0], to: days[days.length - 1],
     sleep: { avg: sl.length ? Math.round(avg(sl)) : null, n: sl.length, under6: sl.filter((v) => v < 360).length },
     steps: { avg: st.length ? Math.round(avg(st)) : null, n: st.length },
+    ex: { avg: ex.length ? Math.round(avg(ex)) : null, n: ex.length, sum: ex.reduce((a, b) => a + b, 0), d30: ex.filter((v) => v >= 30).length },
     gh: { commits, lateDays, adds, latest },
     apps: Object.entries(apps).map(([a, v]) => ({ a, ...v })).sort((x, y) => y.s - x.s || y.n - x.n),
     study: { min: Math.round(smin), days: sdays },
@@ -172,6 +176,7 @@ function notes(w, prev, idle) {
   if (w.sleep.n >= 3 && prev.sleep.n >= 3 && w.sleep.avg - prev.sleep.avg <= -30) out.push({ lv: "w", t: `지난주보다 하루 ${prev.sleep.avg - w.sleep.avg}분 덜 잠` });
   if (w.gh.lateDays >= 2) out.push({ lv: w.gh.lateDays >= 4 ? "r" : "w", t: `자정 넘어 작업한 날 ${w.gh.lateDays}일 (가장 늦은 커밋 ${clock(w.gh.latest)})` });
   if (idle.length >= 5) out.push({ lv: w.gh.adds >= 5 ? "r" : "w", t: `2주 동안 한 번도 안 연 도구 ${idle.length}개${w.gh.adds ? ` — 이번 주 '추가' 커밋은 ${w.gh.adds}건` : ""}` });
+  if (w.ex.n >= 3 && w.ex.d30 === 0) out.push({ lv: "w", t: `30분 넘게 운동한 날 없음 (하루 평균 ${w.ex.avg}분)` });
   if (w.steps.n >= 3 && w.steps.avg < 5000) out.push({ lv: "w", t: `걸음 평균 ${w.steps.avg.toLocaleString()}보` });
   if (!w.sleep.n && !w.steps.n) out.push({ lv: "g", t: "건강 기록이 아직 없어요 — 아래 '아이폰 단축어 연결'을 한 번 해 두면 매일 밤 자동으로 들어와요" });
   if (!out.length) out.push({ lv: "g", t: "특별히 걸리는 숫자가 없는 한 주예요" });
@@ -182,13 +187,14 @@ async function summary(env, h, d, force) {
   const cur = dayList(today, 7), prev = dayList(cnDay(Date.now() - 7 * 864e5), 7), d14 = dayList(today, 14);
   const [use] = await Promise.all([useRows(env, h, prev[0]), ghFetch(env, d, force)]);
   const w = weekOf(d, use, cur), p = weekOf(d, use, prev), idle = idleApps(use, d14);
-  const rows = dayList(today, 14).reverse().map((x) => ({ d: x, wd: WD[new Date(x + "T00:00:00Z").getUTCDay()], sl: d.health[x] && d.health[x].sl, st: d.health[x] && d.health[x].st, gh: (d.gh.days || {})[x] || null, study: d.study[x] ? d.study[x].min : null, apps: Object.keys(use[x] || {}).length }));
+  const rows = dayList(today, 14).reverse().map((x) => ({ d: x, wd: WD[new Date(x + "T00:00:00Z").getUTCDay()], sl: d.health[x] && d.health[x].sl, st: d.health[x] && d.health[x].st, ex: d.health[x] && d.health[x].ex, gh: (d.gh.days || {})[x] || null, study: d.study[x] ? d.study[x].min : null, apps: Object.keys(use[x] || {}).length }));
   return { week: w, prev: p, idle, notes: notes(w, p, idle), rows };
 }
 function weekText(s) {
   const w = s.week, L = [];
   L.push(w.sleep.n ? `😴 수면 평균 ${hm(w.sleep.avg)}${w.sleep.under6 ? ` · 6시간 미만 ${w.sleep.under6}일` : ""}` : "😴 수면 기록 없음");
   if (w.steps.n) L.push(`🚶 걸음 평균 ${w.steps.avg.toLocaleString()}보`);
+  if (w.ex.n) L.push(`🏃 운동 ${w.ex.sum}분 · 30분 넘긴 날 ${w.ex.d30}일`);
   L.push(`💻 커밋 ${w.gh.commits}건 · 자정 넘어 ${w.gh.lateDays}일`);
   L.push(`🧰 쓴 도구 ${w.apps.length}개 · 2주 안 연 도구 ${s.idle.length}개`);
   if (w.study.min) L.push(`🀄 중국어 ${w.study.min}분 (${w.study.days}일)`);
@@ -351,12 +357,12 @@ export async function meApi(env, path, b, h) {
   if (path === "/me/health") {
     let n = 0;
     if (b.days && typeof b.days === "object") for (const [k, v] of Object.entries(b.days).slice(0, 31)) if (v && putHealth(d, k, v)) n++;
-    if (b.steps !== undefined || b.sleep !== undefined) if (putHealth(d, /^\d{4}-\d{2}-\d{2}$/.test(b.d || "") ? b.d : cnDay(), b)) n++;
+    if (b.steps !== undefined || b.step !== undefined || b.sleep !== undefined || b.ex !== undefined || b.exercise !== undefined) if (putHealth(d, /^\d{4}-\d{2}-\d{2}$/.test(b.d || "") ? b.d : cnDay(), b)) n++;
     const sd = await studyDays(code); if (sd) { for (const [k, v] of Object.entries(sd)) if (k >= cnDay(Date.now() - 40 * 864e5)) d.study[k] = { min: v.min, n: v.n }; }
     await save(env, h, d);
     await logUse(env, "me", { health: 1 }, 0);
     const t = d.health[cnDay()] || {};
-    return { ok: true, saved: n, msg: n ? `받았어요 · 오늘 ${t.sl ? hm(t.sl) : "수면 없음"} · ${t.st != null ? t.st.toLocaleString() + "보" : "걸음 없음"}` : "숫자가 없어요(steps·sleep)" };
+    return { ok: true, saved: n, msg: n ? `받았어요 · 오늘 ${t.sl ? hm(t.sl) : "수면 없음"} · ${t.st != null ? t.st.toLocaleString() + "보" : "걸음 없음"} · ${t.ex != null ? "운동 " + t.ex + "분" : "운동 없음"}` : "숫자가 없어요(steps·sleep)" };
   }
   if (path === "/me/cfg") {
     const c = d.cfg;
@@ -456,12 +462,13 @@ function draw(j){
   h+='</div><div class="card"><div class="grid">';
   h+='<div><div class="k">😴 수면 평균 ('+w.sleep.n+'일 기록)</div><div class="v">'+hm(w.sleep.avg)+'</div>'+diff(w.sleep.avg,p.sleep.avg,'분','up')+'</div>';
   h+='<div><div class="k">🚶 걸음 평균</div><div class="v">'+num(w.steps.avg)+'<small> 보</small></div>'+diff(w.steps.avg,p.steps.avg,'보','up')+'</div>';
+  h+='<div><div class="k">🏃 운동 ('+w.ex.n+'일 기록)</div><div class="v">'+(w.ex.n?w.ex.sum:'—')+'<small> 분 · 30분↑ '+(w.ex.d30||0)+'일</small></div>'+diff(w.ex.sum,p.ex.sum,'분','up')+'</div>';
   h+='<div><div class="k">💻 커밋 · 자정 넘어</div><div class="v">'+w.gh.commits+'<small> 건 · </small>'+w.gh.lateDays+'<small> 일</small></div>'+(w.gh.latest?'<span class="d">가장 늦게 '+clock(w.gh.latest)+'</span>':'')+'</div>';
   h+='<div><div class="k">🀄 중국어 공부</div><div class="v">'+w.study.min+'<small> 분 · '+w.study.days+'일</small></div>'+diff(w.study.min,p.study.min,'분','up')+'</div>';
   h+='</div></div>';
   // 날짜별
-  h+='<h2>최근 14일</h2><div class="card" style="overflow-x:auto"><table><tr><th>날짜</th><th class="n">수면</th><th class="n">걸음</th><th class="n">커밋</th><th class="n">마지막</th><th class="n">중국어</th></tr>';
-  h+=j.rows.map(function(r){var g=r.gh||{};return '<tr><td>'+r.d.slice(5).replace('-','/')+' '+r.wd+'</td><td class="n">'+(r.sl?hm(r.sl):'—')+'</td><td class="n">'+num(r.st)+'</td><td class="n">'+(g.n||'—')+'</td><td class="n'+(g.late?' late':'')+'">'+(g.last?clock(g.last):'')+'</td><td class="n">'+(r.study?r.study+'분':'—')+'</td></tr>'}).join('');
+  h+='<h2>최근 14일</h2><div class="card" style="overflow-x:auto"><table><tr><th>날짜</th><th class="n">수면</th><th class="n">걸음</th><th class="n">운동</th><th class="n">커밋</th><th class="n">마지막</th><th class="n">중국어</th></tr>';
+  h+=j.rows.map(function(r){var g=r.gh||{};return '<tr><td>'+r.d.slice(5).replace('-','/')+' '+r.wd+'</td><td class="n">'+(r.sl?hm(r.sl):'—')+'</td><td class="n">'+num(r.st)+'</td><td class="n">'+(r.ex!=null?r.ex+'분':'—')+'</td><td class="n">'+(g.n||'—')+'</td><td class="n'+(g.late?' late':'')+'">'+(g.last?clock(g.last):'')+'</td><td class="n">'+(r.study?r.study+'분':'—')+'</td></tr>'}).join('');
   h+='</table><p class="hint">커밋은 GitHub '+(j.gh.priv?'전체':'공개')+' 저장소 '+j.gh.repos+'곳 · '+ago(j.gh.at)+' 받음'+(j.gh.err?' · <b style="color:var(--red)">'+esc(j.gh.err)+'</b>':'')+(j.gh.priv?'':' (비공개 저장소까지 보려면 GITHUB_TOKEN 시크릿이 필요해요)')+'</p></div>';
   // 도구
   h+='<h2>도구</h2><div class="card"><div class="k" style="margin-bottom:6px">이번 주 쓴 도구 '+w.apps.length+'개</div><div class="chips">';
@@ -482,7 +489,7 @@ function draw(j){
   h+='<li>단축어 앱 → 자동화 → <b>특정 시간</b> 매일 22:30 → <b>즉시 실행</b></li>';
   h+='<li><b>건강 샘플 찾기</b>: 걸음, 시작일 <b>오늘</b> → <b>통계 계산</b> 합계 → 변수 이름 <code>걸음</code></li>';
   h+='<li><b>건강 샘플 찾기</b>: 수면 분석, 시작일 <b>지난 1일</b>, 값 <b>수면 중</b>(코어·깊은·REM 모두) → <b>건강 샘플 세부사항 가져오기</b> 지속 시간 → <b>통계 계산</b> 합계 → 변수 <code>수면</code></li>';
-  h+='<li><b>URL 콘텐츠 가져오기</b>: <code>https://voice.zhnote.net/me/health</code> · 방법 POST · 본문 JSON — <code>code</code>(초대 코드), <code>steps</code>=걸음, <code>sleep</code>=수면</li>';
+  h+='<li><b>URL 콘텐츠 가져오기</b>: <code>https://voice.zhnote.net/me/health</code> · 방법 POST · 본문 JSON — <code>code</code>(초대 코드), <code>steps</code>=걸음, <code>sleep</code>=수면, <code>ex</code>=운동하기 시간 합계(분)</li>';
   h+='</ol><p class="hint">수면 단위는 시간·분·초 어떤 것이든 서버가 알아서 맞춰요. 한 번 실행해 보고 위 \'마지막으로 받은 때\'가 바뀌면 연결된 거예요.</p></details></div>';
   // 설정
   var c=j.cfg;h+='<h2>알림 설정</h2><div class="card">';
