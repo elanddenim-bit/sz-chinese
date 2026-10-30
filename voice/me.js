@@ -418,7 +418,7 @@ export async function meCron(env, uh, um) {
     if (d.cfg.suwon && d.teams.fb) for (const e of d.teams.fb.ev || []) {
       const k = "fb:" + e.id;
       if (d.sent.team[k] || !fbDone(e) || Date.now() - e.t > 24 * 3600e3) continue;
-      d.sent.team[k] = today; dirty = true; lines.push(fbLine(e, d.teams.fb.id));
+      d.sent.team[k] = today; dirty = true; lines.push(fbLine(e, d.teams.fb));
     }
     if (d.cfg.t1 && d.teams.lol) for (const e of d.teams.lol.ev || []) {
       const k = "lol:" + e.id;
@@ -539,8 +539,8 @@ export async function meApi(env, path, b, h) {
   if (path === "/me/widget") {
     // 📱 아이폰 위젯(Scriptable): 중국어 공부(Supabase 실시간) · 다음 출장(출장 브리핑) · 다음 경기 · 이번 주 경고(캐시)
     const today = cnDay(), now = Date.now();
-    // 팀 일정이 6시간 넘게 묵었거나 한 번도 안 받았으면 여기서 받아 둠(크론과 같은 함수·같은 기준)
-    if (d.cfg.team !== false && (d.cfg.suwon || d.cfg.t1)) { try { if (await teamsFetch(d, false)) await save(env, h, d); } catch (e) {} }
+    // 팀 일정은 크론이 6시간마다 받음. 여기서는 한 번도 안 받았을 때만 받음(위젯 요청이 외부 호출로 길어지면 Scriptable 이 15초에 끊고 '저장본'을 보임 — 2026-10-30 실사용)
+    if (d.cfg.team !== false && (d.cfg.suwon || d.cfg.t1) && !(d.teams && d.teams.at)) { try { if (await teamsFetch(d, false)) await save(env, h, d); } catch (e) {} }
     const sd = await studyDays(code);
     if (sd) for (const [k, v] of Object.entries(sd)) if (k >= cnDay(now - 40 * 864e5)) d.study[k] = { min: v.min, n: v.n };
     const mins = (k) => (d.study[k] && d.study[k].min) || 0;
@@ -573,7 +573,12 @@ export async function meApi(env, path, b, h) {
     if (d.cfg.suwon && fb) for (const e of (fb.ev || []).filter((x) => !fbDone(x) && x.t > now - 3 * 3600e3).slice(0, 3)) { const home = e.hid === fb.id || e.hid === fb.hid; gl.push({ t: e.t, k: "fb", me: "수원", op: kr(home ? e.away : e.home), tag: home ? "홈" : "원정", home }); }
     if (d.cfg.t1 && lol) for (const e of (lol.ev || []).filter((x) => !lolDone(x) && x.t > now - 3 * 3600e3).slice(0, 3)) gl.push({ t: e.t, k: "lol", me: "T1", op: e.op, tag: e.lg || "LoL", bo: e.bo || 0 });
     gl.sort((a, b) => a.t - b.t);
-    const gview = gl.slice(0, 3).map((g) => { const x = new Date(g.t + TZ); return { ...g, d: x.toISOString().slice(0, 10), hm: x.toISOString().slice(11, 16) }; });
+    // 최근 결과(done:true) — 위젯이 예정 경기가 모자랄 때 줄을 채움(수원 2·T1 2, 최근 순)
+    const gr = [];
+    if (d.cfg.suwon && fb) for (const e of (fb.ev || []).filter(fbDone).sort((a, b) => b.t - a.t).slice(0, 2)) { const home = e.hid === fb.id || e.hid === fb.hid, my = home ? e.hs : e.as, ot = home ? e.as : e.hs; gr.push({ t: e.t, k: "fb", me: "수원", op: kr(home ? e.away : e.home), tag: home ? "홈" : "원정", home, done: true, res: my + "-" + ot + " " + (my > ot ? "승" : my < ot ? "패" : "무"), win: my > ot ? 1 : my < ot ? -1 : 0 }); }
+    if (d.cfg.t1 && lol) for (const e of (lol.ev || []).filter(lolDone).sort((a, b) => b.t - a.t).slice(0, 2)) { const win = e.out === "win" || (e.w != null && e.ow != null && e.w > e.ow); gr.push({ t: e.t, k: "lol", me: "T1", op: e.op, tag: e.lg || "LoL", done: true, res: (e.w ?? "?") + ":" + (e.ow ?? "?") + " " + (win ? "승" : "패"), win: win ? 1 : -1 }); }
+    gr.sort((a, b) => b.t - a.t);
+    const gview = gl.slice(0, 3).concat(gr.slice(0, 3)).map((g) => { const x = new Date(g.t + TZ); return { ...g, d: x.toISOString().slice(0, 10), hm: x.toISOString().slice(11, 16) }; });
     const days7 = []; for (let i = 6; i >= 0; i--) { const k = cnDay(now - i * 864e5); days7.push({ d: k, min: mins(k) }); }
     return { ok: true, d: today, study: { today: mins(today), goal: d.cfg.gstudy || 30, streak, week, n: sc.todayN, days7 }, hsk: sc.hsk, ring, words: sc.words, chips: sc.chips, trip, plan, games: gview, gerr: [d.cfg.suwon && fb && fb.err ? "⚽ " + fb.err : "", d.cfg.t1 && lol && lol.err ? "🎮 " + lol.err : "", !d.cfg.suwon && !d.cfg.t1 ? "/me 화면에서 팀을 켜 주세요" : ""].filter(Boolean).join(" · "), ...(() => {
       // 경기 상태: ok 있음 / empty 일정 없음 / fail 받기 실패 / off 팀 꺼짐 — 확인 안 된 경기는 만들지 않음
@@ -1197,7 +1202,7 @@ function planCard(c, j, b) {
   });
 }
 function teamCard(c, j, b) {
-  const { x, y, w, h } = b, lw = Math.min(78, w * 0.23), cr = crest(), G = (j.games || []).slice(0, b.n || 3);
+  const { x, y, w, h } = b, lw = Math.min(78, w * 0.23), cr = crest(), G = (j.games || []).filter((g) => !g.done).slice(0, b.n || 3);
   if (cr) imgIn(c, cr, x + 9, y + 10, lw - 16, h - 20);
   else { T(c, "⚽", x + 1, y + h / 2 - 20, lw, 32, P.txt, "", "c", 42); T(c, "MY TEAM", x + 1, y + h - 22, lw, 9, P.sub, "b", "c"); }
   const rx = x + lw + 12, rw = x + w - 10 - rx;
@@ -1294,7 +1299,7 @@ function hskRing(j) { // 진척률 = 실제 익힌 단어 / HSK 목표 단어(j.
 function speakScore(j) { const rg = j.ring || null; return j.ring2 && j.ring2.k === "call" ? j.ring2 : rg && rg.k === "call" ? rg : null; }
 // 수원 경기 두 줄: 확인된 경기만. 없으면 [상태 문장, 보조 문장] — 받기 실패·확인된 일정 없음·저장본 구분, 경기를 지어내지 않음
 function gameLines(j) {
-  const G = (j.games || []).filter((g) => g.k === "fb").slice(0, 2), st = j.gstate || (G.length ? "ok" : "fail");
+  const G = (j.games || []).filter((g) => g.k === "fb" && !g.done).slice(0, 2), st = j.gstate || (G.length ? "ok" : "fail");
   if (G.length) return { ok: true, rows: G.map((g) => { const dw = dayWord(j, g.d), a = g.home ? g.me : g.op, b = g.home ? g.op : g.me; return (dw ? dw + " " : "") + sday(g.d) + " " + g.hm + "  " + a + " vs " + b + "  · " + (g.home ? "홈" : "원정"); }) };
   if (st === "fail") return { ok: false, bad: true, rows: ["⚠️ 경기 정보를 못 불러왔어요", j.stale ? "저장본 · 마지막으로 받은 값이에요" : (j.gmsg || "잠시 뒤 다시 받아요")] };
   if (st === "off") return { ok: false, rows: ["팀 알림이 꺼져 있어요", "/me 내 팀에서 켤 수 있어요"] };
@@ -1464,22 +1469,29 @@ function NPlan(w, j, n, Q, lite) {
 function NGameRow(c, j, g, first) {
   const row = c.addStack(); row.centerAlignContent(); row.backgroundColor = new Color(first ? "#112C66" : "#0B1A3A", 0.92); row.cornerRadius = 10; row.borderWidth = 1; row.borderColor = NC.line; row.setPadding(5, 8, 5, 8);
   const bar = row.addStack(); bar.size = new Size(3, 16); bar.cornerRadius = 1.5; bar.backgroundColor = g.k === "lol" ? NC.lol : NC.acc; row.addSpacer(8);
-  const dw = dayWord(j, g.d); NT(row, (dw ? dw + " " : "") + sday(g.d) + " " + g.hm, 12.5, NC.sub, "m"); row.addSpacer(8);
-  const a = g.k === "fb" && !g.home ? g.op : g.me, b = g.k === "fb" && !g.home ? g.me : g.op, mine = g.k === "lol" ? NC.lol : NC.mine;
-  NT(row, a, 13, a === g.me ? mine : NC.txt, "b"); NT(row, " vs ", 11, NC.dim, "m"); NT(row, b, 13, b === g.me ? mine : NC.txt, "b");
+  const dw = dayWord(j, g.d), mine = g.k === "lol" ? NC.lol : NC.mine;
+  if (g.done) { // 최근 결과: 날짜 · 수원 3-2 승 · vs 상대
+    NT(row, sday(g.d), 12.5, NC.sub, "m"); row.addSpacer(8);
+    NT(row, g.me + " " + g.res, 13, g.win > 0 ? NC.acc : g.win < 0 ? NC.bad : NC.txt, "b"); NT(row, "  vs " + g.op, 12.5, NC.txt, "m");
+  } else {
+    NT(row, (dw ? dw + " " : "") + sday(g.d) + " " + g.hm, 12.5, NC.sub, "m"); row.addSpacer(8);
+    const a = g.k === "fb" && !g.home ? g.op : g.me, b = g.k === "fb" && !g.home ? g.me : g.op;
+    NT(row, a, 13, a === g.me ? mine : NC.txt, "b"); NT(row, " vs ", 11, NC.dim, "m"); NT(row, b, 13, b === g.me ? mine : NC.txt, "b");
+  }
   row.addSpacer();
   const tag = g.k === "lol" ? (g.tag || "LoL") : g.home ? "홈" : "원정", pb = NBox(row, g.k === "fb" && g.home ? new Color("#1E4FB0") : new Color("#2A3656"), null, 8, 7, 2); NT(pb, tag, 10, NC.txt, "b");
   return row;
 }
 function NTeam(w, j, n, fbOnly, Q, lite) {
-  const c = NCard(w, Q.pad), cr = crest(), G = (j.games || []).filter((g) => !fbOnly || g.k === "fb").slice(0, n);
+  const all = (j.games || []).filter((g) => !fbOnly || g.k === "fb"), c = NCard(w, Q.pad), cr = crest();
+  const G = all.filter((g) => !g.done).slice(0, n); for (const g of all.filter((g) => g.done)) { if (G.length >= n) break; G.push(g); } // 예정 먼저, 모자라면 최근 결과
   const body = c.addStack(); body.centerAlignContent();
   const L = body.addStack(); L.layoutVertically(); L.size = new Size(n >= 3 ? 76 : 64, 0); L.centerAlignContent();
   if (cr) { const im = L.addImage(cr); im.imageSize = new Size(n >= 3 ? 68 : 58, n >= 3 ? 68 : 58); im.centerAlignImage(); } else { const e = L.addStack(); e.addSpacer(); NT(e, "⚽", 34); e.addSpacer(); }
   body.addSpacer(10);
   const R = body.addStack(); R.layoutVertically();
-  NT(R, "수원 삼성 블루윙즈", 15, NC.txt, "b"); if (!lite) NT(R, "NEXT MATCH", 10.5, NC.sub, "m"); R.addSpacer(lite ? 4 : 5);
-  if (G.length) G.forEach((g, i) => { if (i) R.addSpacer(4); NGameRow(R, j, g, i === 0); });
+  NT(R, "수원 삼성 블루윙즈", 15, NC.txt, "b"); if (!lite) NT(R, G.length && G[0].done ? "RECENT RESULT" : "NEXT MATCH", 10.5, NC.sub, "m"); R.addSpacer(lite ? 4 : 5);
+  if (G.length) G.forEach((g, i) => { if (i) R.addSpacer(4); NGameRow(R, j, g, i === 0 && !g.done); });
   else {
     const gl = gameLines(j);
     const b1 = NBox(R, new Color(gl.bad ? "#3A1520" : "#0B1A3A", 0.92), NC.line, 10, 9, 5); NT(b1, gl.rows[0], 13, gl.bad ? NC.bad : NC.txt, "b"); b1.addSpacer();
