@@ -1380,14 +1380,153 @@ async function pickCrest() {
   } catch (e) {}
   return false;
 }
+// ---------- ✨ 네이티브 글자 위젯(2026-10-30 소유자 '선명도' — 위젯 전체를 그림 한 장으로 만들지 않음) ----------
+// 글자·숫자는 전부 WidgetText(그림자·글로우 없음), 카드는 WidgetStack(배경색·테두리·모서리), DrawContext 는 링 호·엠블럼 같은 그림에만.
+const NC = { bg1: new Color("#0A1430"), bg2: new Color("#0F1F44"), card: new Color("#0F1F42", 0.94), line: new Color("#3156A0", 0.85), txt: new Color("#F5F8FF"), sub: new Color("#BBC9E8"), dim: new Color("#8A9AC2"),
+  acc: new Color("#2EE6C5"), warn: new Color("#FFC56E"), bad: new Color("#FF9AA8"), blue: new Color("#2F6FE4"), mine: new Color("#8FBBFF"), lol: new Color("#FF7A8C"), chip: new Color("#13285A"), chipLine: new Color("#6A93E8", 0.6) };
+const TILE = { g: ["#0E3A33", "#2BB591"], b: ["#112E60", "#3B82F6"], p: ["#2A1A4E", "#8A63E8"], r: ["#3A1626", "#E0566E"] };
+function NT(st, s, size, color, weight, lines) {
+  const t = st.addText(String(s == null ? "" : s));
+  t.font = weight === "b" ? Font.boldSystemFont(size) : weight === "h" ? Font.heavySystemFont(size) : weight === "m" ? Font.semiboldSystemFont(size) : Font.systemFont(size);
+  t.textColor = color || NC.txt; t.lineLimit = lines || 1; t.minimumScaleFactor = 0.72; return t;
+}
+function NCard(parent, pad, h) { const c = parent.addStack(); c.layoutVertically(); c.backgroundColor = NC.card; c.cornerRadius = 16; c.borderWidth = 1; c.borderColor = NC.line; c.setPadding(pad, 12, pad, 12); if (h) c.size = new Size(0, h); return c; }
+function NBox(parent, bg, line, r, px, py) { const b = parent.addStack(); b.backgroundColor = bg; b.cornerRadius = r; if (line) { b.borderWidth = 1; b.borderColor = line; } b.setPadding(py, px, py, px); b.centerAlignContent(); return b; }
+function NHead(c, emoji, title, right, rightBox) {
+  const h = c.addStack(); h.centerAlignContent();
+  const ib = h.addStack(); ib.size = new Size(26, 26); ib.cornerRadius = 7; ib.backgroundColor = NC.blue; ib.centerAlignContent(); ib.addSpacer(); NT(ib, emoji, 14); ib.addSpacer();
+  h.addSpacer(8); NT(h, title, 16, NC.txt, "b"); h.addSpacer();
+  if (right) { if (rightBox) { const b = NBox(h, new Color("#102B5E"), NC.line, 11, 10, 3); NT(b, right, 12, NC.txt, "m"); } else NT(h, right, 11, NC.sub, "m"); }
+  return h;
+}
+// 링: 트랙+진척 호만 그림(글자 없음) → 그 위에 WidgetText
+function ringImg(pct, S, col) {
+  const c = new DrawContext(); c.size = new Size(S, S); c.opaque = false; c.respectScreenScale = true;
+  const lw = Math.max(7, S * 0.1), r = S / 2 - lw / 2 - 1, cx = S / 2, cy = S / 2;
+  c.setStrokeColor(new Color("#2A4A86", 0.9)); c.setLineWidth(lw); c.strokeEllipse(new Rect(cx - r, cy - r, r * 2, r * 2));
+  pct = Math.max(0, Math.min(1, pct || 0));
+  if (pct > 0.003) {
+    const n = Math.max(2, Math.round(120 * pct)), path = new Path();
+    for (let i = 0; i <= n; i++) { const a = -Math.PI / 2 + Math.PI * 2 * pct * i / n; const pt = new Point(cx + r * Math.cos(a), cy + r * Math.sin(a)); if (i === 0) path.move(pt); else path.addLine(pt); }
+    c.addPath(path); c.setStrokeColor(new Color(col || "#2EE6C5")); c.setLineWidth(lw); c.strokePath();
+    const e = -Math.PI / 2 + Math.PI * 2 * pct; c.setFillColor(new Color(col || "#2EE6C5")); c.fillEllipse(new Rect(cx + r * Math.cos(e) - lw / 2, cy + r * Math.sin(e) - lw / 2, lw, lw));
+  }
+  return c.getImage();
+}
+function NRing(parent, S, pct, big, sub, bigSize) {
+  const rs = parent.addStack(); rs.size = new Size(S, S); rs.backgroundImage = ringImg(pct, S); rs.layoutVertically(); rs.setPadding(0, 0, 0, 0);
+  rs.addSpacer(); const r1 = rs.addStack(); r1.addSpacer(); NT(r1, big, bigSize || 24, NC.txt, "h"); r1.addSpacer();
+  if (sub) { const r2 = rs.addStack(); r2.addSpacer(); NT(r2, sub, 10.5, NC.sub, "m"); r2.addSpacer(); }
+  rs.addSpacer(); return rs;
+}
+function NTile(row, w, label, value, k, valCol, Q) {
+  const t = row.addStack(); t.layoutVertically(); t.size = new Size(w, 0); t.backgroundColor = new Color(TILE[k][0]); t.cornerRadius = 11; t.borderWidth = 1; t.borderColor = new Color(TILE[k][1], 0.8); t.setPadding(Q.tp, 9, Q.tp, 9);
+  NT(t, label, 11.5, new Color(TILE[k][1]), "m"); t.addSpacer(1); NT(t, value, Q.tv, valCol || NC.txt, "b"); return t;
+}
+function NChip(row, w, text, k) { const b = row.addStack(); b.size = new Size(w, 0); b.backgroundColor = k === "y" ? new Color("#2E2410") : NC.chip; b.cornerRadius = 9; b.borderWidth = 1; b.borderColor = k === "y" ? new Color("#D9A441", 0.7) : NC.chipLine; b.setPadding(4, 8, 4, 8); b.centerAlignContent(); NT(b, text, 12, NC.txt, "b"); b.addSpacer(); return b; }
+function NStudy(w, j, W, big, Q) {
+  const c = NCard(w, Q.pad), s = j.study || {}, hr = hskRing(j), goal = s.goal || 30, today = s.today || 0, sp = speakScore(j), ch = (j.chips || []).slice(0, big ? 4 : 2);
+  NHead(c, "📖", "중국어 학습", hr.title, true); c.addSpacer(Q.g);
+  const body = c.addStack(); body.centerAlignContent();
+  const RS = big ? 104 : Q.ring, left = body.addStack(); left.layoutVertically(); left.size = new Size(RS + 4, 0);
+  const lr = left.addStack(); lr.addSpacer(); NRing(lr, RS, hr.pct, hr.big, hr.sub, big ? 27 : 23); lr.addSpacer();
+  if (big) { left.addSpacer(3); const lt = left.addStack(); lt.addSpacer(); NT(lt, "HSK 진척률", 11.5, NC.dim, "m"); lt.addSpacer(); }
+  body.addSpacer(8);
+  const right = body.addStack(); right.layoutVertically(); const tw2 = (W - 24 - RS - 4 - 8 - 6) / 2;
+  const r1 = right.addStack(); NTile(r1, tw2, "오늘 학습", today + "분 / " + goal, "g", today >= goal ? NC.acc : NC.txt, Q); r1.addSpacer(6); NTile(r1, tw2, "누적 단어", n1(j.words) + "개", "b", null, Q);
+  right.addSpacer(6);
+  const r2 = right.addStack(); NTile(r2, tw2, "통화 점수", sp ? sp.big + sp.unit : "기록 없음", "p", sp && Number(sp.big) > 0 ? NC.txt : NC.sub, Q); r2.addSpacer(6); NTile(r2, tw2, "연속 학습", (s.streak || 0) + "일", "r", (s.streak || 0) > 0 ? NC.warn : NC.txt, Q);
+  c.addSpacer(Q.g);
+  if (big) { NT(c, "오늘의 단어", 12, NC.sub, "m"); c.addSpacer(4); }
+  const cw = (W - 24 - 6) / 2, wr = c.addStack();
+  if (ch[0]) NChip(wr, cw, ch[0].z + " · " + ch[0].k, "y"); else NChip(wr, cw, "틀린 단어 없음", "");
+  wr.addSpacer(6); if (ch[1]) NChip(wr, cw, ch[1].z + " · " + ch[1].k, ""); else wr.addSpacer();
+  if (big && ch[2]) { c.addSpacer(5); const w2 = c.addStack(); NChip(w2, cw, ch[2].z + " · " + ch[2].k, ""); w2.addSpacer(6); if (ch[3]) NChip(w2, cw, ch[3].z + " · " + ch[3].k, ""); else w2.addSpacer(); }
+  return c;
+}
+function NPlanRow(c, j, it, first) {
+  const row = c.addStack(); row.centerAlignContent(); row.backgroundColor = new Color("#0B1A3A", 0.9); row.cornerRadius = 12; row.borderWidth = 1; row.borderColor = NC.line; row.setPadding(first ? 7 : 5, 10, first ? 7 : 5, 10);
+  const sp2 = splitPlace(it), p = it.d.split("-"), dw = dayWord(j, it.d);
+  const L = row.addStack(); L.size = new Size(92, 0); L.centerAlignContent(); NT(L, Number(p[1]) + "/" + Number(p[2]) + " · " + (it.t || "종일"), first ? 14 : 13, NC.txt, "b"); L.addSpacer();
+  const bar = row.addStack(); bar.size = new Size(1, first ? 30 : 22); bar.backgroundColor = NC.line; row.addSpacer(10);
+  const R = row.addStack(); R.layoutVertically(); NT(R, sp2.title, first ? 14 : 13, NC.txt, "b");
+  const det = [dw ? dw + " (" + dow(it.d) + ")" : dow(it.d), sp2.place ? "📍 " + sp2.place : "", it.sub || ""].filter(Boolean).join(" · ");
+  if (first && det) NT(R, det, 11, NC.sub, "m");
+  row.addSpacer(); return row;
+}
+function NPlan(w, j, n, Q, lite) {
+  const c = NCard(w, Q.pad), P2 = (j.plan || []).slice(0, n);
+  NHead(c, "📅", "다음 일정", "NEXT EVENT"); c.addSpacer(Q.g);
+  if (!P2.length) { const b = NBox(c, new Color("#0B1A3A", 0.9), NC.line, 12, 10, 8); NT(b, "다가오는 일정이 없어요", 13, NC.sub, "m"); b.addSpacer(); return c; }
+  P2.forEach((it, i) => { if (i) c.addSpacer(4); NPlanRow(c, j, it, i === 0 && !lite); });
+  return c;
+}
+function NGameRow(c, j, g, first) {
+  const row = c.addStack(); row.centerAlignContent(); row.backgroundColor = new Color(first ? "#112C66" : "#0B1A3A", 0.92); row.cornerRadius = 10; row.borderWidth = 1; row.borderColor = NC.line; row.setPadding(5, 8, 5, 8);
+  const bar = row.addStack(); bar.size = new Size(3, 16); bar.cornerRadius = 1.5; bar.backgroundColor = g.k === "lol" ? NC.lol : NC.acc; row.addSpacer(8);
+  const dw = dayWord(j, g.d); NT(row, (dw ? dw + " " : "") + sday(g.d) + " " + g.hm, 12.5, NC.sub, "m"); row.addSpacer(8);
+  const a = g.k === "fb" && !g.home ? g.op : g.me, b = g.k === "fb" && !g.home ? g.me : g.op, mine = g.k === "lol" ? NC.lol : NC.mine;
+  NT(row, a, 13, a === g.me ? mine : NC.txt, "b"); NT(row, " vs ", 11, NC.dim, "m"); NT(row, b, 13, b === g.me ? mine : NC.txt, "b");
+  row.addSpacer();
+  const tag = g.k === "lol" ? (g.tag || "LoL") : g.home ? "홈" : "원정", pb = NBox(row, g.k === "fb" && g.home ? new Color("#1E4FB0") : new Color("#2A3656"), null, 8, 7, 2); NT(pb, tag, 10, NC.txt, "b");
+  return row;
+}
+function NTeam(w, j, n, fbOnly, Q, lite) {
+  const c = NCard(w, Q.pad), cr = crest(), G = (j.games || []).filter((g) => !fbOnly || g.k === "fb").slice(0, n);
+  const body = c.addStack(); body.centerAlignContent();
+  const L = body.addStack(); L.layoutVertically(); L.size = new Size(n >= 3 ? 76 : 64, 0); L.centerAlignContent();
+  if (cr) { const im = L.addImage(cr); im.imageSize = new Size(n >= 3 ? 68 : 58, n >= 3 ? 68 : 58); im.centerAlignImage(); } else { const e = L.addStack(); e.addSpacer(); NT(e, "⚽", 34); e.addSpacer(); }
+  body.addSpacer(10);
+  const R = body.addStack(); R.layoutVertically();
+  NT(R, "수원 삼성 블루윙즈", 15, NC.txt, "b"); if (!lite) NT(R, "NEXT MATCH", 10.5, NC.sub, "m"); R.addSpacer(lite ? 4 : 5);
+  if (G.length) G.forEach((g, i) => { if (i) R.addSpacer(4); NGameRow(R, j, g, i === 0); });
+  else {
+    const gl = gameLines(j);
+    const b1 = NBox(R, new Color(gl.bad ? "#3A1520" : "#0B1A3A", 0.92), NC.line, 10, 9, 5); NT(b1, gl.rows[0], 13, gl.bad ? NC.bad : NC.txt, "b"); b1.addSpacer();
+    R.addSpacer(4); const b2 = NBox(R, new Color("#0B1A3A", 0.92), NC.line, 10, 9, 5); NT(b2, gl.rows[1], 11.5, NC.sub, "m"); b2.addSpacer();
+  }
+  return c;
+}
+// 큰 위젯: 비움·all = 공부+일정+팀 / study = 공부(크게)+일정 / plan = 일정 3+팀 3 · 중간 위젯 team = 팀 3 / plan = 일정 2+팀 1
+function native(j, fam, P0) {
+  if (P0 === "all") P0 = "";
+  // 화면 높이에 따라 여백·링·숫자 크기를 줄임(428 폭 382pt 기준, 390 폭 354 · 375 폭 324) — 글자 크기는 규칙 안에서만
+  const sz = wsize(fam), H = sz.height, Q = fam === "medium" ? { pad: 8, g: 5, ring: 84, tp: 5, tv: 18, out: 8 } : H >= 370 ? { pad: 8, g: 6, ring: 92, tp: 5, tv: 20, out: 8 } : H >= 340 ? { pad: 6, g: 4, ring: 84, tp: 4, tv: 20, out: 6 } : { pad: 6, g: 3, ring: 76, tp: 3, tv: 19, out: 5 };
+  const W = sz.width - Q.out * 2, w = new ListWidget(); w.url = "https://voice.zhnote.net/me"; w.refreshAfterDate = new Date(Date.now() + 20 * 60e3);
+  const bg = bgImage(fam); if (bg) w.backgroundImage = bg; else { const g = new LinearGradient(); g.colors = [NC.bg1, NC.bg2]; g.locations = [0, 1]; w.backgroundGradient = g; }
+  w.setPadding(Q.out, Q.out, Q.out, Q.out);
+  if (fam === "medium") {
+    if (P0 === "plan") { NPlan(w, j, 1, Q); w.addSpacer(6); NTeam(w, j, 1, false, Q, true); }
+    else NTeam(w, j, 3, false, Q);
+  } else if (P0 === "study") { NStudy(w, j, W, true, Q); w.addSpacer(Q.out); NPlan(w, j, 2, Q); }
+  else if (P0 === "plan") { NPlan(w, j, 3, Q); w.addSpacer(Q.out); NTeam(w, j, 3, false, Q); }
+  else { NStudy(w, j, W, false, Q); w.addSpacer(Q.out); NPlan(w, j, 1, Q, true); w.addSpacer(Q.out); NTeam(w, j, H >= 340 ? 2 : 1, true, Q, true); }
+  w.addSpacer();
+  if (j.stale) { const f = w.addStack(); f.addSpacer(); NT(f, "⚠︎ 저장본", 9, NC.dim); }
+  return w;
+}
+// 🔬 비교: 같은 데이터로 ① 그림 한 장(pro) ② 네이티브 글자(native) 를 차례로 미리보기 — 홈 화면에서는 매개변수 'img' 가 ① 고정
+async function compareRender(j) {
+  const a = new Alert(); a.title = "선명도 비교"; a.message = "① 그림 한 장(예전) → ② 글자 위젯(새) 순서로 큰 위젯을 띄워요. 같은 숫자·일정이 보이는지, 글자가 선명한지 비교하세요."; a.addAction("시작"); a.addCancelAction("취소");
+  if (await a.presentAlert() < 0) return;
+  await pro(j, "large", "").presentLarge();
+  await native(j, "large", "").presentLarge();
+  const m = new Alert(); m.title = "중간 위젯(팀)도 비교"; m.addAction("보기"); m.addCancelAction("그만");
+  if (await m.presentAlert() < 0) return;
+  await pro(j, "medium", "team").presentMedium();
+  await native(j, "medium", "team").presentMedium();
+}
 function build(j, fam, param) {
   const w = new ListWidget(); w.backgroundColor = C.bg; w.url = "https://voice.zhnote.net/me";
   const bg = bgImage(fam); HASBG = !!bg; if (bg) w.backgroundImage = bg;
   w.refreshAfterDate = new Date(Date.now() + 20 * 60e3);
   if (j.err) { w.setPadding(14, 14, 14, 14); txt(w, "나 살피기\n" + j.err + "\n\n앱에서 한 번 실행해 주세요", 13, C.sub, 6); return w; }
   const P = String(param || "").trim().toLowerCase();
-  // 그려서 만드는 화면(남색 유리 카드). 예전 글자 위젯은 매개변수 끝에 "old"
-  if (!/old/.test(P) && (fam === "large" || fam === "extraLarge" || (fam === "medium" && (P === "plan" || P === "team")))) { try { return pro(j, fam === "medium" ? "medium" : "large", P); } catch (e) { console.error(e); } }
+  // 기본 = 네이티브 글자 위젯(native). 매개변수 'img' = 예전 그림 한 장(pro, 비교용), 'old' = 맨 처음 글자 위젯
+  const fam2 = fam === "medium" ? "medium" : "large", P1 = P.replace(/\s*img\s*/, "").trim();
+  if (!/old/.test(P) && (fam === "large" || fam === "extraLarge" || (fam === "medium" && (P1 === "plan" || P1 === "team")))) {
+    try { return /img/.test(P) ? pro(j, fam2, P1) : native(j, fam2, P1); } catch (e) { console.error(e); }
+  }
   if (fam === "large" || fam === "extraLarge") {
     w.setPadding(8, 8, 8, 8);
     if (P === "study") { studySec(w, j, true); }
@@ -1443,8 +1582,8 @@ let c = await code(false);
 if (config.runsInApp) {
   if (!c) c = await code(true);
   const a = new Alert(); a.title = "나 살피기 위젯";
-  const ACT = [["작은 위젯", "small", ""], ["중간 위젯", "medium", ""], ["큰 위젯 · 전부(비우기·all)", "large", "all"], ["큰 위젯 · 공부+일정(study)", "large", "study"], ["큰 위젯 · 일정+팀(plan)", "large", "plan"], ["중간 위젯 · 팀(team)", "medium", "team"], ["큰 위젯 · 예전 모양(old)", "large", "old"]];
-  ACT.forEach((x) => a.addAction(x[0] + " 미리보기")); a.addAction("🖼 배경 사진 고르기"); a.addAction("배경 사진 지우기"); a.addAction("초대 코드 다시 넣기"); a.addAction("🛡 팀 엠블럼 고르기(파일·사진)"); a.addAction("팀 엠블럼 지우기"); a.addAction("🖼 위젯 배경 그림 고르기(파일, 큰 위젯)"); a.addAction("위젯 배경 그림 지우기"); a.addCancelAction("닫기");
+  const ACT = [["작은 위젯", "small", ""], ["중간 위젯", "medium", ""], ["큰 위젯 · 전부(비우기·all)", "large", "all"], ["큰 위젯 · 공부+일정(study)", "large", "study"], ["큰 위젯 · 일정+팀(plan)", "large", "plan"], ["중간 위젯 · 팀(team)", "medium", "team"], ["큰 위젯 · 그림 한 장(img, 비교용)", "large", "img"], ["큰 위젯 · 예전 모양(old)", "large", "old"]];
+  ACT.forEach((x) => a.addAction(x[0] + " 미리보기")); a.addAction("🖼 배경 사진 고르기"); a.addAction("배경 사진 지우기"); a.addAction("초대 코드 다시 넣기"); a.addAction("🛡 팀 엠블럼 고르기(파일·사진)"); a.addAction("팀 엠블럼 지우기"); a.addAction("🖼 위젯 배경 그림 고르기(파일, 큰 위젯)"); a.addAction("위젯 배경 그림 지우기"); a.addAction("🔬 선명도 비교(그림 vs 글자)"); a.addCancelAction("닫기");
   let k = await a.presentSheet(); const N = ACT.length;
   if (k === N) { const ok = await pickBg(); if (ok) k = 2; } // 고르면 바로 큰 위젯 미리보기
   else if (k === N + 1) { if (FM.fileExists(BG)) FM.remove(BG); k = 0; }
@@ -1452,6 +1591,7 @@ if (config.runsInApp) {
   else if (k === N + 4) { if (FM.fileExists(CREST)) FM.remove(CREST); k = 4; }
   else if (k === N + 5) { if (await pickBgImg()) k = 2; } // 고르면 큰 위젯(전부) 미리보기
   else if (k === N + 6) { if (FM.fileExists(IMGBG)) FM.remove(IMGBG); if (FM.fileExists(IMGBG2)) FM.remove(IMGBG2); k = 2; }
+  else if (k === N + 7) { const j = c ? await load(c) : { err: "초대 코드 없음" }; if (!j.err) await compareRender(j); k = -1; }
   if (k === N + 2) { c = await code(true); }
   else if (k >= 0 && k < N) {
     const j = c ? await load(c) : { err: "초대 코드 없음" }; const w = build(j, ACT[k][1], ACT[k][2]);
