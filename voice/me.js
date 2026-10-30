@@ -1485,7 +1485,7 @@ function NGameRow(c, j, g, first) {
     NT(row, a, 13, a === g.me ? mine : NC.txt, "b"); NT(row, " vs ", 11, NC.dim, "m"); NT(row, b, 13, b === g.me ? mine : NC.txt, "b");
   }
   row.addSpacer();
-  const tag = g.k === "lol" ? (g.tag || "LoL") : g.home ? "홈" : "원정", pb = NBox(row, g.k === "fb" && g.home ? new Color("#1E4FB0") : new Color("#2A3656"), null, 8, 7, 2); NT(pb, tag, 10, NC.txt, "b");
+  const lt = String(g.tag || "LoL"), tag = g.k === "lol" ? (/월드|world/i.test(lt) ? "Worlds" : /LCK/i.test(lt) ? "LCK" : /MSI/i.test(lt) ? "MSI" : [...lt].length > 6 ? [...lt].slice(0, 6).join("") : lt) : g.home ? "홈" : "원정", pb = NBox(row, g.k === "fb" && g.home ? new Color("#1E4FB0") : new Color("#2A3656"), null, 8, 7, 2); NT(pb, tag, 10, NC.txt, "b");
   return row;
 }
 function NTeam(w, j, n, fbOnly, Q, lite) {
