@@ -207,40 +207,58 @@ function weekText(s) {
 // ---------- 팀: 수원삼성(TheSportsDB) ----------
 const KR = [["Suwon Samsung", "수원삼성"], ["Suwon FC", "수원FC"], ["Seoul E-Land", "서울이랜드"], ["Busan", "부산"], ["Jeonnam", "전남"], ["Bucheon", "부천"], ["Seongnam", "성남"], ["Ansan", "안산"], ["Gimpo", "김포"], ["Asan", "충남아산"], ["Cheonan", "천안"], ["Gyeongnam", "경남"], ["Hwaseong", "화성"], ["Paju", "파주"], ["Gimhae", "김해"], ["Yongin", "용인"], ["Cheongju", "충북청주"], ["Incheon", "인천"], ["Daegu", "대구"], ["Jeju", "제주"], ["Jeonbuk", "전북"], ["Ulsan", "울산"], ["Pohang", "포항"], ["Gangwon", "강원"], ["Daejeon", "대전"], ["Gwangju", "광주"], ["Gimcheon", "김천"], ["Anyang", "안양"], ["FC Seoul", "서울"]];
 const kr = (n) => { const x = KR.find(([e]) => String(n || "").includes(e)); return x ? x[1] : String(n || ""); };
+// TheSportsDB 호출 — 실패 이유(HTTP 상태·네트워크)를 돌려줘서 화면에 그대로 보임(2026-10-30 소유자 '수원 경기를 왜 못 불러오나')
 async function tsdb(path) {
-  for (const k of ["3", "123"]) {
+  const why = [];
+  for (const k of ["123", "3"]) {
     try {
-      const r = await fetch(`https://www.thesportsdb.com/api/v1/json/${k}/${path}`, { headers: { "user-agent": "sz-voice-me" } });
-      if (!r.ok) continue;
-      const j = await r.json().catch(() => null);
-      if (j) return j;
-    } catch {}
+      const r = await fetch(`https://www.thesportsdb.com/api/v1/json/${k}/${path}`, { headers: { "user-agent": "Mozilla/5.0 sz-voice-me", accept: "application/json" }, cf: { cacheTtl: 0 } });
+      if (!r.ok) { why.push(`HTTP ${r.status}`); continue; }
+      const txt = await r.text();
+      try { return { j: JSON.parse(txt), why: "" }; } catch { why.push("JSON 아님(" + txt.slice(0, 40).replace(/\s+/g, " ") + ")"); }
+    } catch (e) { why.push(String(e.message || e).slice(0, 60)); }
   }
-  return null;
+  return { j: null, why: [...new Set(why)].join("/") || "응답 없음" };
 }
 function fbEv(e) {
   const t = Date.parse(e.strTimestamp ? (e.strTimestamp.endsWith("Z") || /[+-]\d\d:?\d\d$/.test(e.strTimestamp) ? e.strTimestamp : e.strTimestamp + "Z") : (e.dateEvent + "T" + (e.strTime || "00:00:00").slice(0, 8) + "Z"));
   const num = (v) => (v === null || v === undefined || v === "" ? null : Number(v));
   return { id: String(e.idEvent), t: t || 0, home: e.strHomeTeam, away: e.strAwayTeam, hid: String(e.idHomeTeam || ""), hs: num(e.intHomeScore), as: num(e.intAwayScore), st: e.strStatus || "", lg: e.strLeague || "", round: e.intRound || "" };
 }
+const FB_NAMES = ["Suwon Samsung Bluewings", "Suwon Samsung", "Suwon Bluewings", "Suwon"];
 async function fbFetch(prev) {
-  const o = { id: prev && prev.id, lg: prev && prev.lg, ev: [], err: "" };
+  const o = { id: prev && prev.id, lg: prev && prev.lg, name: prev && prev.name, ev: [], err: "" };
+  const errs = [];
   try {
     if (!o.id) {
-      const j = await tsdb("searchteams.php?t=" + encodeURIComponent("Suwon Samsung"));
-      const t = ((j && j.teams) || []).find((x) => /samsung/i.test(x.strTeam) || /bluewings/i.test(x.strTeamAlternate || "")) || null;
-      if (!t) throw new Error("수원삼성 팀을 못 찾음");
-      o.id = String(t.idTeam); o.lg = String(t.idLeague || "");
+      let last = "";
+      for (const n of FB_NAMES) {
+        const { j, why } = await tsdb("searchteams.php?t=" + encodeURIComponent(n));
+        if (!j) { last = why; continue; }
+        const t = ((j && j.teams) || []).find((x) => /suwon/i.test(x.strTeam || "") && (/samsung|bluewings/i.test((x.strTeam || "") + " " + (x.strTeamAlternate || "")) || /soccer|football/i.test(x.strSport || ""))) || null;
+        if (t) { o.id = String(t.idTeam); o.lg = String(t.idLeague || ""); o.name = t.strTeam; break; }
+        last = "검색 결과에 수원삼성 없음(" + (((j && j.teams) || []).map((x) => x.strTeam).slice(0, 3).join(", ") || "0건") + ")";
+      }
+      if (!o.id) throw new Error("팀 검색 실패: " + last);
     }
     const all = new Map();
     const add = (list) => { for (const e of list || []) if (e && e.idEvent) all.set(String(e.idEvent), fbEv(e)); };
-    const [nx, ls] = await Promise.all([tsdb("eventsnext.php?id=" + o.id), tsdb("eventslast.php?id=" + o.id)]);
-    add(nx && nx.events); add(ls && ls.results);
-    if (o.lg) { const yr = new Date(Date.now() + TZ).getUTCFullYear(); const s = await tsdb(`eventsseason.php?id=${o.lg}&s=${yr}`); add(((s && s.events) || []).filter((e) => String(e.idHomeTeam) === o.id || String(e.idAwayTeam) === o.id)); }
+    const yr = new Date(Date.now() + TZ).getUTCFullYear();
+    const calls = [["eventsnext", "eventsnext.php?id=" + o.id, "events"], ["eventslast", "eventslast.php?id=" + o.id, "results"]];
+    if (o.lg) { calls.push(["season " + yr, `eventsseason.php?id=${o.lg}&s=${yr}`, "events"]); calls.push(["season " + (yr - 1) + "-" + yr, `eventsseason.php?id=${o.lg}&s=${yr - 1}-${yr}`, "events"]); }
+    const rs = await Promise.all(calls.map(([, p]) => tsdb(p)));
+    rs.forEach(({ j, why }, i) => {
+      if (!j) { errs.push(calls[i][0] + ": " + why); return; }
+      const list = j[calls[i][2]];
+      add(calls[i][0].startsWith("season") ? (list || []).filter((e) => String(e.idHomeTeam) === o.id || String(e.idAwayTeam) === o.id) : list);
+    });
     const lo = Date.now() - 30 * 864e5, hi = Date.now() + 60 * 864e5;
     o.ev = [...all.values()].filter((e) => e.t > lo && e.t < hi).sort((a, b) => a.t - b.t);
-    if (!o.ev.length) { o.err = "가까운 경기 정보 없음"; o.empty = true; }
-  } catch (e) { o.err = String(e.message || e).slice(0, 100); if (prev && prev.ev) o.ev = prev.ev; }
+    if (!o.ev.length) {
+      if (errs.length === calls.length) throw new Error("경기 조회 실패: " + errs.join(" · "));
+      o.err = "가까운 경기 정보 없음(" + (o.name || "수원") + " id " + o.id + (errs.length ? ", 일부 실패 " + errs.join(" · ") : "") + ")"; o.empty = true;
+    } else if (errs.length) o.warn = errs.join(" · ");
+  } catch (e) { o.err = String(e.message || e).slice(0, 220); if (prev && prev.ev) o.ev = prev.ev; }
   return o;
 }
 const fbDone = (e) => e.hs != null && e.as != null && (/FT|Finish|AET|PEN|AP/i.test(e.st) || Date.now() - e.t > 3 * 3600e3);
@@ -302,7 +320,7 @@ function teamView(d) {
   const f = pick(fb.ev, fbDone), l = pick(lol.ev, lolDone);
   return {
     at: d.teams.at || 0,
-    suwon: { on: d.cfg.suwon, err: fb.err || "", past: f.past.map((e) => ({ t: e.t, line: fbLine(e, fb.id) })), next: f.next.map((e) => ({ t: e.t, line: fbLine(e, fb.id) })) },
+    suwon: { on: d.cfg.suwon, err: fb.err || fb.warn || "", past: f.past.map((e) => ({ t: e.t, line: fbLine(e, fb.id) })), next: f.next.map((e) => ({ t: e.t, line: fbLine(e, fb.id) })) },
     t1: { on: d.cfg.t1, err: lol.err || "", past: l.past.map((e) => ({ t: e.t, line: lolLine(e) })), next: l.next.map((e) => ({ t: e.t, line: lolLine(e) })) },
   };
 }
@@ -626,7 +644,7 @@ function draw(j){
   [['⚽ 수원삼성',t.suwon],['🎮 T1',t.t1]].forEach(function(x){var v=x[1];h+='<div class="tm"><b>'+x[0]+(v.on?'':' <span class="hint">(꺼짐)</span>')+'</b>';
     if(v.on){h+=v.next.map(function(e){return '<div>'+esc(e.line)+'</div>'}).join('');h+=v.past.map(function(e){return '<div style="color:var(--ink2)">'+esc(e.line)+'</div>'}).join('');if(!v.next.length&&!v.past.length)h+='<div class="e">'+esc(v.err||'경기 정보 없음')+'</div>';else if(v.err)h+='<div class="e">'+esc(v.err)+'</div>'}
     h+='</div>'});
-  h+='<p class="hint">시각은 중국 시각 · '+ago(t.at)+' 받음 · 경기 날 아침 '+j.cfg.mh+'시에 오늘 경기, 끝나면 결과를 아이폰으로 보내요.</p></div>';
+  h+='<p class="hint">시각은 중국 시각 · '+ago(t.at)+' 받음 · 경기 날 아침 '+j.cfg.mh+'시에 오늘 경기, 끝나면 결과를 아이폰으로 보내요.</p><button class="btn sm" id="tmFresh">🔄 경기 일정 지금 다시 받기</button></div>';
   // 건강 기록
   h+='<h2>건강 기록</h2><div class="card"><div class="k">마지막으로 받은 때: '+ago(j.healthAt)+'</div>';
   h+='<label for="hd">날짜</label><input id="hd" type="date" value="'+j.today+'"><div class="two"><div><label for="hs">잔 시간(시간)</label><input id="hs" inputmode="decimal" placeholder="예: 6.5"></div><div><label for="hp">걸음</label><input id="hp" inputmode="numeric" placeholder="예: 7200"></div></div><button class="btn s" id="hsave">직접 넣기</button>';
@@ -659,6 +677,7 @@ function draw(j){
   $('c_wd').onchange=function(){cfg({wday:Number(this.value)})};$('c_h').onchange=function(){cfg({hour:Number(this.value)})};$('c_mh').onchange=function(){cfg({mh:Number(this.value)})};
   $('g_cn').onchange=function(){cfg({gstudy:Number(this.value)})};
   $('w_ring').onchange=function(){cfg({ring:this.value})};
+  $('tmFresh').onclick=function(){this.disabled=true;this.textContent='받는 중…';load(true)};
   $('wcopy').onclick=function(){var t=WJS;if(!t){toast('스크립트를 받는 중이에요 — 잠시 뒤 다시');return}
     var done=function(){toast('복사했어요 — Scriptable 에 붙여넣기')};
     if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done).catch(function(){fallback(t)})}else fallback(t)};
