@@ -226,10 +226,57 @@ function fbEv(e) {
   return { id: String(e.idEvent), t: t || 0, home: e.strHomeTeam, away: e.strAwayTeam, hid: String(e.idHomeTeam || ""), hs: num(e.intHomeScore), as: num(e.intAwayScore), st: e.strStatus || "", lg: e.strLeague || "", round: e.intRound || "" };
 }
 const FB_NAMES = ["Suwon Samsung Bluewings", "Suwon Samsung", "Suwon Bluewings", "Suwon"];
+// 2026-10-30 실제 응답: 팀 검색은 되지만 eventsnext·eventslast·eventsseason 은 키 123 → 429, 키 3 → 403 (무료 키로 막힘)
+// → ① v1(순차) ② v2 schedule(X-API-KEY 123) ③ ESPN 공개 site API(kor.1·kor.2) 순으로 시도, 어느 경로였는지 src 에 남김
+async function tsdb2(path) {
+  try {
+    const r = await fetch("https://www.thesportsdb.com/api/v2/json/" + path, { headers: { "X-API-KEY": "123", "user-agent": "Mozilla/5.0 sz-voice-me", accept: "application/json" }, cf: { cacheTtl: 0 } });
+    if (!r.ok) return { j: null, why: "HTTP " + r.status };
+    const txt = await r.text(); try { return { j: JSON.parse(txt), why: "" }; } catch { return { j: null, why: "JSON 아님" }; }
+  } catch (e) { return { j: null, why: String(e.message || e).slice(0, 60) }; }
+}
+const ESPN = "https://site.api.espn.com/apis/site/v2/sports/soccer/";
+async function espnFetch(path) {
+  try {
+    const r = await fetch(ESPN + path, { headers: { "user-agent": "Mozilla/5.0 sz-voice-me", accept: "application/json" }, cf: { cacheTtl: 0 } });
+    if (!r.ok) return { j: null, why: "HTTP " + r.status };
+    return { j: await r.json(), why: "" };
+  } catch (e) { return { j: null, why: String(e.message || e).slice(0, 60) }; }
+}
+// ESPN 일정 → fbEv 와 같은 모양(id·t·home·away·hid·hs·as·st·lg)
+function espnEv(e, lg) {
+  const c = (e.competitions && e.competitions[0]) || {}, cs = c.competitors || [];
+  const H = cs.find((x) => x.homeAway === "home") || cs[0] || {}, A = cs.find((x) => x.homeAway === "away") || cs[1] || {};
+  const num = (v) => (v === null || v === undefined || v === "" ? null : Number(typeof v === "object" ? v.value ?? v.displayValue : v));
+  const done = !!(c.status && c.status.type && c.status.type.completed);
+  return { id: "e" + e.id, t: Date.parse(e.date) || 0, home: (H.team && (H.team.displayName || H.team.name)) || "", away: (A.team && (A.team.displayName || A.team.name)) || "", hid: "e" + ((H.team && H.team.id) || ""), hs: num(H.score), as: num(A.score), st: done ? "FT" : ((c.status && c.status.type && c.status.type.shortDetail) || ""), lg: lg || "", round: "" };
+}
+async function fbEspn(o) {
+  const errs = [], evs = [];
+  for (const lg of ["kor.1", "kor.2"]) {
+    if (!o.eid || o.elg !== lg) {
+      if (o.eid && o.elg) continue; // 이미 다른 리그에서 찾음
+      const { j, why } = await espnFetch(lg + "/teams?limit=50");
+      if (!j) { errs.push("espn " + lg + " 팀: " + why); continue; }
+      const teams = (((j.sports || [])[0] || {}).leagues || [])[0]; const list = (teams && teams.teams) || [];
+      const t = list.map((x) => x.team).find((x) => x && /suwon/i.test(x.displayName + " " + x.name + " " + (x.shortDisplayName || "")) && !/fc$/i.test(x.name || "") || (x && /bluewings|samsung/i.test(x.displayName || "")));
+      if (!t) { errs.push("espn " + lg + ": 수원삼성 없음"); continue; }
+      o.eid = String(t.id); o.elg = lg; o.name = o.name || t.displayName;
+    }
+    const { j: sj, why: w2 } = await espnFetch(o.elg + "/teams/" + o.eid + "/schedule");
+    if (!sj) { errs.push("espn 일정: " + w2); break; }
+    for (const e of sj.events || []) evs.push(espnEv(e, (sj.season && sj.season.displayName) || o.elg));
+    break;
+  }
+  return { evs, errs };
+}
 async function fbFetch(prev) {
-  const o = { id: prev && prev.id, lg: prev && prev.lg, name: prev && prev.name, ev: [], err: "" };
+  const o = { id: prev && prev.id, lg: prev && prev.lg, name: prev && prev.name, eid: prev && prev.eid, elg: prev && prev.elg, ev: [], err: "", src: "" };
   const errs = [];
   try {
+    const all = new Map();
+    const add = (list, conv) => { for (const e of list || []) if (e && (e.idEvent || e.id)) { const v = conv ? conv(e) : fbEv(e); all.set(v.id, v); } };
+    // ① TheSportsDB v1 (팀 검색은 무료 키로 됨)
     if (!o.id) {
       let last = "";
       for (const n of FB_NAMES) {
@@ -239,31 +286,47 @@ async function fbFetch(prev) {
         if (t) { o.id = String(t.idTeam); o.lg = String(t.idLeague || ""); o.name = t.strTeam; break; }
         last = "검색 결과에 수원삼성 없음(" + (((j && j.teams) || []).map((x) => x.strTeam).slice(0, 3).join(", ") || "0건") + ")";
       }
-      if (!o.id) throw new Error("팀 검색 실패: " + last);
+      if (!o.id) errs.push("tsdb 팀 검색: " + last);
     }
-    const all = new Map();
-    const add = (list) => { for (const e of list || []) if (e && e.idEvent) all.set(String(e.idEvent), fbEv(e)); };
-    const yr = new Date(Date.now() + TZ).getUTCFullYear();
-    const calls = [["eventsnext", "eventsnext.php?id=" + o.id, "events"], ["eventslast", "eventslast.php?id=" + o.id, "results"]];
-    if (o.lg) { calls.push(["season " + yr, `eventsseason.php?id=${o.lg}&s=${yr}`, "events"]); calls.push(["season " + (yr - 1) + "-" + yr, `eventsseason.php?id=${o.lg}&s=${yr - 1}-${yr}`, "events"]); }
-    const rs = await Promise.all(calls.map(([, p]) => tsdb(p)));
-    rs.forEach(({ j, why }, i) => {
-      if (!j) { errs.push(calls[i][0] + ": " + why); return; }
-      const list = j[calls[i][2]];
-      add(calls[i][0].startsWith("season") ? (list || []).filter((e) => String(e.idHomeTeam) === o.id || String(e.idAwayTeam) === o.id) : list);
-    });
+    if (o.id) {
+      const yr = new Date(Date.now() + TZ).getUTCFullYear();
+      const calls = [["eventsnext", "eventsnext.php?id=" + o.id, "events"], ["eventslast", "eventslast.php?id=" + o.id, "results"]];
+      if (o.lg) calls.push(["season " + yr, `eventsseason.php?id=${o.lg}&s=${yr}`, "events"]);
+      for (const [nm, p, key] of calls) { // 순차 — 한꺼번에 보내면 429
+        const { j, why } = await tsdb(p);
+        if (!j) { errs.push("tsdb " + nm + ": " + why); continue; }
+        add(nm.startsWith("season") ? (j[key] || []).filter((e) => String(e.idHomeTeam) === o.id || String(e.idAwayTeam) === o.id) : j[key]);
+      }
+      if (all.size) o.src = "tsdb v1";
+      // ② v2
+      if (!all.size) {
+        for (const [nm, p] of [["v2 next", "schedule/next/" + o.id], ["v2 prev", "schedule/previous/" + o.id]]) {
+          const { j, why } = await tsdb2(p);
+          if (!j) { errs.push("tsdb " + nm + ": " + why); continue; }
+          add(j.schedule || j.events || j.results);
+        }
+        if (all.size) o.src = "tsdb v2";
+      }
+    }
+    // ③ ESPN
+    if (!all.size) {
+      const { evs, errs: e2 } = await fbEspn(o);
+      errs.push(...e2);
+      for (const v of evs) all.set(v.id, v);
+      if (all.size) { o.src = "espn " + o.elg; if (!o.id) o.id = o.eid; o.hid = "e" + o.eid; }
+    }
     const lo = Date.now() - 30 * 864e5, hi = Date.now() + 60 * 864e5;
     o.ev = [...all.values()].filter((e) => e.t > lo && e.t < hi).sort((a, b) => a.t - b.t);
     if (!o.ev.length) {
-      if (errs.length === calls.length) throw new Error("경기 조회 실패: " + errs.join(" · "));
-      o.err = "가까운 경기 정보 없음(" + (o.name || "수원") + " id " + o.id + (errs.length ? ", 일부 실패 " + errs.join(" · ") : "") + ")"; o.empty = true;
-    } else if (errs.length) o.warn = errs.join(" · ");
-  } catch (e) { o.err = String(e.message || e).slice(0, 220); if (prev && prev.ev) o.ev = prev.ev; }
+      if (!all.size) throw new Error("경기 조회 실패: " + errs.join(" · "));
+      o.err = "가까운 경기 정보 없음(" + (o.name || "수원") + ", " + o.src + ")"; o.empty = true;
+    } else if (errs.length) o.warn = o.src + " 로 받음 · 실패한 경로: " + errs.join(" · ");
+  } catch (e) { o.err = String(e.message || e).slice(0, 300); if (prev && prev.ev) o.ev = prev.ev; }
   return o;
 }
 const fbDone = (e) => e.hs != null && e.as != null && (/FT|Finish|AET|PEN|AP/i.test(e.st) || Date.now() - e.t > 3 * 3600e3);
-function fbLine(e, id) {
-  const home = e.hid === id;
+function fbLine(e, fb) {
+  const home = e.hid === fb.id || (!!fb.hid && e.hid === fb.hid);
   const opp = kr(home ? e.away : e.home), where = home ? "홈" : "원정";
   if (!fbDone(e)) return `⚽ ${hhmm(e.t)} 수원 vs ${opp} (${where})`;
   const my = home ? e.hs : e.as, ot = home ? e.as : e.hs;
@@ -320,7 +383,7 @@ function teamView(d) {
   const f = pick(fb.ev, fbDone), l = pick(lol.ev, lolDone);
   return {
     at: d.teams.at || 0,
-    suwon: { on: d.cfg.suwon, err: fb.err || fb.warn || "", past: f.past.map((e) => ({ t: e.t, line: fbLine(e, fb.id) })), next: f.next.map((e) => ({ t: e.t, line: fbLine(e, fb.id) })) },
+    suwon: { on: d.cfg.suwon, err: fb.err || fb.warn || "", past: f.past.map((e) => ({ t: e.t, line: fbLine(e, fb) })), next: f.next.map((e) => ({ t: e.t, line: fbLine(e, fb) })) },
     t1: { on: d.cfg.t1, err: lol.err || "", past: l.past.map((e) => ({ t: e.t, line: lolLine(e) })), next: l.next.map((e) => ({ t: e.t, line: lolLine(e) })) },
   };
 }
@@ -494,7 +557,7 @@ export async function meApi(env, path, b, h) {
       trip = { d: x.d, dday: dd, icon: { plane: "✈️", train: "🚄", car: "🚗" }[x.how] || "🧳", t: x.t || "", from: x.from || "", to: x.to || "", no: x.no || "", leave: leaveAt(x) || "" };
     }
     const fb = d.teams.fb, lol = d.teams.lol, games = [];
-    if (d.cfg.suwon && fb) { const e = (fb.ev || []).find((x) => !fbDone(x) && x.t > now - 3 * 3600e3); if (e) games.push({ t: e.t, line: fbLine(e, fb.id) }); }
+    if (d.cfg.suwon && fb) { const e = (fb.ev || []).find((x) => !fbDone(x) && x.t > now - 3 * 3600e3); if (e) games.push({ t: e.t, line: fbLine(e, fb) }); }
     if (d.cfg.t1 && lol) { const e = (lol.ev || []).find((x) => !lolDone(x) && x.t > now - 3 * 3600e3); if (e) games.push({ t: e.t, line: lolLine(e) }); }
     games.sort((a, b) => a.t - b.t);
     const ns = (d.notes && d.notes.list) || [];
@@ -507,7 +570,7 @@ export async function meApi(env, path, b, h) {
       .concat(todos.map((x) => ({ d: x.d, t: x.t, icon: x.t ? "🕘" : "📅", title: x.title, sub: x.end ? "~" + x.end.slice(5).replace("-", "/") : "" })))
       .sort((a, b) => (a.d + (a.t || "00:00")).localeCompare(b.d + (b.t || "00:00"))).slice(0, 4);
     const gl = [];
-    if (d.cfg.suwon && fb) for (const e of (fb.ev || []).filter((x) => !fbDone(x) && x.t > now - 3 * 3600e3).slice(0, 3)) { const home = e.hid === fb.id; gl.push({ t: e.t, k: "fb", me: "수원", op: kr(home ? e.away : e.home), tag: home ? "홈" : "원정", home }); }
+    if (d.cfg.suwon && fb) for (const e of (fb.ev || []).filter((x) => !fbDone(x) && x.t > now - 3 * 3600e3).slice(0, 3)) { const home = e.hid === fb.id || e.hid === fb.hid; gl.push({ t: e.t, k: "fb", me: "수원", op: kr(home ? e.away : e.home), tag: home ? "홈" : "원정", home }); }
     if (d.cfg.t1 && lol) for (const e of (lol.ev || []).filter((x) => !lolDone(x) && x.t > now - 3 * 3600e3).slice(0, 3)) gl.push({ t: e.t, k: "lol", me: "T1", op: e.op, tag: e.lg || "LoL", bo: e.bo || 0 });
     gl.sort((a, b) => a.t - b.t);
     const gview = gl.slice(0, 3).map((g) => { const x = new Date(g.t + TZ); return { ...g, d: x.toISOString().slice(0, 10), hm: x.toISOString().slice(11, 16) }; });
