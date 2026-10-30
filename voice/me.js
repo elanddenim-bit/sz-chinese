@@ -847,7 +847,12 @@ function bgImage(fam) {
 }
 async function pickBg() {
   try {
-    const img = await Photos.fromLibrary();
+    // 앨범 또는 파일 앱(iCloud Drive·다운로드)에서 — 둘 다 1200px 로 줄여 이 폰에만 저장
+    const q = new Alert(); q.title = "배경 사진"; q.addAction("앨범에서"); q.addAction("파일에서"); q.addCancelAction("취소");
+    const r = await q.presentSheet(); if (r < 0) return false;
+    let img;
+    if (r === 1) { const f = await DocumentPicker.openFile(); img = Image.fromFile(f); if (!img) throw new Error("이미지 파일이 아니에요"); }
+    else img = await Photos.fromLibrary();
     // 너무 크면 줄여서 저장(위젯 메모리 한도)
     const k = Math.min(1, 1200 / Math.max(img.size.width, img.size.height));
     const ctx = new DrawContext(); ctx.size = new Size(Math.round(img.size.width * k), Math.round(img.size.height * k)); ctx.opaque = true; ctx.respectScreenScale = false;
