@@ -16,7 +16,7 @@
 //  · 경기 날 아침 cfg.mh(기본 9)시 '오늘 경기' 1번, 끝나면 결과 1번(15분마다 확인, 경기 시작 뒤에만)
 // 저장: KV me:<해시> {cfg, health{날짜:{st,sl,at}}, study{날짜:{min,n}}, gh{at,days,repos,priv,err}, teams{at,fb,lol}, sent{week,team{키:날짜}}}
 // =========================================================
-import { barkPush } from "./brief.js";
+import { barkPush, leaveAt } from "./brief.js";
 import { APPS, OWNER_SCOPED, study as studyDays, logUse } from "./usage.js";
 
 const TZ = 8 * 3600e3;
@@ -24,7 +24,7 @@ const cnDay = (t = Date.now()) => new Date(t + TZ).toISOString().slice(0, 10);
 const cnHour = (t) => new Date(t + TZ).getUTCHours();
 const merr = (message, status = 400) => Object.assign(new Error(message), { code: "me", status });
 const KEY = (h) => "me:" + h;
-const DEF = { on: true, wday: 0, hour: 19, team: true, mh: 9, suwon: true, t1: true, gst: 8000, gex: 30, gsl: 420 }; // 위젯 목표: 걸음·운동 분·수면 분
+const DEF = { on: true, wday: 0, hour: 19, team: true, mh: 9, suwon: true, t1: true, gst: 8000, gex: 30, gsl: 420, gstudy: 30 }; // 목표: 걸음·운동 분·수면 분·중국어 분(위젯)
 const SKIP_IDLE = new Set(["daily", "me", "spain"]); // 공개·남이 쓰는 앱, 이 화면 자신은 '안 쓴 도구'에서 뺌
 const WD = ["일", "월", "화", "수", "목", "금", "토"];
 
@@ -188,7 +188,9 @@ async function summary(env, h, d, force) {
   const [use] = await Promise.all([useRows(env, h, prev[0]), ghFetch(env, d, force)]);
   const w = weekOf(d, use, cur), p = weekOf(d, use, prev), idle = idleApps(use, d14);
   const rows = dayList(today, 14).reverse().map((x) => ({ d: x, wd: WD[new Date(x + "T00:00:00Z").getUTCDay()], sl: d.health[x] && d.health[x].sl, st: d.health[x] && d.health[x].st, ex: d.health[x] && d.health[x].ex, gh: (d.gh.days || {})[x] || null, study: d.study[x] ? d.study[x].min : null, apps: Object.keys(use[x] || {}).length }));
-  return { week: w, prev: p, idle, notes: notes(w, p, idle), rows };
+  const ns = notes(w, p, idle);
+  d.notes = { at: Date.now(), list: ns }; // 위젯이 쓰는 '이번 주 경고' 캐시
+  return { week: w, prev: p, idle, notes: ns, rows };
 }
 function weekText(s) {
   const w = s.week, L = [];
@@ -321,6 +323,11 @@ export async function meCron(env, uh, um) {
       await logUse(env, "me", { week: 1 }, 0);
     } catch (e) { console.log("meCron week", e && e.message); }
   }
+  // 위젯용 '이번 주 경고'를 하루 한 번 새로(중국 6시)
+  if (um < 15 && chH === 6 && d.notesDay !== today) {
+    d.notesDay = today; dirty = true;
+    try { await summary(env, h, d, false); } catch (e) { console.log("meCron notes", e && e.message); }
+  }
   // 팀
   if (d.cfg.team && (d.cfg.suwon || d.cfg.t1)) {
     if (await teamsFetch(d, false)) dirty = true;
@@ -365,23 +372,36 @@ export async function meApi(env, path, b, h) {
     return { ok: true, saved: n, msg: n ? `받았어요 · 오늘 ${t.sl ? hm(t.sl) : "수면 없음"} · ${t.st != null ? t.st.toLocaleString() + "보" : "걸음 없음"} · ${t.ex != null ? "운동 " + t.ex + "분" : "운동 없음"}` : "숫자가 없어요(steps·sleep)" };
   }
   if (path === "/me/widget") {
-    // 🟢 아이폰 위젯(Scriptable)용 — 가볍게: KV 문서 하나만 읽음(GitHub·사용량 목록 안 부름)
-    const today = cnDay(), t = d.health[today] || {}, y = d.health[cnDay(Date.now() - 864e5)] || {};
-    const g = (d.gh && d.gh.days && d.gh.days[today]) || {};
-    const fb = d.teams.fb, lol = d.teams.lol, now = Date.now();
-    const nextOf = (ev, done, line) => { const e = (ev || []).find((x) => !done(x) && x.t > now - 3 * 3600e3); return e ? line(e) : ""; };
-    return {
-      ok: true, d: today, at: t.at || 0,
-      steps: t.st ?? null, ex: t.ex ?? null, sleep: t.sl ?? y.sl ?? null, sleepDay: t.sl != null ? today : y.sl != null ? cnDay(now - 864e5) : null,
-      goal: { steps: d.cfg.gst, ex: d.cfg.gex, sleep: d.cfg.gsl },
-      commits: g.n || 0, study: d.study[today] ? d.study[today].min : 0,
-      next: [d.cfg.suwon && fb ? nextOf(fb.ev, fbDone, (e) => fbLine(e, fb.id)) : "", d.cfg.t1 && lol ? nextOf(lol.ev, lolDone, lolLine) : ""].filter(Boolean),
-    };
+    // 📱 아이폰 위젯(Scriptable): 중국어 공부(Supabase 실시간) · 다음 출장(출장 브리핑) · 다음 경기 · 이번 주 경고(캐시)
+    const today = cnDay(), now = Date.now();
+    const sd = await studyDays(code);
+    if (sd) for (const [k, v] of Object.entries(sd)) if (k >= cnDay(now - 40 * 864e5)) d.study[k] = { min: v.min, n: v.n };
+    const mins = (k) => (d.study[k] && d.study[k].min) || 0;
+    let streak = 0;
+    for (let i = mins(today) > 0 ? 0 : 1; i < 60; i++) { if (mins(cnDay(now - i * 864e5)) > 0) streak++; else break; }
+    let week = 0; for (let i = 0; i < 7; i++) week += mins(cnDay(now - i * 864e5));
+    // 다음 출장 이동(현지 체류 제외)
+    let trip = null;
+    const bd = await env.KV.get("brief:" + h, "json");
+    const hm0 = new Date(now + TZ).toISOString().slice(11, 16);
+    const legs = ((bd && bd.trips) || []).filter((x) => x.d && x.how !== "stay" && (x.d > today || (x.d === today && (!x.t || x.t >= hm0)))).sort((a, b) => (a.d + (a.t || "")).localeCompare(b.d + (b.t || "")));
+    if (legs[0]) {
+      const x = legs[0], dd = Math.round((Date.parse(x.d + "T00:00:00Z") - Date.parse(today + "T00:00:00Z")) / 864e5);
+      trip = { d: x.d, dday: dd, icon: { plane: "✈️", train: "🚄", car: "🚗" }[x.how] || "🧳", t: x.t || "", from: x.from || "", to: x.to || "", no: x.no || "", leave: leaveAt(x) || "" };
+    }
+    const fb = d.teams.fb, lol = d.teams.lol, games = [];
+    if (d.cfg.suwon && fb) { const e = (fb.ev || []).find((x) => !fbDone(x) && x.t > now - 3 * 3600e3); if (e) games.push({ t: e.t, line: fbLine(e, fb.id) }); }
+    if (d.cfg.t1 && lol) { const e = (lol.ev || []).find((x) => !lolDone(x) && x.t > now - 3 * 3600e3); if (e) games.push({ t: e.t, line: lolLine(e) }); }
+    games.sort((a, b) => a.t - b.t);
+    const ns = (d.notes && d.notes.list) || [];
+    const note = ns.find((n) => n.lv === "r") || ns.find((n) => n.lv === "w") || ns[0] || null;
+    return { ok: true, d: today, study: { today: mins(today), goal: d.cfg.gstudy || 30, streak, week }, trip, game: games[0] ? games[0].line : "", note };
   }
   if (path === "/me/cfg") {
     const c = d.cfg;
     if (b.gst !== undefined && Number(b.gst) >= 1000 && Number(b.gst) <= 50000) c.gst = Math.round(Number(b.gst));
     if (b.gex !== undefined && Number(b.gex) >= 5 && Number(b.gex) <= 300) c.gex = Math.round(Number(b.gex));
+    if (b.gstudy !== undefined && Number(b.gstudy) >= 5 && Number(b.gstudy) <= 120) c.gstudy = Math.round(Number(b.gstudy));
     if (b.gsl !== undefined && Number(b.gsl) >= 240 && Number(b.gsl) <= 600) c.gsl = Math.round(Number(b.gsl));
     for (const k of ["on", "team", "suwon", "t1"]) if (typeof b[k] === "boolean") c[k] = b[k];
     if (b.wday !== undefined && Number(b.wday) >= 0 && Number(b.wday) <= 6) c.wday = Number(b.wday);
@@ -509,11 +529,10 @@ function draw(j){
   h+='<li><b>URL 콘텐츠 가져오기</b>: <code>https://voice.zhnote.net/me/health</code> · 방법 POST · 본문 JSON — <code>code</code>(초대 코드), <code>steps</code>=걸음, <code>sleep</code>=수면, <code>ex</code>=운동하기 시간 합계(분)</li>';
   h+='</ol><p class="hint">수면 단위는 시간·분·초 어떤 것이든 서버가 알아서 맞춰요. 한 번 실행해 보고 위 \'마지막으로 받은 때\'가 바뀌면 연결된 거예요.</p></details></div>';
   // 위젯
-  h+='<h2>📱 아이폰 위젯</h2><div class="card"><p style="margin:0 0 6px">피트니스 위젯처럼 오늘 걸음·운동·수면 링 3개. 중간 크기는 커밋·중국어·다음 경기도.</p><ol>';
-  h+='<li>아래 버튼으로 스크립트를 복사</li><li><b>Scriptable</b> 앱 → 오른쪽 위 <b>+</b> → 붙여넣기 → 이름 <code>나 살피기</code></li><li>그 스크립트를 한 번 실행 → 초대 코드 입력 → 미리보기 확인</li><li>홈 화면 길게 누르기 → 편집 → 위젯 추가 → Scriptable(작게 또는 중간) → 위젯을 눌러 Script 를 <b>나 살피기</b>로</li></ol>';
-  h+='<div class="two"><div><label for="g_st">걸음 목표</label><select id="g_st">'+[5000,6000,8000,10000,12000].map(function(x){return '<option'+(x===c0.gst?' selected':'')+'>'+x+'</option>'}).join('')+'</select></div><div><label for="g_ex">운동 목표(분)</label><select id="g_ex">'+[15,20,30,45,60].map(function(x){return '<option'+(x===c0.gex?' selected':'')+'>'+x+'</option>'}).join('')+'</select></div></div>';
-  h+='<label for="g_sl">수면 목표</label><select id="g_sl">'+[360,390,420,450,480].map(function(x){return '<option value="'+x+'"'+(x===c0.gsl?' selected':'')+'>'+hm(x)+'</option>'}).join('')+'</select>';
-  h+='<button class="btn" id="wcopy">위젯 스크립트 복사</button><p class="hint">스크립트에는 초대 코드가 들어 있지 않아요(폰 안에만 저장). 수면은 밤 단축어가 보내기 전까지 어제 기록으로 보여요.</p></div>';
+  h+='<h2>📱 아이폰 위젯</h2><div class="card"><p style="margin:0 0 6px">오늘 중국어 공부(링·연속 일수) · 다음 출장과 나갈 시각 · 다음 경기 · 이번 주 경고 한 줄.</p><ol>';
+  h+='<li>아래 버튼으로 스크립트를 복사</li><li><b>Scriptable</b> 앱 → 오른쪽 위 <b>+</b> → 붙여넣기 → 이름 <code>나 살피기</code> (이미 있으면 내용을 통째로 바꿔 붙여넣기)</li><li>그 스크립트를 한 번 실행 → 초대 코드 입력 → 미리보기 확인</li><li>홈 화면 길게 누르기 → 편집 → 위젯 추가 → Scriptable(작게 또는 중간) → 위젯을 눌러 Script 를 <b>나 살피기</b>로</li></ol>';
+  h+='<label for="g_cn">중국어 하루 목표</label><select id="g_cn">'+[15,20,30,45,60].map(function(x){return '<option value="'+x+'"'+(x===(c0.gstudy||30)?' selected':'')+'>'+x+'분</option>'}).join('')+'</select>';
+  h+='<button class="btn" id="wcopy">위젯 스크립트 복사</button><p class="hint">스크립트에는 초대 코드가 들어 있지 않아요(폰 안에만 저장). 경고 한 줄은 이 화면을 열 때와 매일 아침 6시에 새로 계산해요.</p></div>';
   // 설정
   var c=j.cfg;h+='<h2>알림 설정</h2><div class="card">';
   if(!j.bark)h+='<p class="hint" style="color:var(--red)">Bark 주소가 없어요 — 출장 브리핑 화면에서 먼저 넣어 주세요.</p>';
@@ -529,7 +548,7 @@ function draw(j){
   $('c_on').onchange=function(){cfg({on:this.checked})};$('c_team').onchange=function(){cfg({team:this.checked})};
   $('c_su').onchange=function(){cfg({suwon:this.checked})};$('c_t1').onchange=function(){cfg({t1:this.checked})};
   $('c_wd').onchange=function(){cfg({wday:Number(this.value)})};$('c_h').onchange=function(){cfg({hour:Number(this.value)})};$('c_mh').onchange=function(){cfg({mh:Number(this.value)})};
-  $('g_st').onchange=function(){cfg({gst:Number(this.value)})};$('g_ex').onchange=function(){cfg({gex:Number(this.value)})};$('g_sl').onchange=function(){cfg({gsl:Number(this.value)})};
+  $('g_cn').onchange=function(){cfg({gstudy:Number(this.value)})};
   $('wcopy').onclick=function(){var t=WJS;if(!t){toast('스크립트를 받는 중이에요 — 잠시 뒤 다시');return}
     var done=function(){toast('복사했어요 — Scriptable 에 붙여넣기')};
     if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done).catch(function(){fallback(t)})}else fallback(t)};
@@ -544,14 +563,15 @@ try{navigator.sendBeacon('/u',JSON.stringify({app:'me',c:{open:1}}))}catch(e){}
 load();
 </script></body></html>`;
 
+
 // ---------- 📱 아이폰 위젯(Scriptable) 스크립트 — GET /me/widget.js, 화면의 '위젯 스크립트 복사' 버튼이 이걸 복사 ----------
-// 피트니스 위젯처럼 어두운 바탕 + 링 3개(걸음·운동·수면) + 숫자 3줄. 중간 크기는 오른쪽에 커밋·중국어·다음 경기.
+// 2026-10-30 소유자: 운동은 피트니스 위젯이 있으니 빼고 → 중국어 공부 · 다음 일정 · 이번 주 경고 한 줄.
 // 초대 코드는 스크립트에 안 넣고 Scriptable Keychain('pb-code')에 — 앱에서 처음 실행할 때 한 번 물음.
 export const WIDGET_JS = String.raw`// 나 살피기 위젯 — voice.zhnote.net/me (Scriptable)
 // 앱 안에서 한 번 실행하면 초대 코드를 묻고, 위젯 미리보기를 보여 줍니다.
 const API = "https://voice.zhnote.net/me/widget";
-const CACHE = FileManager.local().joinPath(FileManager.local().documentsDirectory(), "me-widget.json");
-const C = { bg: new Color("#1C1C1E"), red: new Color("#FA114F"), redBg: new Color("#3A0A16"), grn: new Color("#A6FF00"), grnBg: new Color("#26360A"), cyn: new Color("#00E5F0"), cynBg: new Color("#08363A"), sub: new Color("#8E8E93"), txt: Color.white() };
+const CACHE = FileManager.local().joinPath(FileManager.local().documentsDirectory(), "me-widget2.json");
+const C = { bg: new Color("#1C1C1E"), ring: new Color("#FF375F"), ringBg: new Color("#3A0A16"), ok: new Color("#A6FF00"), sub: new Color("#8E8E93"), txt: Color.white(), warn: new Color("#FFB340"), red: new Color("#FF5A5F"), sky: new Color("#5AC8FA") };
 
 async function code(ask) {
   if (!ask && Keychain.contains("pb-code")) return Keychain.get("pb-code");
@@ -574,65 +594,78 @@ async function load(c) {
   return { err: "연결 안 됨" };
 }
 function arc(ctx, cx, cy, r, w, frac, color) {
-  const n = Math.max(2, Math.ceil(160 * frac));
+  const n = Math.max(2, Math.ceil(180 * frac));
   ctx.setFillColor(color);
   for (let i = 0; i <= n; i++) {
     const a = -Math.PI / 2 + 2 * Math.PI * frac * (i / n);
     ctx.fillEllipse(new Rect(cx + r * Math.cos(a) - w / 2, cy + r * Math.sin(a) - w / 2, w, w));
   }
 }
-function rings(vals) {
+function ring(frac) {
   const S = 200, ctx = new DrawContext(); ctx.size = new Size(S, S); ctx.opaque = false; ctx.respectScreenScale = true;
-  const w = 24, rs = [86, 60, 34], cols = [[C.red, C.redBg], [C.grn, C.grnBg], [C.cyn, C.cynBg]];
-  vals.forEach(function (v, i) {
-    arc(ctx, S / 2, S / 2, rs[i], w, 1, cols[i][1]);
-    const f = Math.max(0, v || 0);
-    if (f > 0) arc(ctx, S / 2, S / 2, rs[i], w, Math.min(f, 1), cols[i][0]);
-    if (f > 1) arc(ctx, S / 2, S / 2, rs[i], w, Math.min(f - 1, 1), cols[i][0]); // 목표 넘으면 한 바퀴 더(겹쳐 진하게)
-  });
+  const r = 78, w = 34;
+  arc(ctx, S / 2, S / 2, r, w, 1, C.ringBg);
+  if (frac > 0) arc(ctx, S / 2, S / 2, r, w, Math.min(frac, 1), C.ring);
+  ctx.setTextAlignedCenter(); ctx.setFont(Font.boldRoundedSystemFont(64)); ctx.setTextColor(frac >= 1 ? C.ok : C.txt);
+  ctx.drawTextInRect(frac >= 1 ? "✓" : "中", new Rect(0, S / 2 - 40, S, 80));
   return ctx.getImage();
 }
-const fmt = (n) => n == null ? "—" : Math.round(n).toLocaleString();
-const hrs = (m) => m == null ? "—" : (Math.round(m / 6) / 10).toString();
-function line(st, big, unit, color, size) {
-  const s = st.addStack(); s.centerAlignContent();
-  const t = s.addText(big); t.font = Font.boldRoundedSystemFont(size); t.textColor = color; t.lineLimit = 1; t.minimumScaleFactor = 0.5;
-  const u = s.addText(unit); u.font = Font.boldRoundedSystemFont(Math.round(size * 0.62)); u.textColor = color; u.lineLimit = 1;
+const md = (d) => { const p = d.split("-"); return Number(p[1]) + "/" + Number(p[2]); };
+function tripLines(t) {
+  if (!t) return ["다음 출장 없음", ""];
+  const when = t.dday === 0 ? "오늘" : t.dday === 1 ? "내일" : md(t.d) + " (D-" + t.dday + ")";
+  const a = t.icon + " " + when + (t.t ? " " + t.t : "") + " → " + t.to;
+  const b = [t.no, t.leave ? "나갈 시각 " + t.leave : ""].filter(Boolean).join(" · ");
+  return [a, b];
+}
+function txt(st, s, size, color, lines, weight) {
+  const t = st.addText(s); t.font = weight === "b" ? Font.boldRoundedSystemFont(size) : Font.semiboldRoundedSystemFont(size);
+  t.textColor = color || C.txt; t.lineLimit = lines || 1; t.minimumScaleFactor = 0.6; return t;
 }
 function build(j, fam) {
   const w = new ListWidget(); w.backgroundColor = C.bg; w.url = "https://voice.zhnote.net/me";
   w.refreshAfterDate = new Date(Date.now() + 20 * 60e3);
-  if (j.err) { w.setPadding(14, 14, 14, 14); const t = w.addText("나 살피기\n" + j.err + "\n\n앱에서 한 번 실행해 주세요"); t.font = Font.mediumSystemFont(13); t.textColor = C.sub; return w; }
-  const g = j.goal || { steps: 8000, ex: 30, sleep: 420 };
-  const vals = [j.steps == null ? 0 : j.steps / g.steps, j.ex == null ? 0 : j.ex / g.ex, j.sleep == null ? 0 : j.sleep / g.sleep];
-  const big = fam === "medium" ? 24 : 21;
-  w.setPadding(14, 16, 12, 14);
-  const row = w.addStack(); row.layoutHorizontally();
-  const left = row.addStack(); left.layoutVertically();
-  const im = left.addImage(rings(vals)); im.imageSize = fam === "medium" ? new Size(56, 56) : new Size(50, 50);
-  left.addSpacer(6);
-  line(left, fmt(j.steps) + "/" + fmt(g.steps), "걸음", C.red, big);
-  line(left, fmt(j.ex) + "/" + g.ex, "분", C.grn, big);
-  line(left, hrs(j.sleep) + "/" + hrs(g.sleep), "시간", C.cyn, big);
+  if (j.err) { w.setPadding(14, 14, 14, 14); txt(w, "나 살피기\n" + j.err + "\n\n앱에서 한 번 실행해 주세요", 13, C.sub, 6); return w; }
+  const s = j.study || { today: 0, goal: 30, streak: 0, week: 0 };
+  const frac = s.goal ? s.today / s.goal : 0;
+  const tl = tripLines(j.trip);
+  const noteCol = j.note ? (j.note.lv === "r" ? C.red : j.note.lv === "w" ? C.warn : C.ok) : C.sub;
+  w.setPadding(13, 14, 11, 14);
   if (fam === "medium") {
-    row.addSpacer();
-    const r = row.addStack(); r.layoutVertically(); r.size = new Size(130, 0);
-    const add = (txt, col, sz) => { const t = r.addText(txt); t.font = Font.semiboldRoundedSystemFont(sz || 13); t.textColor = col || C.txt; t.lineLimit = 2; t.minimumScaleFactor = 0.7; r.addSpacer(4); };
-    add("💻 커밋 " + (j.commits || 0) + "건");
-    add("🀄 중국어 " + (j.study || 0) + "분");
-    (j.next || []).slice(0, 2).forEach((x) => add(x, C.sub, 12));
-    r.addSpacer();
+    const row = w.addStack(); row.layoutHorizontally();
+    const L = row.addStack(); L.layoutVertically(); L.size = new Size(118, 0);
+    const im = L.addImage(ring(frac)); im.imageSize = new Size(54, 54);
+    L.addSpacer(5);
+    const n = L.addStack(); n.centerAlignContent(); txt(n, String(s.today), 26, C.ring, 1, "b"); txt(n, "/" + s.goal + "분", 15, C.ring, 1, "b");
+    txt(L, (s.streak ? "🔥 " + s.streak + "일 연속" : "오늘 첫 공부를") + " · 주 " + s.week + "분", 11, C.sub);
+    row.addSpacer(10);
+    const R = row.addStack(); R.layoutVertically();
+    txt(R, "다음 출장", 11, C.sub); R.addSpacer(2);
+    txt(R, tl[0], 15, C.txt, 2, "b"); if (tl[1]) txt(R, tl[1], 12, C.sky);
+    if (j.game) { R.addSpacer(6); txt(R, j.game, 12, C.txt, 2); }
+    R.addSpacer();
+    w.addSpacer(4);
+    if (j.note) txt(w, "● " + j.note.t, 11, noteCol, 1);
+  } else {
+    const top = w.addStack(); top.centerAlignContent();
+    const im = top.addImage(ring(frac)); im.imageSize = new Size(44, 44);
+    top.addSpacer(8);
+    const c = top.addStack(); c.layoutVertically();
+    const n = c.addStack(); n.centerAlignContent(); txt(n, String(s.today), 24, C.ring, 1, "b"); txt(n, "/" + s.goal + "분", 13, C.ring, 1, "b");
+    txt(c, s.streak ? "🔥 " + s.streak + "일 연속" : "오늘 첫 공부를", 11, C.sub);
+    w.addSpacer(8);
+    txt(w, tl[0], 13, C.txt, 2, "b"); if (tl[1]) txt(w, tl[1], 11, C.sky);
+    w.addSpacer();
+    if (j.note) txt(w, "● " + j.note.t, 10, noteCol, 2);
   }
-  w.addSpacer();
-  const f = w.addText((j.stale ? "⚠︎ 저장본 · " : "") + (j.sleepDay && j.sleepDay !== j.d ? "수면은 어제 기록 · " : "") + (j.at ? new Date(j.at).toTimeString().slice(0, 5) + " 받음" : "오늘 기록 없음"));
-  f.font = Font.systemFont(9); f.textColor = C.sub; f.lineLimit = 1;
+  if (j.stale) { const f = w.addText("⚠︎ 저장본"); f.font = Font.systemFont(9); f.textColor = C.sub; }
   return w;
 }
 
 let c = await code(false);
 if (config.runsInApp) {
-  const a = new Alert(); a.title = "나 살피기 위젯"; a.addAction("작은 위젯 미리보기"); a.addAction("중간 위젯 미리보기"); a.addAction("초대 코드 다시 넣기"); a.addCancelAction("닫기");
   if (!c) c = await code(true);
+  const a = new Alert(); a.title = "나 살피기 위젯"; a.addAction("작은 위젯 미리보기"); a.addAction("중간 위젯 미리보기"); a.addAction("초대 코드 다시 넣기"); a.addCancelAction("닫기");
   const k = await a.presentSheet();
   if (k === 2) { c = await code(true); }
   else if (k === 0 || k === 1) { const j = c ? await load(c) : { err: "초대 코드 없음" }; const w = build(j, k === 1 ? "medium" : "small"); if (k === 1) await w.presentMedium(); else await w.presentSmall(); }

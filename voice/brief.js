@@ -102,7 +102,7 @@ async function wx(city, d) {
 }
 
 // 권장 출발: 비행기 이륙 2시간 반(광저우 바이윈 집 기준)/2시간 전, 고속철 1시간 반/1시간 전 — 대략
-function leaveAt(tr) {
+export function leaveAt(tr) {
   if (tr.go) return tr.go;
   if (!tr.t || tr.how === "stay") return "";
   const [H, M] = tr.t.split(":").map(Number);
