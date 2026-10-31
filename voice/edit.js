@@ -351,6 +351,8 @@ function draftBody(){var asr={};(D.clips||[]).forEach(function(c,i){if(c&&c.asr)
 var saveT=null;function saveSoon(){clearTimeout(saveT);saveT=setTimeout(function(){readForm();api('/shorts/update',{id:D.id,draft:draftBody()});},1200);}
 function bind(){
   document.querySelectorAll('#main input,#main textarea,#main select').forEach(function(x){if(x.type==='file')return;x.oninput=saveSoon;x.onchange=saveSoon;});
+  // 구간의 클립을 바꾸면 바로 다시 그림 — 빈칸·사진 → 영상으로 바꿨을 때 시작·끝 칸이 나오게(2026-10-31 '빈칸 구간 선택이 안 돼')
+  document.querySelectorAll('.seg select[data-f="clip"]').forEach(function(x){x.onchange=function(){var y=window.scrollY;readForm();editor();window.scrollTo(0,y);saveSoon();};});
   document.querySelectorAll('.seg [data-a]').forEach(function(b){b.onclick=function(){readForm();var i=+b.closest('.seg').getAttribute('data-i'),a=b.getAttribute('data-a'),L=D.scenes;
     if(a==='pv')return preview(i);
     if(a==='rec')return recToggle(L[i]);
