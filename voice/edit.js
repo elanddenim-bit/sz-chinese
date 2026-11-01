@@ -277,7 +277,7 @@ var RW_UNDO=null;
 async function rewriteAll(){
   readForm();var b=$('rwBtn'),note=$('rwNote').value.trim();b.disabled=true;b.textContent='✍️ 다시 쓰는 중…';
   try{
-    var r=await api('/shorts/rewrite',{id:D.id,note:note,scenes:D.scenes.map(function(x){return {len:segLen(x),cap:x.cap||'',say:x.say||''};})});
+    var r=await api('/shorts/rewrite',{id:D.id,note:note,target:D.sec||0,scenes:D.scenes.map(function(x){return {len:segLen(x),cap:x.cap||'',say:x.say||''};})});
     if(!r.ok)throw new Error(r.detail||r.error||'실패');
     RW_UNDO=D.scenes.map(function(x){return {cap:x.cap||'',say:x.say||''};});
     r.segments.forEach(function(y,k){var x=D.scenes[k];if(x){x.cap=y.cap;x.say=y.say;}});
@@ -316,7 +316,10 @@ function editor(){
   if(D.privacy&&D.privacy.length)h+='<div class="card" style="border-color:var(--red)"><h2>🙈 개인정보 확인</h2><p class="note" style="margin:0">AI가 가렸거나 직접 봐야 할 것: '+D.privacy.map(esc).join(' · ')+'. 올리기 전에 ▶ 전체 미리보기로 꼭 확인하세요 — 전화번호·주소·잔액은 한 프레임만 보여도 캡처돼요.</p></div>';
   if(D.mode==='script'){var est=D.scenes.map(function(s){var c=CLIPS[s.clip],st=!c||c.kind!=='video';return Math.max(st?1:segLen(s),(s.say||'').length*0.22+0.5);}),sum=est.reduce(function(a,b){return a+b;},0)||1;
     h+='<div class="card"><h2>📝 타임라인 · 약 '+Math.round(sum)+'초</h2><div class="tl">'+D.scenes.map(function(s,i){var c=CLIPS[s.clip],k=!c||c.kind==='blank'?'b':c.kind==='photo'?'p':'v';return '<i class="'+k+'" style="flex:'+est[i].toFixed(2)+'" data-go="'+i+'" title="#'+(i+1)+'">'+(i+1)+'</i>';}).join('')+'</div><p class="note" style="margin:6px 0 0">🎬 영상 · 📷 사진 · ⬚ 빈칸(빨강). 길이는 내레이션 글자 수로 어림한 값이고, 실제는 목소리 길이에 맞춰요. 탭하면 그 구간으로.</p></div>';}
-  h+='<div class="card"><h2>구간 '+D.scenes.length+'개 · 약 '+Math.round(tot)+'초</h2><p class="note" style="margin:0 0 6px">내레이션이 구간보다 길면 그만큼 늘어나요. 속도 0.5×=슬로모션, 2×=빨리감기.</p><div class="rw"><input type="text" id="rwNote" placeholder="원하는 느낌 (선택) 예: 담백하게, 웃기게"><button id="rwBtn">✍️ 멘트 다시 쓰기</button>'+(RW_UNDO?'<button id="rwUndo">↩ 되돌리기</button>':'')+'</div><video class="prev" id="pv" playsinline muted controls style="display:none"></video>'+D.scenes.map(segHtml).join('')+'<button class="big ghost" id="addSeg">＋ 구간 추가</button></div>';
+  // 목표 길이 넘김 경고(2026-11-01 45초 목표 → 64초): 내레이션 글자 수 어림(0.22초/자) 기준
+  var estT=D.scenes.reduce(function(a,s){return a+Math.max(segLen(s),(s.say||'').replace(/\s/g,'').length*0.22+0.5);},0),over=D.sec&&estT>D.sec*1.15;
+  h+='<div class="card"><h2>구간 '+D.scenes.length+'개 · 약 '+Math.round(tot)+'초</h2><p class="note" style="margin:0 0 6px">내레이션이 구간보다 길면 그만큼 늘어나요. 속도 0.5×=슬로모션, 2×=빨리감기.</p>'
+    +(over?'<p class="err" style="margin:0 0 8px">⚠ 목표 '+D.sec+'초인데 내레이션 기준 약 '+Math.round(estT)+'초예요. 숏츠는 길면 끝까지 안 봐요 — ✍️ 멘트 다시 쓰기를 누르면 '+D.sec+'초에 맞춰 줄여요(가격·비교·끝 질문은 남김).</p>':'')+'<div class="rw"><input type="text" id="rwNote" placeholder="원하는 느낌 (선택) 예: 담백하게, 웃기게"><button id="rwBtn">✍️ 멘트 다시 쓰기</button>'+(RW_UNDO?'<button id="rwUndo">↩ 되돌리기</button>':'')+'</div><video class="prev" id="pv" playsinline muted controls style="display:none"></video>'+D.scenes.map(segHtml).join('')+'<button class="big ghost" id="addSeg">＋ 구간 추가</button></div>';
   h+='<div class="card"><h2>설정</h2><p class="lbl">화면</p>'+chipRow('fit',[['crop','꽉 채우기(가운데 자르기)'],['full','전체 보기(흐린 배경)']],o.fit)
    +'<p class="lbl">원본 소리 <span style="font-weight:400">(내레이션 나올 땐 자동으로 줄어요)</span></p>'+chipRow('orig',[[0,'끄기'],[0.3,'작게'],[1,'그대로']],o.orig)
    +'<p class="lbl">내레이션 목소리</p>'+chipRow('voice',[['Cherry','👩 AI 여성'],['Ethan','👨 AI 남성'],['mine','🗣 내 목소리(AI 복제)'],['rec','🎙 직접 녹음']],o.voice||'Cherry')
