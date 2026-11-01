@@ -105,7 +105,21 @@ var PRESETS=[
   ['남은 돈은 [__]위안, 마지막은 [__]로 할게요','남은 돈 세는 손','탑뷰·고정'],
   ['100위안으로 산 건 이렇게 [__]개예요','산 물건 전부 테이블에 펼치기','탑뷰·고정'],
   ['한국 돈으로 치면 [__]원어치 아낀 셈이에요','물건 하나씩 집어 드는 손','클로즈업'],
-  ['여러분이라면 100위안으로 뭘 사실래요?','봉지 들고 걸어 나가는 뒷모습','미디엄·트래킹']])}];
+  ['여러분이라면 100위안으로 뭘 사실래요?','봉지 들고 걸어 나가는 뒷모습','미디엄·트래킹']])},
+ {id:'p-nanfang',title:'광저우 남방대하 — 100년 백화점이 전자상가로',topic:'광저우 南方大厦: 1922년 대신공사(大新公司) 백화점, 당시 중국에서 가장 높은 건물 → 지금은 전자상가. 어제 화창베이에서 155위안에 산 绿联 100W 충전기 가격 비교',series:'price',
+  tips:['핵심 컷은 绿联 100W 충전기 값 묻기 — 가격표·계산기 화면을 3초 이상, 처음 부른 값과 깎은 값을 메모에','외관은 길 건너 강변에서 아래→위 틸트로 한 번에, 1층 기루 아케이드 기둥도 따로','상인 얼굴·가게 정면 대신 물건과 손 위주, 카메라는 Pocket 4 하나로','한 컷 5~15초, 찍기 전에 몇 번째 줄인지 정하고 녹화'],
+  items:mk([
+  ['어제 선전에서 155위안 준 충전기, 광저우에선 얼마일까요?','绿联 100W 충전기 박스를 손에 들고 남방대하 입구 앞','인서트·아이레벨·고정'],
+  ['여기는 광저우 강변의 남방대하예요','길 건너 강변에서 건물 전체, 아래에서 위로','와이드·로우앵글·틸트'],
+  ['1922년에 백화점으로 지어졌고 그때 중국에서 제일 높은 건물이었대요','1층 아케이드 기둥(骑楼)과 위층 창문','미디엄·로우앵글·고정'],
+  ['차가 옥상까지 올라갈 수 있었다고 하네요','건물 모서리·옥상 쪽 올려다보기','와이드·로우앵글·고정'],
+  ['지금은 100년 된 건물 안이 통째로 전자상가예요','입구에서 안으로 걸어 들어가기(내 시점)','미디엄·아이레벨·트래킹'],
+  ['분위기는 화창베이보다 [조용해요/비슷해요]','상가 통로 전경(가게 정면 피하기)','와이드·아이레벨·팬'],
+  ['같은 绿联 100W 충전기를 물어봤더니 [__]위안','가격 묻고 가격표·계산기 보여 주는 손','인서트·고정'],
+  ['화창베이는 155위안, 京东은 134위안이었어요','폰에서 京东 134위안 화면(어제 캡처 또는 녹화)','폰 화면 녹화'],
+  ['결론은 [__]','충전기 박스 두 개 나란히(또는 하나+계산기)','탑뷰·고정'],
+  ['개조 얘기가 몇 년째 나오는 곳이라 지금 가 볼 만해요','강변 쪽에서 건물과 珠江 같이','와이드·아이레벨·팬'],
+  ['여러분은 이런 데서 전자제품 사 보셨어요?','건물을 나와 강변 걷는 뒷모습','미디엄·트래킹']])}];
 
 // ---- 빈칸 [..] ----
 function parts(say){return String(say||'').split(/\[([^\]]*)\]/);}
@@ -120,7 +134,7 @@ function list(){CUR='';EDIT=false;releaseWL();$('ttl').textContent='📋 촬영 
   if(!CODE){$('main').innerHTML='<div class="gate">숏츠 공방에서 초대 코드를 먼저 넣어 주세요.<br><a class="big" href="/shorts">숏츠 공방으로</a></div>';return;}
   var h='';
   var miss=PRESETS.filter(function(p){return !plan(p.id)&&S.gone.indexOf(p.id)<0;});
-  if(miss.length)h+='<div class="card"><h2>📦 10/31 선전 촬영 계획</h2><p class="note" style="margin:0 0 4px">'+miss.map(function(p){return esc(p.title);}).join(' · ')+' — 대본·컷 리스트가 다 들어 있어요.</p><button class="big ok" id="preset">불러오기</button></div>';
+  if(miss.length)h+='<div class="card"><h2>📦 미리 넣은 촬영 계획</h2><p class="note" style="margin:0 0 4px">'+miss.map(function(p){return esc(p.title);}).join(' · ')+' — 대본·컷 리스트가 다 들어 있어요.</p><button class="big ok" id="preset">불러오기</button></div>';
   h+='<div class="card"><h2>내 촬영 계획</h2>'+(S.plans.length?S.plans.slice().sort(function(a,b){return b.upd-a.upd;}).map(function(p){var d=p.items.filter(function(x){return x.done;}).length;
     return '<div class="plan" data-open="'+esc(p.id)+'"><div class="t"><b>'+esc(p.title)+'</b><small>컷 '+p.items.length+'개'+(blanks(p)?' · 빈칸 '+blanks(p)+'개':'')+'</small></div><span class="n">'+d+'/'+p.items.length+'</span></div>';}).join(''):'<p class="note">아직 없어요. 아래에서 만들어 보세요.</p>')+'</div>';
   h+='<div class="card"><h2>＋ 새 촬영 계획</h2><input type="text" id="topic" placeholder="어디서 뭘 찍나요? 예: 广州 早茶 집 가격"><div class="chips">'+[30,45,60].map(function(s){return '<button class="chip'+(s===SEC?' on':'')+'" data-sec="'+s+'">'+s+'초</button>';}).join('')+'</div>'
