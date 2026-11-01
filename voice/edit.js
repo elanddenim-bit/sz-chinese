@@ -284,6 +284,13 @@ async function rewriteAll(){
     editor();saveSoon();toast('멘트를 다시 썼어요. 마음에 안 들면 ↩ 되돌리기');
   }catch(e){toast('다시 쓰기 실패: '+e.message);b.disabled=false;b.textContent='✍️ 멘트 다시 쓰기';}
 }
+// 대본 모드: 한 줄 = 한 장면이라 내레이션이 다음 컷으로 밀리면 소리·화면이 어긋남(2026-11-01 소유자 '음성이랑 화면 순서가 안 맞아').
+// 구간이 클립 끝 가까이라 내레이션보다 짧으면 시작을 앞당겨(끝 화면은 그대로) 내레이션 길이만큼 확보, 클립 자체가 짧으면 끝 화면 정지로 채움
+function fitScript(narr){if(D.mode!=='script')return;var ch=false;D.scenes.forEach(function(sc,k){var c=CLIPS[sc.clip];if(!c||c.kind!=='video'||!narr[k]||!c.dur)return;
+  var sp=sc.sp||1,need=(narr[k].duration+0.4)*sp;if(sc.e-sc.s>=need)return;
+  var e=Math.min(c.dur-0.05,Math.max(sc.e,sc.s+need)),s=Math.max(0,e-need);sc.s=Math.round(s*10)/10;sc.e=Math.round(e*10)/10;ch=true;});
+  if(ch)try{saveSoon();}catch(e){}}
+function scriptLen(len,nd){return D.mode==='script'&&nd?Math.max(len,nd+0.4):len;}
 function segLen(s){return Math.max(0.3,(s.e-s.s)/(s.sp||1));}
 function segHtml(s,i){
   var c=CLIPS[s.clip],sp=s.sp||1,still=!c||c.kind==='photo'||c.kind==='blank',blank=!c||c.kind==='blank';
@@ -509,7 +516,7 @@ async function render0(dry){
   var lock=null;try{if(navigator.wakeLock)lock=await navigator.wakeLock.request('screen');}catch(e){}
   function prog(t){out.innerHTML='<p class="prog">'+t+'</p>';}
   function finish(){RUN=null;try{if(lock)lock.release();}catch(e){}btn.disabled=false;pb.disabled=false;pb.textContent='▶ 전체 미리보기 (녹화 안 함)';btn.textContent=dry||!btn.getAttribute('data-done')?'🎬 영상 만들기':'🎬 다시 만들기';CLIPS.forEach(function(c){[c.v,c.v2].forEach(function(v){if(v){v.pause();v.playbackRate=1;}});});}
-  var narr=await ensureNarr(ac,prog);await ensureBgm(ac);
+  var narr=await ensureNarr(ac,prog);await ensureBgm(ac);fitScript(narr);
   var tiny=document.createElement('canvas');tiny.width=24;tiny.height=42;var tg=tiny.getContext('2d');
   var sn=document.createElement('canvas');sn.width=720;sn.height=1280;var sgx=sn.getContext('2d'),hasSnap=false;
   var W=720,H=1280,cv=document.createElement('canvas');cv.width=W;cv.height=H;var g=cv.getContext('2d');
@@ -529,7 +536,7 @@ async function render0(dry){
   out.innerHTML='<p class="prog" id="rp">'+(dry?'미리보기 중…':'녹화 중… 화면을 켜 두세요')+'</p><div class="bar"><i id="rb"></i></div>';out.appendChild(cv);cv.className='pv';
   if(dry)cv.scrollIntoView({block:'center',behavior:'smooth'});
   var END=D.opts.end?2:0;
-  var plan=D.scenes.map(function(s,i){var nd=narr[i]?narr[i].duration+0.4:0,c=CLIPS[s.clip],room=c?Math.max(0.3,(c.dur-s.s)/(s.sp||1)):segLen(s);return {s:s,i:i,sp:s.sp||1,seg:segLen(s),nd:narr[i]?narr[i].duration:0,ck:alignW(narr[i],sayChunks(s.say)),len:Math.max(Math.min(Math.max(segLen(s),nd),room),0.8)};}),total=plan.reduce(function(a,p){return a+p.len;},0)+END,doneT=0,bgmPos=0;
+  var plan=D.scenes.map(function(s,i){var nd=narr[i]?narr[i].duration+0.4:0,c=CLIPS[s.clip],room=c?Math.max(0.3,(c.dur-s.s)/(s.sp||1)):segLen(s);return {s:s,i:i,sp:s.sp||1,seg:segLen(s),nd:narr[i]?narr[i].duration:0,ck:alignW(narr[i],sayChunks(s.say)),len:scriptLen(Math.max(Math.min(Math.max(segLen(s),nd),room),0.8),narr[i]?narr[i].duration:0)};}),total=plan.reduce(function(a,p){return a+p.len;},0)+END,doneT=0,bgmPos=0;
   // 배경음악: 구간마다 이어지는 위치부터 짧게 페이드 인·아웃(녹화 일시정지 사이 끊김 없이 이어 붙음), 내레이션 땐 낮춤
   function bgm(at,len,duck,fadeOut){var lv=D.opts.bgv*0.7;if(!BGM||!BGM.buf||!lv)return;var s=ac.createBufferSource(),gn=ac.createGain();s.buffer=BGM.buf;s.loop=true;s.connect(gn);gn.connect(BUS.comp);
     var l=lv*(duck?0.4:1),fo=Math.min(len,fadeOut||0.04);gn.gain.setValueAtTime(0,at);gn.gain.linearRampToValueAtTime(l,at+0.03);gn.gain.setValueAtTime(l,at+Math.max(0.03,len-fo));gn.gain.linearRampToValueAtTime(0,at+len);
@@ -704,13 +711,13 @@ async function cloudRender(){
   var btn=$('cloudBtn'),out=$('out'),ac=getAC(),lbl=btn.textContent,o=D.opts;btn.disabled=true;$('renderBtn').disabled=true;$('pvAll').disabled=true;
   function prog(t,f){out.innerHTML='<p class="prog">'+t+'</p><div class="bar"><i id="cb" style="width:'+Math.round((f||0)*100)+'%"></i></div>';}
   try{
-    var narr=await ensureNarr(ac,function(t){prog(t);});await ensureBgm(ac);
+    var narr=await ensureNarr(ac,function(t){prog(t);});await ensureBgm(ac);fitScript(narr);
     prog('📐 타임라인 짜는 중…');
     var T=0,nEnd=0,vid=[],ovs=[],aud=[],talk=[],used={};
     for(var k=0;k<D.scenes.length;k++){var sc=D.scenes[k],c=CLIPS[sc.clip];if(!c)continue;
       var still=c.kind==='photo'||c.kind==='blank';
       var sp=sc.sp||1,seg=segLen(sc),nd=narr[k]?narr[k].duration:0,room=still?999:Math.max(0.3,(c.dur-sc.s)/sp),hasN=!!narr[k],last=k===D.scenes.length-1;
-      var len=Math.max(Math.min(Math.max(seg,nd?nd+0.4:0),room),0.8),t0=T,ns=0;
+      var len=scriptLen(Math.max(Math.min(Math.max(seg,nd?nd+0.4:0),room),0.8),still?0:nd),t0=T,ns=0;
       if(hasN){ns=Math.max(t0+0.1,nEnd+0.08);nEnd=ns+nd;talk.push([ns,nEnd]);aud.push({k:k,tin:ns,tout:nEnd});}
       if(last&&nEnd>t0+len-0.3)len=nEnd-t0+0.4;
       var vl=Math.min(len,room);
