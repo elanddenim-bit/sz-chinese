@@ -1488,6 +1488,7 @@ export async function ytCallback(env, url) {
   if (!j.refresh_token) return page("토큰을 받지 못했어요: " + String(j.error_description || j.error || r.status).replace(/[<>&]/g, ""));
   const ch = await ytChannel(j.access_token);
   await env.KV.put("yt:" + h, JSON.stringify({ refresh: j.refresh_token, channel: ch.title || "", chId: ch.id || "", scope: j.scope || "", at: Date.now() }));
+  await env.KV.delete("yt:stats:" + h); // 다시 연결하면 예전 권한으로 받은 성적 캐시 버림(2026-11-03 다시 연결 뒤에도 '권한 필요'가 남던 것)
   if (ch.title) return page("✅ 유튜브 채널 <b>" + ch.title.replace(/[<>&]/g, "") + "</b> 연결됐어요.");
   return page("⚠️ 로그인은 됐지만 채널을 찾지 못했어요.<br><small>" + ch.why.replace(/[<>&]/g, "") + "</small><br><br>로그인할 때 <b>채널 이름이 적힌 계정</b>을 고르고, 권한 체크박스를 <b>전부</b> 체크한 뒤 다시 연결해 주세요.");
 }
@@ -1514,7 +1515,7 @@ async function ytToken(env, h) {
 function isoSec(d) { const m = String(d || "").match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/); return m ? (+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0) : 0; }
 async function ytStats(env, h, b) {
   const ck = "yt:stats:" + h;
-  if (!(b && b.fresh)) { const c = await env.KV.get(ck, "json"); if (c && Date.now() - c.at < 10 * 60e3) return { ok: true, ...c, cached: true }; }
+  if (!(b && b.fresh)) { const c = await env.KV.get(ck, "json"); if (c && Date.now() - c.at < 10 * 60e3 && !(c.an && (c.an.need || c.an.err))) return { ok: true, ...c, cached: true }; }
   const { token } = await ytToken(env, h);
   const H = { authorization: "Bearer " + token };
   const get = async (u) => { const r = await fetch("https://www.googleapis.com/youtube/v3/" + u, { headers: H }); const j = await r.json().catch(() => ({})); if (!r.ok) throw serr("유튜브 조회 " + r.status + ": " + ((j.error && j.error.message) || "").slice(0, 160) + (r.status === 403 ? " — 다시 연결해 권한을 모두 체크해 주세요." : ""), 502); return j; };
@@ -1554,7 +1555,9 @@ async function ytAnalytics(token, items) {
   if (!r.ok && r.status === 400) { eng = false; r = await rep({ ...base, metrics: "views,averageViewDuration,averageViewPercentage,subscribersGained" }); }
   if (!r.ok) {
     const msg = ((r.j.error && r.j.error.message) || "").slice(0, 160);
-    return { need: r.status === 403 || r.status === 401, err: "분석 " + r.status + (msg ? ": " + msg : "") };
+    // 403 이어도 권한 문제가 아닐 수 있음(구글 클라우드에서 YouTube Analytics API 미사용 등) → 권한 관련 문구일 때만 '다시 연결' 안내
+    const need = r.status === 401 || (r.status === 403 && /scope|insufficient|permission/i.test(msg) && !/has not been used|disabled|not enabled/i.test(msg));
+    return { need, err: "분석 " + r.status + (msg ? ": " + msg : "") };
   }
   const cols = (r.j.columnHeaders || []).map((c) => c.name), by = {};
   for (const row of r.j.rows || []) { const o = {}; cols.forEach((c, i) => (o[c] = row[i])); by[o.video] = { v: +o.views || 0, ev: eng ? +o.engagedViews || 0 : null, avd: Math.round(+o.averageViewDuration || 0), avp: Math.round((+o.averageViewPercentage || 0) * 10) / 10, subs: +o.subscribersGained || 0 }; }
@@ -2088,7 +2091,7 @@ function stats(fresh){var b=$('stBox');if(!b)return;b.textContent='불러오는 
     h+=it.map(function(x){var hrs=Math.max(1,(Date.now()-x.at)/3600e3);return '<a href="https://youtube.com/shorts/'+esc(x.id)+'" target="_blank" style="display:block;padding:8px 0;border-top:1px solid var(--line);color:var(--ink);text-decoration:none">'
       +'<div style="font-size:14px;line-height:1.35">'+(x.kind==='mine'?'🎥 ':x.kind==='ai'?'🤖 ':'')+esc(x.title)+'</div>'
       +'<div style="font-size:12.5px;color:var(--ink2);margin-top:2px">▶ <b style="color:var(--ink)">'+x.views+'</b> · 👍 '+x.likes+' · 💬 '+x.comments+' · '+ago(x.at)+(x.privacy!=='public'?' · <span style="color:var(--red)">'+(x.privacy==='private'?'비공개':'일부공개')+'</span>':' · 시간당 '+(x.views/hrs).toFixed(1))+'</div>'+anLine(r.an,x)+'</a>';}).join('');
-    var an=r.an;h+=an&&an.need?'<p class="err" style="margin:8px 0 0">📊 시청 비율을 보려면 유튜브 분석 권한이 필요해요 — 아래 📊 채널 탭의 유튜브 연결에서 <b>다시 연결</b>을 누르고 권한을 전부 체크해 주세요.</p>':an&&an.err?'<p class="note">📊 분석을 못 받았어요: '+esc(an.err)+'</p>':'';
+    var an=r.an;h+=an&&an.need?'<p class="err" style="margin:8px 0 0">📊 시청 비율을 보려면 유튜브 분석 권한이 필요해요 — 아래 📊 채널 탭의 유튜브 연결에서 <b>다시 연결</b>을 누르고 권한을 전부 체크해 주세요.<br><small>'+esc(an.err||'')+'</small></p>':an&&an.err?'<p class="note">📊 분석을 못 받았어요: '+esc(an.err)+'</p>':'';
     h+='<p class="note">🎥 편집실 · 🤖 AI 생성. <b>계속 시청</b>=피드에서 넘기지 않고 본 비율(추정, 목표 70%↑) · <b>시청 비율</b>=영상 길이 대비 평균(목표 50%↑) · <b>3초 남음</b>=3초 시점에 남은 시청자. 분석 숫자는 1~2일 늦게 쌓여요. 이 성적은 💡 주제 추천에 자동 반영돼요.</p>';
     b.innerHTML=h;});}
 function ytBox(){
