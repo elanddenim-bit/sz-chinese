@@ -1466,7 +1466,7 @@ export async function shortsFile(req, env, url) {
 
 // ---------------- 유튜브 ----------------
 // force-ssl(2026-10-11): 댓글 읽기(commentThreads.list 는 readonly 로 403 insufficientPermissions) — 이후 답글·제목 실험에도 필요
-const YT_SCOPE = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl";
+const YT_SCOPE = "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/youtube.force-ssl https://www.googleapis.com/auth/yt-analytics.readonly";
 function ytCfg(env) { if (!env.YT_CLIENT_ID || !env.YT_CLIENT_SECRET) throw serr("유튜브 연결 설정(YT_CLIENT_ID·YT_CLIENT_SECRET 시크릿)이 아직 없어요.", 400, "yt_config"); }
 async function ytStart(env, h) {
   ytCfg(env);
@@ -1536,9 +1536,37 @@ async function ytStats(env, h, b) {
       sec: isoSec(x.contentDetails && x.contentDetails.duration), privacy: (x.status && x.status.privacyStatus) || "", kind: m.id ? (m.kind || "ai") : "", series: m.series || "" }; });
   }
   const subs = +((it0.statistics || {}).subscriberCount) || 0;
-  const out = { at: Date.now(), subs, items };
+  const an = await ytAnalytics(token, items);
+  const out = { at: Date.now(), subs, items, an };
   await env.KV.put(ck, JSON.stringify(out), { expirationTtl: 30 * 86400 });
   return { ok: true, ...out };
+}
+// 📊 유튜브 분석(2026-11-03 소유자 '붙여놔' — 万象城 편 '계속 시청함 35%·이탈 65%'를 스튜디오에서만 볼 수 있던 것):
+// yt-analytics.readonly 권한(다시 연결 필요). 영상별 평균 시청 비율·시간·구독 증가 + engagedViews(있으면 '계속 시청' 추정 = engaged/views),
+// 최근 공개 2편은 시청 지속 곡선(elapsedVideoTimeRatio)에서 3초·절반 시점 남은 비율. 분석 데이터는 1~2일 늦게 쌓임
+async function ytAnalytics(token, items) {
+  const pub = items.filter((x) => x.privacy === "public");
+  if (!pub.length) return null;
+  const H = { authorization: "Bearer " + token }, end = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+  const rep = async (q) => { const r = await fetch("https://youtubeanalytics.googleapis.com/v2/reports?" + new URLSearchParams(q), { headers: H }); const j = await r.json().catch(() => ({})); return { ok: r.ok, status: r.status, j }; };
+  const base = { ids: "channel==MINE", startDate: "2020-01-01", endDate: end, dimensions: "video", filters: "video==" + pub.slice(0, 50).map((x) => x.id).join(","), sort: "-views", maxResults: "50" };
+  let r = await rep({ ...base, metrics: "views,engagedViews,averageViewDuration,averageViewPercentage,subscribersGained" }), eng = true;
+  if (!r.ok && r.status === 400) { eng = false; r = await rep({ ...base, metrics: "views,averageViewDuration,averageViewPercentage,subscribersGained" }); }
+  if (!r.ok) {
+    const msg = ((r.j.error && r.j.error.message) || "").slice(0, 160);
+    return { need: r.status === 403 || r.status === 401, err: "분석 " + r.status + (msg ? ": " + msg : "") };
+  }
+  const cols = (r.j.columnHeaders || []).map((c) => c.name), by = {};
+  for (const row of r.j.rows || []) { const o = {}; cols.forEach((c, i) => (o[c] = row[i])); by[o.video] = { v: +o.views || 0, ev: eng ? +o.engagedViews || 0 : null, avd: Math.round(+o.averageViewDuration || 0), avp: Math.round((+o.averageViewPercentage || 0) * 10) / 10, subs: +o.subscribersGained || 0 }; }
+  // 최근 공개 2편 시청 지속 곡선 → 3초 시점·절반 시점 남은 비율(audienceWatchRatio, 1=100%)
+  const ret = {};
+  for (const x of pub.slice().sort((a, c) => c.at - a.at).slice(0, 2)) {
+    const q = await rep({ ids: "channel==MINE", startDate: "2020-01-01", endDate: end, dimensions: "elapsedVideoTimeRatio", metrics: "audienceWatchRatio", filters: "video==" + x.id });
+    if (!q.ok || !(q.j.rows || []).length || !x.sec) continue;
+    const pts = q.j.rows.map((row) => [+row[0], +row[1]]), at = (t) => { let b = pts[0]; for (const p of pts) if (Math.abs(p[0] - t) < Math.abs(b[0] - t)) b = p; return Math.round(b[1] * 100); };
+    ret[x.id] = { s3: at(Math.min(1, 3 / x.sec)), half: at(0.5), end: at(1) };
+  }
+  return { by, ret, eng, at: Date.now() };
 }
 async function ytStatus(env, h) {
   if (!env.YT_CLIENT_ID || !env.YT_CLIENT_SECRET) return { ok: true, config: false };
@@ -2043,6 +2071,12 @@ function avWait(task){var b=$('avGo');if(b)b.disabled=true;var tick=function(){a
   if(p.status==='done'){$('avProg').textContent='완성!';if(b)b.disabled=false;api('/shorts/avatar/state').then(function(r){if(r.ok)avShow(r);});return;}
   if(p.status==='failed'||p.status==='none'){if(b)b.disabled=false;$('avProg').textContent='';if(p.status==='failed')$('avErr').textContent='실패(과금 안 됨): '+(p.detail||'');return;}
   $('avProg').innerHTML='<span class="spin">⏳</span> '+(p.status==='PENDING'?'차례 기다리는 중':p.status==='RETRY'?'그리는 중(조회 재시도)':'그리는 중')+(p.el?' · '+Math.floor(p.el/60)+'분 '+(p.el%60)+'초':'')+' — 화면을 닫아도 나중에 이어져요';setTimeout(tick,15000);}).catch(function(){setTimeout(tick,20000);});};tick();}
+// 📊 영상별 분석 한 줄: 계속 시청(engaged/views)·평균 시청 비율·시간·구독 증가 + 최근 2편 3초/절반 시점 남은 비율
+function anLine(an,x){if(!an||!an.by)return '';var a=an.by[x.id];if(!a)return x.privacy==='public'?'<div style="font-size:12px;color:var(--ink2);margin-top:2px">📊 분석 집계 전(1~2일)</div>':'';
+  var c=function(v,g,b){return '<b style="color:'+(v>=g?'var(--ok)':v<b?'var(--red)':'var(--ink)')+'">'+v+'%</b>';},o=[];
+  if(a.ev!=null&&a.v)o.push('계속 시청 '+c(Math.round(a.ev/a.v*100),70,50));o.push('시청 비율 '+c(Math.round(a.avp),50,35));o.push('평균 '+a.avd+'초');if(a.subs)o.push('구독 +'+a.subs);
+  var rt=an.ret&&an.ret[x.id];if(rt)o.push('3초 남음 '+c(rt.s3,70,50)+' · 절반 '+rt.half+'%');
+  return '<div style="font-size:12px;color:var(--ink2);margin-top:2px">📊 '+o.join(' · ')+'</div>';}
 function ago(t){var hh=(Date.now()-t)/3600e3;return hh<1?'방금':hh<48?Math.round(hh)+'시간 전':Math.round(hh/24)+'일 전';}
 function stats(fresh){var b=$('stBox');if(!b)return;b.textContent='불러오는 중…';
   api('/shorts/yt/stats',{fresh:fresh}).then(function(r){if(!r.ok){b.textContent=r.detail||r.error;return;}
@@ -2053,8 +2087,9 @@ function stats(fresh){var b=$('stBox');if(!b)return;b.textContent='불러오는 
     if(best)h+='<p style="margin:0 0 8px;font-size:13.5px;color:var(--ink)">🏆 하루당 조회 1위: <b>'+esc(best.x.title)+'</b> ('+Math.round(best.d)+'회/일)</p>';
     h+=it.map(function(x){var hrs=Math.max(1,(Date.now()-x.at)/3600e3);return '<a href="https://youtube.com/shorts/'+esc(x.id)+'" target="_blank" style="display:block;padding:8px 0;border-top:1px solid var(--line);color:var(--ink);text-decoration:none">'
       +'<div style="font-size:14px;line-height:1.35">'+(x.kind==='mine'?'🎥 ':x.kind==='ai'?'🤖 ':'')+esc(x.title)+'</div>'
-      +'<div style="font-size:12.5px;color:var(--ink2);margin-top:2px">▶ <b style="color:var(--ink)">'+x.views+'</b> · 👍 '+x.likes+' · 💬 '+x.comments+' · '+ago(x.at)+(x.privacy!=='public'?' · <span style="color:var(--red)">'+(x.privacy==='private'?'비공개':'일부공개')+'</span>':' · 시간당 '+(x.views/hrs).toFixed(1))+'</div></a>';}).join('');
-    h+='<p class="note">🎥 편집실 · 🤖 AI 생성. 첫 화면에서 넘긴 비율·시청 비율은 유튜브 스튜디오 → 분석에서 봐요. 이 성적은 💡 주제 추천에 자동 반영돼요.</p>';
+      +'<div style="font-size:12.5px;color:var(--ink2);margin-top:2px">▶ <b style="color:var(--ink)">'+x.views+'</b> · 👍 '+x.likes+' · 💬 '+x.comments+' · '+ago(x.at)+(x.privacy!=='public'?' · <span style="color:var(--red)">'+(x.privacy==='private'?'비공개':'일부공개')+'</span>':' · 시간당 '+(x.views/hrs).toFixed(1))+'</div>'+anLine(r.an,x)+'</a>';}).join('');
+    var an=r.an;h+=an&&an.need?'<p class="err" style="margin:8px 0 0">📊 시청 비율을 보려면 유튜브 분석 권한이 필요해요 — 아래 📊 채널 탭의 유튜브 연결에서 <b>다시 연결</b>을 누르고 권한을 전부 체크해 주세요.</p>':an&&an.err?'<p class="note">📊 분석을 못 받았어요: '+esc(an.err)+'</p>':'';
+    h+='<p class="note">🎥 편집실 · 🤖 AI 생성. <b>계속 시청</b>=피드에서 넘기지 않고 본 비율(추정, 목표 70%↑) · <b>시청 비율</b>=영상 길이 대비 평균(목표 50%↑) · <b>3초 남음</b>=3초 시점에 남은 시청자. 분석 숫자는 1~2일 늦게 쌓여요. 이 성적은 💡 주제 추천에 자동 반영돼요.</p>';
     b.innerHTML=h;});}
 function ytBox(){
   api('/shorts/yt/status').then(function(y){var b=$('ytBox');if(!b)return;
