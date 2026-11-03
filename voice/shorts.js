@@ -1563,7 +1563,7 @@ async function ytAnalytics(token, items) {
   for (const row of r.j.rows || []) { const o = {}; cols.forEach((c, i) => (o[c] = row[i])); by[o.video] = { v: +o.views || 0, ev: eng ? +o.engagedViews || 0 : null, avd: Math.round(+o.averageViewDuration || 0), avp: Math.round((+o.averageViewPercentage || 0) * 10) / 10, subs: +o.subscribersGained || 0 }; }
   // 최근 공개 2편 시청 지속 곡선 → 3초 시점·절반 시점 남은 비율(audienceWatchRatio, 1=100%)
   const ret = {};
-  for (const x of pub.slice().sort((a, c) => c.at - a.at).slice(0, 2)) {
+  for (const x of pub.filter((x) => by[x.id] && by[x.id].v > 0).sort((a, c) => c.at - a.at).slice(0, 3)) { // 집계된 영상 중 최근 3편(집계 전 영상은 곡선이 없음)
     const q = await rep({ ids: "channel==MINE", startDate: "2020-01-01", endDate: end, dimensions: "elapsedVideoTimeRatio", metrics: "audienceWatchRatio", filters: "video==" + x.id });
     if (!q.ok || !(q.j.rows || []).length || !x.sec) continue;
     const pts = q.j.rows.map((row) => [+row[0], +row[1]]), at = (t) => { let b = pts[0]; for (const p of pts) if (Math.abs(p[0] - t) < Math.abs(b[0] - t)) b = p; return Math.round(b[1] * 100); };
