@@ -325,7 +325,7 @@ function editor(){
    +'<p class="lbl">내레이션 목소리</p>'+chipRow('voice',[['Cherry','👩 AI 여성'],['Ethan','👨 AI 남성'],['mine','🗣 내 목소리(AI 복제)'],['rec','🎙 직접 녹음']],o.voice||'Cherry')
    +((o.voice==='rec')?'<p class="note">구간마다 🎙 녹음을 눌러 직접 말하세요. 녹음은 이 화면을 닫으면 사라져요.</p>':(o.voice==='mine')?'<p class="note">실전 중국어 발음 탭에서 등록한 목소리로 한국어를 읽어요. 등록 전이면 AI 여성 목소리로 나와요.</p>':'')
    +'<p class="lbl">내레이션 크기</p>'+chipRow('nv',[[1,'보통'],[1.5,'크게'],[2,'아주 크게']],o.nv||1.5)
-   +'<p class="lbl">목소리 톤(내 목소리)</p>'+chipRow('vt',[['calm','차분'],['up','활기'],['hot','신남']],o.vt||'up')
+   +'<p class="lbl">목소리 톤(내 목소리)</p>'+chipRow('vt',[['calm','차분'],['up','활기'],['hot','신남']],o.vt||'calm')
    +'<p class="lbl">자막 글꼴</p>'+chipRow('font',[['game','🎮 게임 글꼴(블랙한 + 금색)'],['sys','아이폰 기본']],o.font||'game')+'<p class="note" style="font-family:&quot;BB Lilita&quot;,&quot;BB BlackHan&quot;,sans-serif;font-size:17px;color:#fff;-webkit-text-stroke:2px #0B1A2A;paint-order:stroke fill;text-shadow:0 2px 0 #0B1A2A;background:#1664B0;border-radius:8px;padding:6px 10px">광저우 물가 1분 · 15위안 = 2,900원</p>'
    +'<p class="lbl">내레이션 · 자막 · 끝 화면</p><div class="chips"><button class="chip'+(o.narr?' on':'')+'" data-o="narr">🔊 내레이션</button><button class="chip'+(o.subs?' on':'')+'" data-o="subs">💬 자막</button><button class="chip'+(o.end?' on':'')+'" data-o="end">🔔 끝에 구독 카드(2초)</button></div>'
    +'<p class="lbl">영상 속 말 자막 <span style="font-weight:400">(현지인 중국어·광둥어 → 한국어)</span></p><div class="chips"><button class="chip'+(o.osub?' on':'')+'" data-o="osub">🗣 영상 속 말 자막</button></div>'+(o.osub?osubHtml():'')
@@ -450,7 +450,7 @@ async function ensureNarr(ac,prog){
     prog('🔊 내레이션 '+(i+1)+'/'+D.scenes.length);
     var sc=D.scenes[i],vo=D.opts.voice||'Cherry';
     if(vo==='rec'){if(!sc._rec)continue;try{out[i]=await decode(ac,await sc._rec.blob.arrayBuffer());}catch(e){toast('#'+(i+1)+' 녹음을 읽지 못했어요');}continue;}
-    var vt=D.opts.vt||'up',key='r4|'+vo+'|'+(vo==='mine'?vt:'')+'|'+t,n=sc._narr; // r4: 목소리 톤(2026-11-06 '내 목소리가 졸리다' — 기본 활기) // r3: 소리 크게(volume 100) 다시 만든 내레이션 // r2: 읽기용 문장 다듬기(2026-10-12) 이후 내레이션 — 예전 것은 다시 만듦
+    var vt=D.opts.vt||'calm',key='r5|'+vo+'|'+(vo==='mine'?vt:'')+'|'+t,n=sc._narr; // r5: 목소리 톤 칩(2026-11-06) — 소유자가 새로 녹음한 목소리 + 차분이 기본 // r3: 소리 크게(volume 100) 다시 만든 내레이션 // r2: 읽기용 문장 다듬기(2026-10-12) 이후 내레이션 — 예전 것은 다시 만듦
     // 실패하면 한 번 더, 그래도 없으면 빠진 채로 만들지 않고 멈춤(예전엔 조용히 건너뛰어 내레이션이 날아갔음)
     if(!n||n.key!==key){var r=await api('/shorts/asset',{id:D.id,n:i,kind:'say',text:t,voice:vo,tone:vt});if(!r.ok){await new Promise(function(z){setTimeout(z,1500);});r=await api('/shorts/asset',{id:D.id,n:i,kind:'say',text:t,voice:vo,tone:vt});}
       if(!r.ok)throw new Error('#'+(i+1)+' 내레이션을 만들지 못했어요('+(r.detail||r.error)+'). 잠시 뒤 다시 눌러 주세요.');n=sc._narr={key:key,url:r.url,buf:null};}

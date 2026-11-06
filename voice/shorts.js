@@ -774,7 +774,7 @@ async function asset(env, b, h, synth) {
       const kr = await env.KV.get("voice:kr:" + h);
       const mine = kr || (await env.KV.get("voice:" + h));
       if (!mine) { useAi = true; why = "내 목소리 미등록 → AI 여성"; }
-      else try { bytes = await sayMine(env, synth, mine, speakText, !!kr, TONES[b.tone] ? b.tone : "up"); ext = "mp3"; ct = "audio/mpeg"; } catch (e) { why = "내 목소리: " + String(e.message || e).slice(0, 100); }
+      else try { bytes = await sayMine(env, synth, mine, speakText, !!kr, TONES[b.tone] ? b.tone : "calm"); ext = "mp3"; ct = "audio/mpeg"; } catch (e) { why = "내 목소리: " + String(e.message || e).slice(0, 100); }
     }
     if (!bytes && useAi) try {
       const j = await dsPost(env, "/services/aigc/multimodal-generation/generation", { model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text: speakText, voice: want === "mine" ? "Cherry" : want, language_type: "Korean" } });
@@ -1250,7 +1250,7 @@ async function krTry(env, b, h, synth) {
   const text = String(b.text || "광저우 万象城 커피 520ml가 21위안, 우리 돈 4,200원이에요. 스벅 톨보다 크고 싸요!").slice(0, 120);
   const kr = await env.KV.get(krKey(h));
   const read = await readable(env, text);
-  const bytes = await sayMine(env, synth, voice, read, voice === kr, TONES[b.tone] ? b.tone : "up");
+  const bytes = await sayMine(env, synth, voice, read, voice === kr, TONES[b.tone] ? b.tone : "calm");
   // 파일 이름은 /shorts/file 허용 글자([\w.])만 — '-' 를 넣었다가 재생 403(2026-10-12). 들을 때마다 새 이름(브라우저 캐시 회피), 이전 것은 지움
   const k = "shorts/" + h + "/" + AVA + "/try" + (voice.slice(-6).replace(/[^\w]/g, "")) + "_" + Date.now().toString(36) + ".mp3";
   const prev = await env.KV.get("shorts:try:" + h);
