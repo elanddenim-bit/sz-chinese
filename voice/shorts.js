@@ -109,9 +109,12 @@ async function readable(env, text) {
 }
 // 한국어로 복제한 내 목소리는 한국어 힌트·보통 속도로(공부용 중국어 목소리는 기존 그대로)
 // 숏츠 내레이션은 CosyVoice volume 100(기본 50 — 2026-10-12 '내레이션이 너무 작다')
-async function sayMine(env, synth, voice, text, kr) {
-  if (!kr) { try { return await synth(env, voice, text, null, { volume: 100 }); } catch (e) { return await synth(env, voice, text); } }
-  try { return await synth(env, voice, text, null, { language_hints: ["ko"], rate: 1.0, volume: 100 }); }
+// 목소리 톤(2026-11-06 소유자 아내 '내 목소리 AI 가 너무 졸리다'): CosyVoice 복제 목소리는 말투 지시를 못 받아 빠르기·음높이로 활기를 올림
+const TONES = { calm: { rate: 1.0, pitch: 1.0 }, up: { rate: 1.12, pitch: 1.06 }, hot: { rate: 1.2, pitch: 1.12 } };
+async function sayMine(env, synth, voice, text, kr, tone) {
+  const tn = TONES[tone] || TONES.calm;
+  if (!kr) { try { return await synth(env, voice, text, null, { volume: 100, ...tn }); } catch (e) { return await synth(env, voice, text); } }
+  try { return await synth(env, voice, text, null, { language_hints: ["ko"], volume: 100, ...tn }); }
   catch (e) { return await synth(env, voice, text, null, { volume: 100 }).catch(() => synth(env, voice, text)); }
 }
 
@@ -771,7 +774,7 @@ async function asset(env, b, h, synth) {
       const kr = await env.KV.get("voice:kr:" + h);
       const mine = kr || (await env.KV.get("voice:" + h));
       if (!mine) { useAi = true; why = "내 목소리 미등록 → AI 여성"; }
-      else try { bytes = await sayMine(env, synth, mine, speakText, !!kr); ext = "mp3"; ct = "audio/mpeg"; } catch (e) { why = "내 목소리: " + String(e.message || e).slice(0, 100); }
+      else try { bytes = await sayMine(env, synth, mine, speakText, !!kr, TONES[b.tone] ? b.tone : "up"); ext = "mp3"; ct = "audio/mpeg"; } catch (e) { why = "내 목소리: " + String(e.message || e).slice(0, 100); }
     }
     if (!bytes && useAi) try {
       const j = await dsPost(env, "/services/aigc/multimodal-generation/generation", { model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text: speakText, voice: want === "mine" ? "Cherry" : want, language_type: "Korean" } });
