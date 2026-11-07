@@ -522,7 +522,7 @@ async function assemble(env, b, h) {
   let title = String(out.title || topic || L[0] || "숏츠");
   if (ser) { const ck = "shorts:series:" + h + ":" + b.series, n = (Number(await env.KV.get(ck)) || 0) + 1; await env.KV.put(ck, String(n)); title = "[" + ser.name + " #" + n + "] " + title.replace(/^\[[^\]]*\]\s*/, ""); }
   const d = { id, kind: "mine", mode: "script", series: ser ? b.series : "", topic: topic || L[0].slice(0, 40), sec, angle: b.angle || "mix", made: Date.now(), title: title.slice(0, 90), description: String(out.description || "").slice(0, 900),
-    tags: (Array.isArray(out.tags) ? out.tags : []).map((t) => String(t).replace(/^#/, "").slice(0, 30)).slice(0, 10), clips, scenes, opts: { fit: "crop", orig: 0.3, narr: true, subs: true } };
+    tags: (Array.isArray(out.tags) ? out.tags : []).map((t) => String(t).replace(/^#/, "").slice(0, 30)).slice(0, 10), clips, scenes, opts: { fit: "crop", orig: 0.3, narr: true, subs: true, voice: "wife", vt: "calm" } };
   await env.KV.put(draftKey(h, id), JSON.stringify(d), { expirationTtl: 120 * 86400 });
   const l = (await env.KV.get(listKey(h), "json")) || [];
   l.unshift({ id, title: d.title, made: d.made, kind: "mine", series: d.series });
@@ -717,7 +717,7 @@ async function update(env, b, h) {
     return o;
   });
   if (d.kind === "mine" && u.asr && typeof u.asr === "object" && Array.isArray(d.clips)) for (const k of Object.keys(u.asr)) { const c = d.clips[Number(k)]; if (c && Array.isArray(u.asr[k])) c.asr = cleanAsr(u.asr[k]); }
-  if (u.opts && typeof u.opts === "object") d.opts = { fit: u.opts.fit === "full" ? "full" : "crop", orig: [0, 0.3, 1].includes(Number(u.opts.orig)) ? Number(u.opts.orig) : 0.3, narr: u.opts.narr !== false, subs: u.opts.subs !== false, voice: ["Cherry", "Ethan", "mine", "wife", "rec"].includes(u.opts.voice) ? u.opts.voice : "Cherry", end: u.opts.end !== false, tag: typeof u.opts.tag === "string" ? u.opts.tag.slice(0, 20) : "📍 광저우 广州", bgv: [0, 0.07, 0.12, 0.22].includes(Number(u.opts.bgv)) ? Number(u.opts.bgv) : 0.12, nv: [1, 1.5, 2].includes(Number(u.opts.nv)) ? Number(u.opts.nv) : 1.5 };
+  if (u.opts && typeof u.opts === "object") d.opts = { fit: u.opts.fit === "full" ? "full" : "crop", orig: [0, 0.3, 1].includes(Number(u.opts.orig)) ? Number(u.opts.orig) : 0.3, narr: u.opts.narr !== false, subs: u.opts.subs !== false, voice: ["Cherry", "Ethan", "mine", "wife", "rec"].includes(u.opts.voice) ? u.opts.voice : "wife", end: u.opts.end !== false, tag: typeof u.opts.tag === "string" ? u.opts.tag.slice(0, 20) : "📍 광저우 广州", bgv: [0, 0.07, 0.12, 0.22].includes(Number(u.opts.bgv)) ? Number(u.opts.bgv) : 0.12, nv: [1, 1.5, 2].includes(Number(u.opts.nv)) ? Number(u.opts.nv) : 1.5, vt: ["soft", "calm", "up", "hot"].includes(u.opts.vt) ? u.opts.vt : "calm", font: u.opts.font === "sys" ? "sys" : "game" };
   if (b.yt) d.yt = b.yt;
   await env.KV.put(draftKey(h, id), JSON.stringify(d), { expirationTtl: 120 * 86400 });
   if (u.title || b.yt) {
@@ -773,13 +773,13 @@ async function asset(env, b, h, synth) {
     if (want === "wife") { // 🎙 아내 목소리(2026-11-07) — KV voice:krw:<해시>, 미등록이면 AI 여성
       const wv = await env.KV.get(krKey(h, "wife"));
       if (!wv) { useAi = true; why = "아내 목소리 미등록 → AI 여성"; }
-      else try { bytes = await sayMine(env, synth, wv, speakText, true, TONES[b.tone] ? b.tone : "soft"); ext = "mp3"; ct = "audio/mpeg"; } catch (e) { why = "아내 목소리: " + String(e.message || e).slice(0, 100); }
+      else try { bytes = await sayMine(env, synth, wv, speakText, true, TONES[b.tone] ? b.tone : "calm"); ext = "mp3"; ct = "audio/mpeg"; } catch (e) { why = "아내 목소리: " + String(e.message || e).slice(0, 100); }
     }
     if (want === "mine") {
       const kr = await env.KV.get("voice:kr:" + h);
       const mine = kr || (await env.KV.get("voice:" + h));
       if (!mine) { useAi = true; why = "내 목소리 미등록 → AI 여성"; }
-      else try { bytes = await sayMine(env, synth, mine, speakText, !!kr, TONES[b.tone] ? b.tone : "soft"); ext = "mp3"; ct = "audio/mpeg"; } catch (e) { why = "내 목소리: " + String(e.message || e).slice(0, 100); }
+      else try { bytes = await sayMine(env, synth, mine, speakText, !!kr, TONES[b.tone] ? b.tone : "calm"); ext = "mp3"; ct = "audio/mpeg"; } catch (e) { why = "내 목소리: " + String(e.message || e).slice(0, 100); }
     }
     if (!bytes && useAi) try {
       const j = await dsPost(env, "/services/aigc/multimodal-generation/generation", { model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text: speakText, voice: want === "mine" || want === "wife" ? "Cherry" : want, language_type: "Korean" } });
@@ -1258,7 +1258,7 @@ async function krTry(env, b, h, synth) {
   const text = String(b.text || "광저우 万象城 커피 520ml가 21위안, 우리 돈 4,200원이에요. 스벅 톨보다 크고 싸요!").slice(0, 120);
   const kr = await env.KV.get(krKey(h, who));
   const read = await readable(env, text);
-  const bytes = await sayMine(env, synth, voice, read, voice === kr, TONES[b.tone] ? b.tone : "soft");
+  const bytes = await sayMine(env, synth, voice, read, voice === kr, TONES[b.tone] ? b.tone : "calm");
   // 파일 이름은 /shorts/file 허용 글자([\w.])만 — '-' 를 넣었다가 재생 403(2026-10-12). 들을 때마다 새 이름(브라우저 캐시 회피), 이전 것은 지움
   const k = "shorts/" + h + "/" + AVA + "/try" + (voice.slice(-6).replace(/[^\w]/g, "")) + "_" + Date.now().toString(36) + ".mp3";
   const prev = await env.KV.get("shorts:try:" + h);
@@ -2017,7 +2017,7 @@ function home(){
     var t0='make';try{t0=localStorage.getItem('sh-tab')||'make';}catch(e){}if(!P[t0])t0='make';goTab(t0);
   }).catch(function(){gate('서버에 연결하지 못했어요');});
 }
-var AV={voice:'Cherry',res:'480P'};try{AV.voice=localStorage.getItem('av-voice')||'Cherry';}catch(e){}
+var AV={voice:'wife',res:'480P'};try{AV.voice=localStorage.getItem('av-voice')||'wife';}catch(e){}
 function ava(){
   $('main').innerHTML='<a href="#" id="avBack" class="note">← 숏츠 공방</a><div class="card"><h2>🎙 숏츠용 내 목소리 (한국어)</h2><div id="krBox-me"></div></div><div class="card"><h2>🎙 아내 목소리 (한국어)</h2><div id="krBox-wife"></div></div><div class="card"><h2>🗣 캐릭터가 말하기 <small style="font-weight:400;color:var(--ink2)">시험</small></h2><p class="note">그림 한 장 + 대사 → 입이 움직이는 영상. 얼굴 대신 캐릭터가 말하게. 한 번에 20초 미만, 만드는 데 5~10분.</p><div id="avFace"></div><p class="lbl">대사 (90자까지, 한국어)</p><textarea id="avText" maxlength="90" placeholder="예: 광저우에서 아메리카노 한 잔, 얼마일까요? 한국 돈으로 3천 원이 안 돼요."></textarea><p class="note" id="avLen"></p>'
     +'<p class="lbl">목소리</p><div class="chips">'+[['Cherry','AI 여성'],['Ethan','AI 남성'],['mine','내 목소리'],['wife','아내 목소리']].map(function(v){return '<button class="chip'+(v[0]===AV.voice?' on':'')+'" data-av="'+v[0]+'">'+v[1]+'</button>';}).join('')+'</div>'
