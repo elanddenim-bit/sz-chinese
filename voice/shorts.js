@@ -110,7 +110,7 @@ async function readable(env, text) {
 // 한국어로 복제한 내 목소리는 한국어 힌트·보통 속도로(공부용 중국어 목소리는 기존 그대로)
 // 숏츠 내레이션은 CosyVoice volume 100(기본 50 — 2026-10-12 '내레이션이 너무 작다')
 // 목소리 톤(2026-11-06 소유자 아내 '내 목소리 AI 가 너무 졸리다'): CosyVoice 복제 목소리는 말투 지시를 못 받아 빠르기·음높이로 활기를 올림
-const TONES = { calm: { rate: 1.0, pitch: 1.0 }, up: { rate: 1.12, pitch: 1.06 }, hot: { rate: 1.2, pitch: 1.12 } };
+const TONES = { soft: { rate: 0.94, pitch: 0.94 }, calm: { rate: 1.0, pitch: 1.0 }, up: { rate: 1.12, pitch: 1.06 }, hot: { rate: 1.2, pitch: 1.12 } };
 async function sayMine(env, synth, voice, text, kr, tone) {
   const tn = TONES[tone] || TONES.calm;
   if (!kr) { try { return await synth(env, voice, text, null, { volume: 100, ...tn }); } catch (e) { return await synth(env, voice, text); } }
@@ -774,7 +774,7 @@ async function asset(env, b, h, synth) {
       const kr = await env.KV.get("voice:kr:" + h);
       const mine = kr || (await env.KV.get("voice:" + h));
       if (!mine) { useAi = true; why = "내 목소리 미등록 → AI 여성"; }
-      else try { bytes = await sayMine(env, synth, mine, speakText, !!kr, TONES[b.tone] ? b.tone : "calm"); ext = "mp3"; ct = "audio/mpeg"; } catch (e) { why = "내 목소리: " + String(e.message || e).slice(0, 100); }
+      else try { bytes = await sayMine(env, synth, mine, speakText, !!kr, TONES[b.tone] ? b.tone : "soft"); ext = "mp3"; ct = "audio/mpeg"; } catch (e) { why = "내 목소리: " + String(e.message || e).slice(0, 100); }
     }
     if (!bytes && useAi) try {
       const j = await dsPost(env, "/services/aigc/multimodal-generation/generation", { model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text: speakText, voice: want === "mine" ? "Cherry" : want, language_type: "Korean" } });
@@ -1250,7 +1250,7 @@ async function krTry(env, b, h, synth) {
   const text = String(b.text || "광저우 万象城 커피 520ml가 21위안, 우리 돈 4,200원이에요. 스벅 톨보다 크고 싸요!").slice(0, 120);
   const kr = await env.KV.get(krKey(h));
   const read = await readable(env, text);
-  const bytes = await sayMine(env, synth, voice, read, voice === kr, TONES[b.tone] ? b.tone : "calm");
+  const bytes = await sayMine(env, synth, voice, read, voice === kr, TONES[b.tone] ? b.tone : "soft");
   // 파일 이름은 /shorts/file 허용 글자([\w.])만 — '-' 를 넣었다가 재생 403(2026-10-12). 들을 때마다 새 이름(브라우저 캐시 회피), 이전 것은 지움
   const k = "shorts/" + h + "/" + AVA + "/try" + (voice.slice(-6).replace(/[^\w]/g, "")) + "_" + Date.now().toString(36) + ".mp3";
   const prev = await env.KV.get("shorts:try:" + h);
@@ -2031,7 +2031,7 @@ function krCard(){var b=$('krBox');if(!b)return;b.innerHTML='<p class="note">확
   api('/shorts/voice/status').then(function(r){if(!$('krBox'))return;var st=r.voice?(r.status==='OK'?'✅ 사용 중':r.status==='UNDEPLOYED'?'❌ 녹음이 불분명해 거절됨 — 다시 녹음':'⏳ 만드는 중('+esc(r.status||'')+')'):'아직 없음 — 지금은 중국어 공부용 목소리를 대신 씀';
     b.innerHTML='<p class="note" style="margin-top:0">'+st+'</p>'
       +(r.voice&&r.status==='OK'?'':'<details'+(r.voice?'':' open')+'><summary class="note">녹음 방법 · 읽을 글</summary><p class="note">조용한 방, 폰을 입에서 20cm쯤, 유튜브에서 말하듯 <b>평소보다 한 톤 높고 밝게</b> 25~30초(녹음한 톤이 그대로 복제돼요). 중간에 2초 넘게 쉬지 않기.</p><div style="background:var(--bg);border-radius:10px;padding:10px;font-size:15px;line-height:1.6">'+esc(KRS)+'</div></details>')
-      +'<div class="mini" style="margin-top:8px"><button id="krRec">'+(r.voice?'● 다시 녹음':'● 녹음 시작')+'</button>'+(r.voice&&r.status==='OK'?'<button class="krT" data-t="calm">▶ 차분</button><button class="krT" data-t="up">▶ 활기</button><button class="krT" data-t="hot">▶ 신남</button>':'')+'</div><div class="err" id="krErr"></div>';
+      +'<div class="mini" style="margin-top:8px"><button id="krRec">'+(r.voice?'● 다시 녹음':'● 녹음 시작')+'</button>'+(r.voice&&r.status==='OK'?'<button class="krT" data-t="soft">▶ 부드럽게</button><button class="krT" data-t="calm">▶ 차분</button><button class="krT" data-t="up">▶ 활기</button><button class="krT" data-t="hot">▶ 신남</button>':'')+'</div><div class="err" id="krErr"></div>';
     $('krRec').onclick=krRecord;document.querySelectorAll('.krT').forEach(function(x){x.onclick=krTry;});
     if(r.voice&&r.status!=='OK'&&r.status!=='UNDEPLOYED')setTimeout(krCard,8000);});}
 function krTry(){var b=this,t0=Date.now(),tn=b.getAttribute('data-t')||'up',lb=b.textContent;b.disabled=true;
@@ -2040,7 +2040,7 @@ function krTry(){var b=this,t0=Date.now(),tn=b.getAttribute('data-t')||'up',lb=b
   var tk=setInterval(function(){b.textContent='만드는 중… '+Math.round((Date.now()-t0)/1000)+'초';},500);
   api('/shorts/voice/try',{tone:tn,text:($('avText')&&$('avText').value.trim())||''}).then(function(r){clearInterval(tk);b.disabled=false;b.textContent=lb;
     if(!r.ok){$('krErr').textContent=r.detail||r.error;return;}
-    $('krErr').innerHTML='<audio src="'+r.url+'" controls playsinline style="width:100%;margin-top:6px"></audio><span class="note">'+(r.which==='kr'?'한국어 목소리':'공부용 목소리')+' · '+({calm:'차분',up:'활기',hot:'신남'}[tn])+' · '+Math.round((Date.now()-t0)/1000)+'초</span>'+(r.read&&r.read!==r.text?'<p class="note" style="margin-top:6px">자막: '+esc(r.text)+'<br>실제로 읽은 문장: <b>'+esc(r.read)+'</b></p>':'<p class="note" style="margin-top:6px">읽은 문장: '+esc(r.text||'')+'</p>');
+    $('krErr').innerHTML='<audio src="'+r.url+'" controls playsinline style="width:100%;margin-top:6px"></audio><span class="note">'+(r.which==='kr'?'한국어 목소리':'공부용 목소리')+' · '+({soft:'부드럽게',calm:'차분',up:'활기',hot:'신남'}[tn])+' · '+Math.round((Date.now()-t0)/1000)+'초</span>'+(r.read&&r.read!==r.text?'<p class="note" style="margin-top:6px">자막: '+esc(r.text)+'<br>실제로 읽은 문장: <b>'+esc(r.read)+'</b></p>':'<p class="note" style="margin-top:6px">읽은 문장: '+esc(r.text||'')+'</p>');
     a.src=r.url;var p=a.play();if(p&&p.catch)p.catch(function(){toast('▶ 재생 버튼을 눌러 주세요');});
   }).catch(function(e){clearInterval(tk);b.disabled=false;b.textContent=lb;$('krErr').textContent='연결 실패: '+(e.message||e);});}
 async function krRecord(){var btn=$('krRec');if(KREC){KREC.stop();return;}
