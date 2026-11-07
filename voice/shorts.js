@@ -150,7 +150,7 @@ export async function shortsApi(env, ctx, path, b, h, synth) {
   if (path === "/shorts/toon/idea") return toonIdea(env, b);
   if (path === "/shorts/toon/new") return toonNew(env, b, h);
   if (path === "/shorts/voice/enroll") return krEnroll(env, b, h);
-  if (path === "/shorts/voice/status") return krStatus(env, h);
+  if (path === "/shorts/voice/status") return krStatus(env, h, b.who === "wife" ? "wife" : "me");
   if (path === "/shorts/voice/try") return krTry(env, b, h, synth);
   if (path === "/shorts/avatar/state") return avaView(env, await avaRecover(env, h, await avaDoc(env, h)));
   if (path === "/shorts/avatar/face") return avaFace(env, b, h);
@@ -717,7 +717,7 @@ async function update(env, b, h) {
     return o;
   });
   if (d.kind === "mine" && u.asr && typeof u.asr === "object" && Array.isArray(d.clips)) for (const k of Object.keys(u.asr)) { const c = d.clips[Number(k)]; if (c && Array.isArray(u.asr[k])) c.asr = cleanAsr(u.asr[k]); }
-  if (u.opts && typeof u.opts === "object") d.opts = { fit: u.opts.fit === "full" ? "full" : "crop", orig: [0, 0.3, 1].includes(Number(u.opts.orig)) ? Number(u.opts.orig) : 0.3, narr: u.opts.narr !== false, subs: u.opts.subs !== false, voice: ["Cherry", "Ethan", "mine", "rec"].includes(u.opts.voice) ? u.opts.voice : "Cherry", end: u.opts.end !== false, tag: typeof u.opts.tag === "string" ? u.opts.tag.slice(0, 20) : "📍 광저우 广州", bgv: [0, 0.07, 0.12, 0.22].includes(Number(u.opts.bgv)) ? Number(u.opts.bgv) : 0.12, nv: [1, 1.5, 2].includes(Number(u.opts.nv)) ? Number(u.opts.nv) : 1.5 };
+  if (u.opts && typeof u.opts === "object") d.opts = { fit: u.opts.fit === "full" ? "full" : "crop", orig: [0, 0.3, 1].includes(Number(u.opts.orig)) ? Number(u.opts.orig) : 0.3, narr: u.opts.narr !== false, subs: u.opts.subs !== false, voice: ["Cherry", "Ethan", "mine", "wife", "rec"].includes(u.opts.voice) ? u.opts.voice : "Cherry", end: u.opts.end !== false, tag: typeof u.opts.tag === "string" ? u.opts.tag.slice(0, 20) : "📍 광저우 广州", bgv: [0, 0.07, 0.12, 0.22].includes(Number(u.opts.bgv)) ? Number(u.opts.bgv) : 0.12, nv: [1, 1.5, 2].includes(Number(u.opts.nv)) ? Number(u.opts.nv) : 1.5 };
   if (b.yt) d.yt = b.yt;
   await env.KV.put(draftKey(h, id), JSON.stringify(d), { expirationTtl: 120 * 86400 });
   if (u.title || b.yt) {
@@ -766,10 +766,15 @@ async function asset(env, b, h, synth) {
     const text = String(b.text || "").trim().slice(0, 200);
     if (!text) throw serr("내레이션이 비었어요.");
     let bytes = null, why = "", ext = "wav", ct = "audio/wav";
-    const want = ["Cherry", "Ethan", "mine"].includes(b.voice) ? b.voice : (env.SHORTS_VOICE || "Cherry");
+    const want = ["Cherry", "Ethan", "mine", "wife"].includes(b.voice) ? b.voice : (env.SHORTS_VOICE || "Cherry");
     const speakText = await readable(env, text);
     // 목소리는 고른 그대로만 — 실패했다고 다른 목소리로 바꾸면 한 영상 안에서 목소리가 섞임(2026-10-11 소유자 지적)
-    let useAi = want !== "mine";
+    let useAi = want !== "mine" && want !== "wife";
+    if (want === "wife") { // 🎙 아내 목소리(2026-11-07) — KV voice:krw:<해시>, 미등록이면 AI 여성
+      const wv = await env.KV.get(krKey(h, "wife"));
+      if (!wv) { useAi = true; why = "아내 목소리 미등록 → AI 여성"; }
+      else try { bytes = await sayMine(env, synth, wv, speakText, true, TONES[b.tone] ? b.tone : "soft"); ext = "mp3"; ct = "audio/mpeg"; } catch (e) { why = "아내 목소리: " + String(e.message || e).slice(0, 100); }
+    }
     if (want === "mine") {
       const kr = await env.KV.get("voice:kr:" + h);
       const mine = kr || (await env.KV.get("voice:" + h));
@@ -777,7 +782,7 @@ async function asset(env, b, h, synth) {
       else try { bytes = await sayMine(env, synth, mine, speakText, !!kr, TONES[b.tone] ? b.tone : "soft"); ext = "mp3"; ct = "audio/mpeg"; } catch (e) { why = "내 목소리: " + String(e.message || e).slice(0, 100); }
     }
     if (!bytes && useAi) try {
-      const j = await dsPost(env, "/services/aigc/multimodal-generation/generation", { model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text: speakText, voice: want === "mine" ? "Cherry" : want, language_type: "Korean" } });
+      const j = await dsPost(env, "/services/aigc/multimodal-generation/generation", { model: env.SHORTS_TTS_MODEL || "qwen3-tts-flash", input: { text: speakText, voice: want === "mine" || want === "wife" ? "Cherry" : want, language_type: "Korean" } });
       const url = j.output && j.output.audio && j.output.audio.url;
       if (url) { const r = await fetch(url); if (r.ok) bytes = new Uint8Array(await r.arrayBuffer()); }
       if (!bytes) why += " / qwen-tts 결과 없음";
@@ -1212,7 +1217,8 @@ async function avaDel(env, b, h) {
 
 // ---------------- 🎙 숏츠용 내 목소리(한국어) ----------------
 // 중국어 공부용 목소리(voice:<해시>)와 따로 — 한국어로 25~30초 녹음해 복제, KV voice:kr:<해시>. 숏츠의 '내 목소리'는 이걸 먼저 씀.
-const krKey = (h) => "voice:kr:" + h;
+// 🎙 아내 목소리(2026-11-07 소유자 '아내 목소리도 쓰려고') — 같은 방식, KV voice:krw:<해시>. b.who 'wife'
+const krKey = (h, who) => (who === "wife" ? "voice:krw:" : "voice:kr:") + h;
 async function krEnroll(env, b, h) {
   const m = String(b.audio || "").match(/^(?:data:[^,]*,)?([A-Za-z0-9+/=]+)$/);
   if (!m) throw serr("녹음을 다시 해 주세요.");
@@ -1223,20 +1229,21 @@ async function krEnroll(env, b, h) {
   const mime = /wav/.test(b.mime || "") ? "audio/wav" : /mpeg|mp3/.test(b.mime || "") ? "audio/mpeg" : "audio/mp4";
   const ext = mime === "audio/wav" ? "wav" : mime === "audio/mpeg" ? "mp3" : "m4a";
   let url = "";
-  for (let k = 0; ; k++) { try { url = await ossUp(env, "voice-enrollment", u8, "krvoice-" + h + "-" + Date.now() + "." + ext, mime); break; } catch (e) { if (k >= 1) throw e; } }
-  const old = await env.KV.get(krKey(h));
+  const who = b.who === "wife" ? "wife" : "me";
+  for (let k = 0; ; k++) { try { url = await ossUp(env, "voice-enrollment", u8, (who === "wife" ? "kwvoice-" : "krvoice-") + h + "-" + Date.now() + "." + ext, mime); break; } catch (e) { if (k >= 1) throw e; } }
+  const old = await env.KV.get(krKey(h, who));
   if (old) { try { await dsRaw(env, "/services/audio/tts/customization", { model: "voice-enrollment", input: { action: "delete_voice", voice_id: old } }); } catch {} }
-  const base = { action: "create_voice", target_model: env.TTS_MODEL || "cosyvoice-v3.5-plus", prefix: "kr" + h.slice(0, 6), url };
+  const base = { action: "create_voice", target_model: env.TTS_MODEL || "cosyvoice-v3.5-plus", prefix: (who === "wife" ? "kw" : "kr") + h.slice(0, 6), url };
   let j;
   try { j = await dsRaw(env, "/services/audio/tts/customization", { model: "voice-enrollment", input: { ...base, language_hints: ["ko"], max_prompt_audio_length: 20.0 } }, OSSR); }
   catch (e) { j = await dsRaw(env, "/services/audio/tts/customization", { model: "voice-enrollment", input: base }, OSSR); } // 옵션을 안 받으면 기본으로
   const voice = j.output && j.output.voice_id;
   if (!voice) throw serr("목소리 ID를 받지 못했어요.", 502);
-  await env.KV.put(krKey(h), voice);
-  return { ok: true, voice, status: "DEPLOYING" };
+  await env.KV.put(krKey(h, who), voice);
+  return { ok: true, voice, who, status: "DEPLOYING" };
 }
-async function krStatus(env, h) {
-  const voice = await env.KV.get(krKey(h));
+async function krStatus(env, h, who) {
+  const voice = await env.KV.get(krKey(h, who));
   if (!voice) return { ok: true, voice: null };
   try {
     const j = await dsRaw(env, "/services/audio/tts/customization", { model: "voice-enrollment", input: { action: "query_voice", voice_id: voice } });
@@ -1244,11 +1251,12 @@ async function krStatus(env, h) {
   } catch (e) { return { ok: true, voice, status: "UNKNOWN", detail: String(e.message || e).slice(0, 120) }; }
 }
 async function krTry(env, b, h, synth) {
-  const voice = (await env.KV.get(krKey(h))) || (await env.KV.get("voice:" + h));
+  const who = b.who === "wife" ? "wife" : "me";
+  const voice = (await env.KV.get(krKey(h, who))) || (who === "me" ? await env.KV.get("voice:" + h) : null);
   if (!voice) throw serr("아직 목소리가 없어요.");
   // 비워 두면 중국어·숫자가 섞인 예문 — 읽기용 문장 변환을 바로 들어 보게(2026-10-12)
   const text = String(b.text || "광저우 万象城 커피 520ml가 21위안, 우리 돈 4,200원이에요. 스벅 톨보다 크고 싸요!").slice(0, 120);
-  const kr = await env.KV.get(krKey(h));
+  const kr = await env.KV.get(krKey(h, who));
   const read = await readable(env, text);
   const bytes = await sayMine(env, synth, voice, read, voice === kr, TONES[b.tone] ? b.tone : "soft");
   // 파일 이름은 /shorts/file 허용 글자([\w.])만 — '-' 를 넣었다가 재생 403(2026-10-12). 들을 때마다 새 이름(브라우저 캐시 회피), 이전 것은 지움
@@ -2011,8 +2019,8 @@ function home(){
 }
 var AV={voice:'Cherry',res:'480P'};try{AV.voice=localStorage.getItem('av-voice')||'Cherry';}catch(e){}
 function ava(){
-  $('main').innerHTML='<a href="#" id="avBack" class="note">← 숏츠 공방</a><div class="card"><h2>🎙 숏츠용 내 목소리 (한국어)</h2><div id="krBox"></div></div><div class="card"><h2>🗣 캐릭터가 말하기 <small style="font-weight:400;color:var(--ink2)">시험</small></h2><p class="note">그림 한 장 + 대사 → 입이 움직이는 영상. 얼굴 대신 캐릭터가 말하게. 한 번에 20초 미만, 만드는 데 5~10분.</p><div id="avFace"></div><p class="lbl">대사 (90자까지, 한국어)</p><textarea id="avText" maxlength="90" placeholder="예: 광저우에서 아메리카노 한 잔, 얼마일까요? 한국 돈으로 3천 원이 안 돼요."></textarea><p class="note" id="avLen"></p>'
-    +'<p class="lbl">목소리</p><div class="chips">'+[['Cherry','AI 여성'],['Ethan','AI 남성'],['mine','내 목소리']].map(function(v){return '<button class="chip'+(v[0]===AV.voice?' on':'')+'" data-av="'+v[0]+'">'+v[1]+'</button>';}).join('')+'</div>'
+  $('main').innerHTML='<a href="#" id="avBack" class="note">← 숏츠 공방</a><div class="card"><h2>🎙 숏츠용 내 목소리 (한국어)</h2><div id="krBox-me"></div></div><div class="card"><h2>🎙 아내 목소리 (한국어)</h2><div id="krBox-wife"></div></div><div class="card"><h2>🗣 캐릭터가 말하기 <small style="font-weight:400;color:var(--ink2)">시험</small></h2><p class="note">그림 한 장 + 대사 → 입이 움직이는 영상. 얼굴 대신 캐릭터가 말하게. 한 번에 20초 미만, 만드는 데 5~10분.</p><div id="avFace"></div><p class="lbl">대사 (90자까지, 한국어)</p><textarea id="avText" maxlength="90" placeholder="예: 광저우에서 아메리카노 한 잔, 얼마일까요? 한국 돈으로 3천 원이 안 돼요."></textarea><p class="note" id="avLen"></p>'
+    +'<p class="lbl">목소리</p><div class="chips">'+[['Cherry','AI 여성'],['Ethan','AI 남성'],['mine','내 목소리'],['wife','아내 목소리']].map(function(v){return '<button class="chip'+(v[0]===AV.voice?' on':'')+'" data-av="'+v[0]+'">'+v[1]+'</button>';}).join('')+'</div>'
     +'<p class="lbl">화질</p><div class="chips">'+[['480P','480P · 0.5위안/초'],['720P','720P · 0.9위안/초']].map(function(v){return '<button class="chip'+(v[0]===AV.res?' on':'')+'" data-ar="'+v[0]+'">'+v[1]+'</button>';}).join('')+'</div>'
     +'<button class="big" id="avGo">🎬 말하는 영상 만들기</button><div class="err" id="avErr"></div><div id="avProg" class="note"></div><div id="avOut"></div></div><div class="card"><h2>만든 영상</h2><div id="avList" class="note">불러오는 중…</div></div>';
   window.scrollTo(0,0);
@@ -2022,39 +2030,39 @@ function ava(){
   document.querySelectorAll('[data-av]').forEach(function(b){b.onclick=function(){AV.voice=b.getAttribute('data-av');try{localStorage.setItem('av-voice',AV.voice);}catch(e){}document.querySelectorAll('[data-av]').forEach(function(x){x.classList.toggle('on',x===b);});};});
   document.querySelectorAll('[data-ar]').forEach(function(b){b.onclick=function(){AV.res=b.getAttribute('data-ar');document.querySelectorAll('[data-ar]').forEach(function(x){x.classList.toggle('on',x===b);});est();};});
   $('avGo').onclick=avMake;
-  krCard();
+  krCard('me');krCard('wife');
   api('/shorts/avatar/state').then(function(r){if(!r.ok){$('avErr').textContent=r.detail||r.error;return;}avShow(r);if(r.pend)avWait(r.pend.task);});
 }
 var KRS='안녕하세요. 저는 광저우에 살고 있어요. 오늘은 한국 사람들이 제일 궁금해하는 광저우 물가를 알려 드릴게요. 커피 한 잔, 지하철 한 번, 점심 한 끼가 한국 돈으로 얼마일까요? 생각보다 싼 것도 있고, 의외로 비싼 것도 있어요. 끝까지 보시면 진짜 꿀팁도 있으니까, 같이 한번 가 보시죠!';
-var KREC=null;
-function krCard(){var b=$('krBox');if(!b)return;b.innerHTML='<p class="note">확인 중…</p>';
-  api('/shorts/voice/status').then(function(r){if(!$('krBox'))return;var st=r.voice?(r.status==='OK'?'✅ 사용 중':r.status==='UNDEPLOYED'?'❌ 녹음이 불분명해 거절됨 — 다시 녹음':'⏳ 만드는 중('+esc(r.status||'')+')'):'아직 없음 — 지금은 중국어 공부용 목소리를 대신 씀';
+var KREC=null,KRW=null;
+function krCard(who){who=who||'me';var b=$('krBox-'+who);if(!b)return;b.innerHTML='<p class="note">확인 중…</p>';
+  api('/shorts/voice/status',{who:who}).then(function(r){var b=$('krBox-'+who);if(!b)return;var st=r.voice?(r.status==='OK'?'✅ 사용 중':r.status==='UNDEPLOYED'?'❌ 녹음이 불분명해 거절됨 — 다시 녹음':'⏳ 만드는 중('+esc(r.status||'')+')'):(who==='wife'?'아직 없음 — 편집실에서 아내 목소리를 고르면 AI 여성으로 나와요':'아직 없음 — 지금은 중국어 공부용 목소리를 대신 씀');
     b.innerHTML='<p class="note" style="margin-top:0">'+st+'</p>'
-      +(r.voice&&r.status==='OK'?'':'<details'+(r.voice?'':' open')+'><summary class="note">녹음 방법 · 읽을 글</summary><p class="note">조용한 방, 폰을 입에서 20cm쯤, 유튜브에서 말하듯 <b>평소보다 한 톤 높고 밝게</b> 25~30초(녹음한 톤이 그대로 복제돼요). 중간에 2초 넘게 쉬지 않기.</p><div style="background:var(--bg);border-radius:10px;padding:10px;font-size:15px;line-height:1.6">'+esc(KRS)+'</div></details>')
-      +'<div class="mini" style="margin-top:8px"><button id="krRec">'+(r.voice?'● 다시 녹음':'● 녹음 시작')+'</button>'+(r.voice&&r.status==='OK'?'<button class="krT" data-t="soft">▶ 부드럽게</button><button class="krT" data-t="calm">▶ 차분</button><button class="krT" data-t="up">▶ 활기</button><button class="krT" data-t="hot">▶ 신남</button>':'')+'</div><div class="err" id="krErr"></div>';
-    $('krRec').onclick=krRecord;document.querySelectorAll('.krT').forEach(function(x){x.onclick=krTry;});
-    if(r.voice&&r.status!=='OK'&&r.status!=='UNDEPLOYED')setTimeout(krCard,8000);});}
-function krTry(){var b=this,t0=Date.now(),tn=b.getAttribute('data-t')||'up',lb=b.textContent;b.disabled=true;
+      +(r.voice&&r.status==='OK'?'':'<details'+(r.voice?'':' open')+'><summary class="note">녹음 방법 · 읽을 글</summary><p class="note">조용한 방, 폰을 입에서 20cm쯤, <b>평소 말 높이로</b> 옆 사람에게 설명하듯 25~30초. 문장 끝은 <b>내려서</b> 끝내기(끝을 올리거나 힘주면 따지는 말투로 복제돼요). 중간에 2초 넘게 쉬지 않기.</p><div style="background:var(--bg);border-radius:10px;padding:10px;font-size:15px;line-height:1.6">'+esc(KRS)+'</div></details>')
+      +'<div class="mini" style="margin-top:8px"><button data-krrec="'+who+'">'+(r.voice?'● 다시 녹음':'● 녹음 시작')+'</button>'+(r.voice&&r.status==='OK'?['soft','부드럽게','calm','차분','up','활기','hot','신남'].reduce(function(a,x,k,arr){return k%2?a:a+'<button class="krT" data-w="'+who+'" data-t="'+x+'">▶ '+arr[k+1]+'</button>';},''):'')+'</div><div class="err" id="krErr-'+who+'"></div>';
+    b.querySelector('[data-krrec]').onclick=function(){krRecord(who,this);};b.querySelectorAll('.krT').forEach(function(x){x.onclick=krTry;});
+    if(r.voice&&r.status!=='OK'&&r.status!=='UNDEPLOYED')setTimeout(function(){krCard(who);},8000);});}
+function krTry(){var b=this,t0=Date.now(),tn=b.getAttribute('data-t')||'soft',who=b.getAttribute('data-w')||'me',lb=b.textContent,er=$('krErr-'+who);b.disabled=true;
   // iOS: 서버 응답을 기다린 뒤 새 Audio 를 재생하면 막힘 → 탭 순간 같은 요소를 무음으로 깨워 둠
   var a=new Audio();a.setAttribute('playsinline','');try{a.src='data:audio/mp3;base64,//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA';var p0=a.play();if(p0&&p0.catch)p0.catch(function(){});}catch(e){}
   var tk=setInterval(function(){b.textContent='만드는 중… '+Math.round((Date.now()-t0)/1000)+'초';},500);
-  api('/shorts/voice/try',{tone:tn,text:($('avText')&&$('avText').value.trim())||''}).then(function(r){clearInterval(tk);b.disabled=false;b.textContent=lb;
-    if(!r.ok){$('krErr').textContent=r.detail||r.error;return;}
-    $('krErr').innerHTML='<audio src="'+r.url+'" controls playsinline style="width:100%;margin-top:6px"></audio><span class="note">'+(r.which==='kr'?'한국어 목소리':'공부용 목소리')+' · '+({soft:'부드럽게',calm:'차분',up:'활기',hot:'신남'}[tn])+' · '+Math.round((Date.now()-t0)/1000)+'초</span>'+(r.read&&r.read!==r.text?'<p class="note" style="margin-top:6px">자막: '+esc(r.text)+'<br>실제로 읽은 문장: <b>'+esc(r.read)+'</b></p>':'<p class="note" style="margin-top:6px">읽은 문장: '+esc(r.text||'')+'</p>');
+  api('/shorts/voice/try',{who:who,tone:tn,text:($('avText')&&$('avText').value.trim())||''}).then(function(r){clearInterval(tk);b.disabled=false;b.textContent=lb;
+    if(!r.ok){er.textContent=r.detail||r.error;return;}
+    er.innerHTML='<audio src="'+r.url+'" controls playsinline style="width:100%;margin-top:6px"></audio><span class="note">'+(who==='wife'?'아내 목소리':r.which==='kr'?'한국어 목소리':'공부용 목소리')+' · '+({soft:'부드럽게',calm:'차분',up:'활기',hot:'신남'}[tn])+' · '+Math.round((Date.now()-t0)/1000)+'초</span>'+(r.read&&r.read!==r.text?'<p class="note" style="margin-top:6px">자막: '+esc(r.text)+'<br>실제로 읽은 문장: <b>'+esc(r.read)+'</b></p>':'<p class="note" style="margin-top:6px">읽은 문장: '+esc(r.text||'')+'</p>');
     a.src=r.url;var p=a.play();if(p&&p.catch)p.catch(function(){toast('▶ 재생 버튼을 눌러 주세요');});
-  }).catch(function(e){clearInterval(tk);b.disabled=false;b.textContent=lb;$('krErr').textContent='연결 실패: '+(e.message||e);});}
-async function krRecord(){var btn=$('krRec');if(KREC){KREC.stop();return;}
-  if(!window.MediaRecorder){$('krErr').textContent='이 브라우저는 녹음을 못 해요';return;}
-  var stream;try{stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});}catch(e){$('krErr').textContent='마이크 권한이 필요해요';return;}
+  }).catch(function(e){clearInterval(tk);b.disabled=false;b.textContent=lb;er.textContent='연결 실패: '+(e.message||e);});}
+async function krRecord(who,btn){var er=$('krErr-'+who);if(KREC){if(KRW===who)KREC.stop();else er.textContent='다른 녹음이 진행 중이에요';return;}
+  if(!window.MediaRecorder){er.textContent='이 브라우저는 녹음을 못 해요';return;}
+  var stream;try{stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});}catch(e){er.textContent='마이크 권한이 필요해요';return;}
   var mime=MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported('audio/mp4')?'audio/mp4':'';
-  var rec=mime?new MediaRecorder(stream,{mimeType:mime,audioBitsPerSecond:128000}):new MediaRecorder(stream),ch=[],t0=Date.now();KREC=rec;$('krErr').textContent='';
+  var rec=mime?new MediaRecorder(stream,{mimeType:mime,audioBitsPerSecond:128000}):new MediaRecorder(stream),ch=[],t0=Date.now();KREC=rec;KRW=who;er.textContent='';
   rec.ondataavailable=function(e){if(e.data&&e.data.size)ch.push(e.data);};
   var tick=setInterval(function(){var s=Math.round((Date.now()-t0)/1000);btn.textContent='■ 끝내기 · '+s+'초'+(s<20?' (20초 이상)':'');if(s>=45)rec.stop();},500);
-  rec.onstop=async function(){clearInterval(tick);KREC=null;stream.getTracks().forEach(function(t){t.stop();});
-    if((Date.now()-t0)/1000<20){$('krErr').textContent='20초 이상 녹음해 주세요';btn.textContent='● 다시 녹음';return;}
+  rec.onstop=async function(){clearInterval(tick);KREC=null;KRW=null;stream.getTracks().forEach(function(t){t.stop();});
+    if((Date.now()-t0)/1000<20){er.textContent='20초 이상 녹음해 주세요';btn.textContent='● 다시 녹음';return;}
     var blob=new Blob(ch,{type:rec.mimeType||mime||'audio/mp4'});btn.disabled=true;btn.textContent='등록 중… (1~2분)';
     var b64=await new Promise(function(ok){var fr=new FileReader();fr.onload=function(){ok(String(fr.result).split(',')[1]);};fr.readAsDataURL(blob);});
-    api('/shorts/voice/enroll',{audio:b64,mime:blob.type}).then(function(r){if(!r.ok){btn.disabled=false;btn.textContent='● 다시 녹음';$('krErr').textContent=r.detail||r.error;return;}toast('등록 접수 — 1분쯤 뒤 사용 가능');krCard();});};
+    api('/shorts/voice/enroll',{who:who,audio:b64,mime:blob.type}).then(function(r){if(!r.ok){btn.disabled=false;btn.textContent='● 다시 녹음';er.textContent=r.detail||r.error;return;}toast('등록 접수 — 1분쯤 뒤 사용 가능');krCard(who);});};
   rec.start(500);btn.textContent='■ 끝내기';}
 function avShow(r){
   var c=r.check,ck='';
