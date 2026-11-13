@@ -5,6 +5,7 @@
 //  POST /vpn/add    {code, name, dev, url}          → 바로 한 번 조회해서 추가
 //  POST /vpn/edit   {code, id, name?, dev?, url?}
 //  POST /vpn/del    {code, id}
+//  POST /vpn/reveal {code, id}                      → {url} 전체 주소(앱 재설치 때 복사용, 주인만)
 //  POST /vpn/check  {code}                          → 전부 다시 조회(하루 30번)
 //  POST /vpn/cfg    {code, minGB?, days?, hour?, on?}
 //  POST /vpn/test   {code}                          → 지금 상태로 Bark 시험 알림
@@ -196,6 +197,7 @@ export async function vpnApi(env, path, b, h) {
     await save(env, h, d);
     return { ...view(d), bark };
   }
+  if (path === "/vpn/reveal") { const s = d.subs.find((x) => x.id === b.id); if (!s) throw verr("없는 항목이에요."); return { url: s.url }; }
   if (path === "/vpn/del") { d.subs = d.subs.filter((x) => x.id !== b.id); await save(env, h, d); return { ...view(d), bark }; }
   if (path === "/vpn/check") {
     const t = cnDay();
@@ -269,7 +271,7 @@ h2{font-size:13px;color:var(--ink2);margin:18px 0 8px;font-weight:700}
 .spark{display:flex;align-items:flex-end;gap:3px;height:44px;margin-top:10px}.spark i{flex:1;background:var(--sky);opacity:.55;border-radius:3px 3px 0 0;min-height:2px}
 .dev{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}.dev:first-child{border-top:0}
 .dev b{display:block}.dev small{color:var(--ink2);font-size:12.5px;word-break:break-all}.dev .e{color:var(--red)}
-.dev button{margin-left:auto;background:none;border:1px solid var(--line);color:var(--ink2);border-radius:8px;padding:6px 10px;font:inherit;font-size:13px}
+.dev button{margin-left:6px;}.dev [data-cp]{margin-left:auto}.dev button{background:none;border:1px solid var(--line);color:var(--ink2);border-radius:8px;padding:6px 10px;font:inherit;font-size:13px}
 label{display:block;font-size:13px;color:var(--ink2);margin:10px 0 4px}
 input,select{width:100%;font:inherit;padding:11px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -321,11 +323,12 @@ function draw(j){
   else{h+='<h2>계정별</h2>'+j.groups.map(groupCard).join('')}
   h+='<h2>구독 주소 '+j.subs.length+'개</h2><div class="card">';
   if(!j.subs.length)h+='<p class="note">아직 없어요.</p>';
-  h+=j.subs.map(function(s){return '<div class="dev"><div><b>'+esc(j.devs[s.dev]||'')+' '+esc(s.name)+'</b><small>'+esc(s.host)+(s.err?'<br><span class="e">'+esc(s.err)+'</span>':' · '+ago(s.at))+'</small></div><button data-del="'+s.id+'">삭제</button></div>'}).join('');
+  h+=j.subs.map(function(s){return '<div class="dev"><div><b>'+esc(j.devs[s.dev]||'')+' '+esc(s.name)+'</b><small>'+esc(s.host)+(s.err?'<br><span class="e">'+esc(s.err)+'</span>':' · '+ago(s.at))+'</small></div><button data-cp="'+s.id+'">주소 복사</button><button data-del="'+s.id+'">삭제</button></div>'}).join('');
   h+='</div><div class="card"><b>＋ 구독 추가</b><div class="two"><div><label>이름</label><input id="nm" placeholder="예: 침실 공유기"></div><div><label>어디서 쓰나</label><select id="dv">'+Object.keys(j.devs).map(function(k){return '<option value="'+k+'">'+j.devs[k]+'</option>'}).join('')+'</select></div></div><label>구독 주소</label><input id="ur" placeholder="https://… (Shadowrocket·Clash 구독 주소)" autocomplete="off" autocapitalize="off"><button class="btn" id="add">추가하고 바로 조회</button><p class="note">주소는 서버에만 저장되고 화면에는 가린 형태로만 보여요. Shadowrocket: 구독 길게 누르기 → 편집 → URL 복사.</p></div>';
   h+='<h2>알림</h2><div class="card">'+(j.bark?'':'<p class="note" style="color:var(--red)">Bark 주소가 없어요 — <a href="/brief">출장 브리핑</a> 화면에서 먼저 넣어 주세요(같은 알림 주소를 써요).</p>')+'<div class="sw"><span>알림 받기</span><input type="checkbox" id="on"'+(j.cfg.on?' checked':'')+'></div><div class="two"><div><label>남은 용량 기준(GB)</label><input id="mg" type="number" inputmode="numeric" value="'+j.cfg.minGB+'"></div><div><label>만료 며칠 전부터</label><input id="dy" type="number" inputmode="numeric" value="'+j.cfg.days+'"></div></div><label>매일 확인 시각(중국)</label><select id="hr">'+[7,8,9,10,12,18,20,21,22].map(function(x){return '<option'+(x==j.cfg.hour?' selected':'')+' value="'+x+'">'+x+'시</option>'}).join('')+'</select><button class="btn s" id="sv">설정 저장</button><button class="btn s" id="ts">지금 상태로 시험 알림</button><p class="note">기준 아래·만료 D-14/7/3/1·지금 속도면 만료 전에 바닥날 때만 보내요(같은 내용은 하루 한 번).</p></div>';
   $('m').innerHTML=h;
   $('add').onclick=function(){var u=$('ur').value.trim();if(!u)return toast('구독 주소를 붙여 넣어 주세요');this.disabled=true;this.textContent='조회 중…';api('/vpn/add',{name:$('nm').value,dev:$('dv').value,url:u}).then(function(r){draw(r);var s=r.subs[r.subs.length-1];toast(s&&s.err?'추가했지만 조회 실패: '+s.err:'추가했어요')}).catch(function(e){toast(e.message);load()})};
+  [].forEach.call(document.querySelectorAll('[data-cp]'),function(b){b.onclick=function(){api('/vpn/reveal',{id:b.getAttribute('data-cp')}).then(function(r){var done=function(){toast('주소를 복사했어요. Shadowrocket에 붙여 넣으세요')};if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(r.url).then(done,function(){prompt('길게 눌러 복사하세요',r.url)});else prompt('길게 눌러 복사하세요',r.url)}).catch(function(e){toast(e.message)})}});
   [].forEach.call(document.querySelectorAll('[data-del]'),function(b){b.onclick=function(){if(!confirm('이 구독 주소를 지울까요?'))return;api('/vpn/del',{id:b.getAttribute('data-del')}).then(draw).catch(function(e){toast(e.message)})}});
   $('sv').onclick=function(){api('/vpn/cfg',{on:$('on').checked,minGB:$('mg').value,days:$('dy').value,hour:$('hr').value}).then(function(r){draw(r);toast('저장했어요')}).catch(function(e){toast(e.message)})};
   $('ts').onclick=function(){this.disabled=true;api('/vpn/test').then(function(r){draw(r);toast('알림 '+r.sent+'개 보냈어요')}).catch(function(e){toast(e.message);load()})};
